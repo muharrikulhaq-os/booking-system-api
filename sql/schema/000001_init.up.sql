@@ -1,0 +1,495 @@
+-- ═══════════════════════════════════════════════════════════════════════════════
+-- RESOURCE BOOKING SYSTEM — Schema v3 (Go Fiber + SQLC)
+-- Changes from v2:
+--   [NEW] vehicles +photoUrl (catalog thumbnail)
+--   [NEW] rooms    +photoUrl (catalog thumbnail)
+--   [CHG] attachments: filePath (local disk) instead of fileUrl (remote URL)
+-- ═══════════════════════════════════════════════════════════════════════════════
+
+CREATE EXTENSION IF NOT EXISTS "pgcrypto";
+
+-- ─── ENUMS ───────────────────────────────────────────────────────────────────
+CREATE TYPE role_name AS ENUM ('EMPLOYEE', 'ADMIN', 'DRIVER');
+CREATE TYPE resource_type AS ENUM ('VEHICLE', 'ROOM');
+CREATE TYPE resource_status AS ENUM ('AVAILABLE', 'MAINTENANCE', 'INACTIVE');
+CREATE TYPE booking_status AS ENUM (
+    'PENDING', 'APPROVED', 'REJECTED', 'ONGOING',
+    'COMPLETED', 'CANCELLED', 'OVERDUE'
+);
+CREATE TYPE approval_action AS ENUM ('APPROVED', 'REJECTED');
+CREATE TYPE fuel_type AS ENUM ('BBM', 'LISTRIK');
+
+-- ─── ROLES ───────────────────────────────────────────────────────────────────
+CREATE TABLE roles (
+    id   SERIAL    PRIMARY KEY,
+    name role_name NOT NULL UNIQUE
+);
+
+-- ─── DEPARTMENTS ─────────────────────────────────────────────────────────────
+CREATE TABLE departments (
+    id          SERIAL       PRIMARY KEY,
+    name        VARCHAR(100) NOT NULL UNIQUE,
+    "createdAt" TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+);
+
+-- ─── USERS ───────────────────────────────────────────────────────────────────
+CREATE TABLE users (
+    id             SERIAL       PRIMARY KEY,
+    "employeeId"   VARCHAR(50)  NOT NULL UNIQUE,
+    name           VARCHAR(150) NOT NULL,
+    email          VARCHAR(255) NOT NULL UNIQUE,
+    password       VARCHAR(255) NOT NULL,
+    "profilePhoto" VARCHAR(500) NULL,
+    "isActive"     BOOLEAN      NOT NULL DEFAULT TRUE,
+    "roleId"       INTEGER      NOT NULL REFERENCES roles(id),
+    "departmentId" INTEGER      NOT NULL REFERENCES departments(id),
+    "createdAt"    TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+    "updatedAt"    TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX idx_users_email         ON users(email);
+CREATE INDEX idx_users_employee_id   ON users("employeeId");
+CREATE INDEX idx_users_role_id       ON users("roleId");
+CREATE INDEX idx_users_department_id ON users("departmentId");
+CREATE INDEX idx_users_is_active     ON users("isActive");
+
+-- ─── AUTH ─────────────────────────────────────────────────────────────────────
+CREATE TABLE refresh_tokens (
+    id          SERIAL      PRIMARY KEY,
+    "userId"    INTEGER     NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    token       TEXT        NOT NULL UNIQUE,
+    "expiresAt" TIMESTAMPTZ NOT NULL,
+    revoked     BOOLEAN     NOT NULL DEFAULT FALSE
+);
+
+CREATE INDEX idx_refresh_tokens_user_id ON refresh_tokens("userId");
+CREATE INDEX idx_refresh_tokens_token   ON refresh_tokens(token);
+CREATE INDEX idx_refresh_tokens_revoked ON refresh_tokens(revoked);
+
+CREATE TABLE password_reset_otps (
+    id          SERIAL      PRIMARY KEY,
+    "userId"    INTEGER     NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    "otpCode"   VARCHAR(10) NOT NULL,
+    "expiresAt" TIMESTAMPTZ NOT NULL,
+    "isUsed"    BOOLEAN     NOT NULL DEFAULT FALSE
+);
+
+CREATE INDEX idx_otp_user_id ON password_reset_otps("userId");
+CREATE INDEX idx_otp_is_used ON password_reset_otps("isUsed");
+
+-- ─── RESOURCES ────────────────────────────────────────────────────────────────
+CREATE TABLE resources (
+    id          SERIAL          PRIMARY KEY,
+    name        VARCHAR(200)    NOT NULL,
+    type        resource_type   NOT NULL,
+    status      resource_status NOT NULL DEFAULT 'AVAILABLE',
+    "createdAt" TIMESTAMPTZ     NOT NULL DEFAULT NOW(),
+    "updatedAt" TIMESTAMPTZ     NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX idx_resources_type   ON resources(type);
+CREATE INDEX idx_resources_status ON resources(status);
+
+-- ─── VEHICLE CATEGORIES ───────────────────────────────────────────────────────
+CREATE TABLE vehicle_categories (
+    id   SERIAL       PRIMARY KEY,
+    name VARCHAR(100) NOT NULL UNIQUE
+);
+
+-- ─── VEHICLES ─────────────────────────────────────────────────────────────────
+CREATE TABLE vehicles (
+    id                SERIAL        PRIMARY KEY,
+    "resourceId"      INTEGER       NOT NULL UNIQUE REFERENCES resources(id) ON DELETE CASCADE,
+    "plateNumber"     VARCHAR(20)   NOT NULL UNIQUE,
+    brand             VARCHAR(100)  NOT NULL,
+    model             VARCHAR(100)  NOT NULL,
+    year              SMALLINT      NOT NULL CHECK (year >= 1900 AND year <= 2100),
+    "currentOdometer" INTEGER       NOT NULL DEFAULT 0 CHECK ("currentOdometer" >= 0),
+    "categoryId"      INTEGER       NOT NULL REFERENCES vehicle_categories(id),
+    capacity          SMALLINT      NOT NULL DEFAULT 4 CHECK (capacity > 0),
+    "photoUrl"        VARCHAR(500)  NULL
+);
+
+CREATE INDEX idx_vehicles_plate_number ON vehicles("plateNumber");
+CREATE INDEX idx_vehicles_category_id  ON vehicles("categoryId");
+
+-- ─── ROOMS ────────────────────────────────────────────────────────────────────
+CREATE TABLE rooms (
+    id           SERIAL       PRIMARY KEY,
+    "resourceId" INTEGER      NOT NULL UNIQUE REFERENCES resources(id) ON DELETE CASCADE,
+    location     VARCHAR(255) NOT NULL,
+    capacity     SMALLINT     NOT NULL CHECK (capacity > 0),
+    "photoUrl"   VARCHAR(500) NULL
+);
+
+-- ─── DRIVERS ──────────────────────────────────────────────────────────────────
+CREATE TABLE drivers (
+    id              SERIAL       PRIMARY KEY,
+    "userId"        INTEGER      NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,
+    "licenseNumber" VARCHAR(100) NOT NULL,
+    "phoneNumber"   VARCHAR(20)  NOT NULL,
+    "isActive"      BOOLEAN      NOT NULL DEFAULT TRUE,
+    "createdAt"     TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX idx_drivers_user_id   ON drivers("userId");
+CREATE INDEX idx_drivers_is_active ON drivers("isActive");
+
+-- ─── BOOKINGS ─────────────────────────────────────────────────────────────────
+CREATE TABLE bookings (
+    id                   SERIAL         PRIMARY KEY,
+    "userId"             INTEGER        NOT NULL REFERENCES users(id),
+    "resourceId"         INTEGER        NOT NULL REFERENCES resources(id),
+    "startDate"          TIMESTAMPTZ    NOT NULL,
+    "endDate"            TIMESTAMPTZ    NOT NULL,
+    purpose              TEXT           NOT NULL,
+    status               booking_status NOT NULL DEFAULT 'PENDING',
+    "approvedById"       INTEGER        REFERENCES users(id),
+    "approvedAt"         TIMESTAMPTZ,
+    "assignedDriverId"   INTEGER        REFERENCES drivers(id),
+    "assignedVehicleId"  INTEGER        REFERENCES vehicles(id),
+    "assignedAt"         TIMESTAMPTZ,
+    "returnedAt"         TIMESTAMPTZ,
+    "createdAt"          TIMESTAMPTZ    NOT NULL DEFAULT NOW(),
+    "updatedAt"          TIMESTAMPTZ    NOT NULL DEFAULT NOW(),
+    CONSTRAINT chk_booking_dates CHECK ("endDate" > "startDate")
+);
+
+CREATE INDEX idx_bookings_user_id          ON bookings("userId");
+CREATE INDEX idx_bookings_resource_id      ON bookings("resourceId");
+CREATE INDEX idx_bookings_status           ON bookings(status);
+CREATE INDEX idx_bookings_start_date       ON bookings("startDate");
+CREATE INDEX idx_bookings_end_date         ON bookings("endDate");
+CREATE INDEX idx_bookings_assigned_driver  ON bookings("assignedDriverId");
+CREATE INDEX idx_bookings_assigned_vehicle ON bookings("assignedVehicleId");
+CREATE INDEX idx_bookings_active ON bookings("resourceId", "startDate", "endDate")
+    WHERE status IN ('PENDING', 'APPROVED', 'ONGOING');
+
+-- ─── APPROVAL LOGS ────────────────────────────────────────────────────────────
+CREATE TABLE approval_logs (
+    id           SERIAL          PRIMARY KEY,
+    "bookingId"  INTEGER         NOT NULL REFERENCES bookings(id) ON DELETE CASCADE,
+    "approverId" INTEGER         NOT NULL REFERENCES users(id),
+    action       approval_action NOT NULL,
+    note         TEXT,
+    "createdAt"  TIMESTAMPTZ     NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX idx_approval_logs_booking_id  ON approval_logs("bookingId");
+CREATE INDEX idx_approval_logs_approver_id ON approval_logs("approverId");
+
+-- ─── DRIVER ASSIGNMENTS ───────────────────────────────────────────────────────
+CREATE TABLE driver_assignments (
+    id           SERIAL      PRIMARY KEY,
+    "driverId"   INTEGER     NOT NULL REFERENCES drivers(id),
+    "vehicleId"  INTEGER     NOT NULL REFERENCES vehicles(id),
+    "assignedAt" TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    "releasedAt" TIMESTAMPTZ
+);
+
+CREATE INDEX idx_driver_assignments_driver_id  ON driver_assignments("driverId");
+CREATE INDEX idx_driver_assignments_vehicle_id ON driver_assignments("vehicleId");
+CREATE UNIQUE INDEX idx_driver_assignments_active_driver
+    ON driver_assignments("driverId") WHERE "releasedAt" IS NULL;
+CREATE UNIQUE INDEX idx_driver_assignments_active_vehicle
+    ON driver_assignments("vehicleId") WHERE "releasedAt" IS NULL;
+
+-- ─── DRIVER RATINGS ───────────────────────────────────────────────────────────
+CREATE TABLE driver_ratings (
+    id          SERIAL      PRIMARY KEY,
+    "bookingId" INTEGER     NOT NULL UNIQUE REFERENCES bookings(id) ON DELETE CASCADE,
+    "driverId"  INTEGER     NOT NULL REFERENCES drivers(id),
+    "ratedById" INTEGER     NOT NULL REFERENCES users(id),
+    rating      SMALLINT    NOT NULL CHECK (rating >= 1 AND rating <= 5),
+    review      TEXT        NULL,
+    "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX idx_driver_ratings_driver_id ON driver_ratings("driverId");
+CREATE INDEX idx_driver_ratings_rated_by  ON driver_ratings("ratedById");
+
+-- ─── FUEL EXPENSES ────────────────────────────────────────────────────────────
+CREATE TABLE fuel_expenses (
+    id               SERIAL        PRIMARY KEY,
+    "driverId"       INTEGER       NOT NULL REFERENCES drivers(id),
+    "vehicleId"      INTEGER       NOT NULL REFERENCES vehicles(id),
+    "bookingId"      INTEGER       REFERENCES bookings(id),
+    "fuelType"       fuel_type     NOT NULL DEFAULT 'BBM',
+    liter            NUMERIC(10,2) NULL CHECK (liter IS NULL OR liter > 0),
+    "pricePerLiter"  NUMERIC(12,2) NULL CHECK ("pricePerLiter" IS NULL OR "pricePerLiter" > 0),
+    "odometerBefore" INTEGER       NULL CHECK ("odometerBefore" IS NULL OR "odometerBefore" >= 0),
+    "odometerAfter"  INTEGER       NULL,
+    kwh              NUMERIC(10,2) NULL CHECK (kwh IS NULL OR kwh > 0),
+    "pricePerKwh"    NUMERIC(12,2) NULL CHECK ("pricePerKwh" IS NULL OR "pricePerKwh" > 0),
+    "batteryBefore"  NUMERIC(5,2)  NULL CHECK ("batteryBefore" IS NULL OR ("batteryBefore" >= 0 AND "batteryBefore" <= 100)),
+    "batteryAfter"   NUMERIC(5,2)  NULL CHECK ("batteryAfter"  IS NULL OR ("batteryAfter"  >= 0 AND "batteryAfter"  <= 100)),
+    "totalAmount"    NUMERIC(14,2) NOT NULL CHECK ("totalAmount" > 0),
+    note             TEXT,
+    "createdAt"      TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
+    CONSTRAINT chk_bbm_required CHECK (
+        "fuelType" <> 'BBM' OR (
+            liter IS NOT NULL AND "pricePerLiter" IS NOT NULL AND
+            "odometerBefore" IS NOT NULL AND "odometerAfter" IS NOT NULL AND
+            "odometerAfter" > "odometerBefore"
+        )
+    ),
+    CONSTRAINT chk_listrik_required CHECK (
+        "fuelType" <> 'LISTRIK' OR (kwh IS NOT NULL AND "pricePerKwh" IS NOT NULL)
+    )
+);
+
+CREATE INDEX idx_fuel_expenses_driver_id  ON fuel_expenses("driverId");
+CREATE INDEX idx_fuel_expenses_vehicle_id ON fuel_expenses("vehicleId");
+CREATE INDEX idx_fuel_expenses_booking_id ON fuel_expenses("bookingId");
+CREATE INDEX idx_fuel_expenses_fuel_type  ON fuel_expenses("fuelType");
+CREATE INDEX idx_fuel_expenses_created_at ON fuel_expenses("createdAt");
+
+-- ─── MASTER SETTINGS ──────────────────────────────────────────────────────────
+CREATE TABLE master_settings (
+    id          SERIAL        PRIMARY KEY,
+    key         VARCHAR(100)  NOT NULL UNIQUE,
+    value       NUMERIC(14,4) NOT NULL,
+    unit        VARCHAR(50)   NULL,
+    description TEXT          NULL,
+    "updatedAt" TIMESTAMPTZ   NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX idx_master_settings_key ON master_settings(key);
+
+-- ─── MAINTENANCE RECORDS ──────────────────────────────────────────────────────
+CREATE TABLE maintenance_records (
+    id            SERIAL        PRIMARY KEY,
+    "resourceId"  INTEGER       NOT NULL REFERENCES resources(id),
+    description   TEXT          NOT NULL,
+    "startDate"   TIMESTAMPTZ   NOT NULL,
+    "endDate"     TIMESTAMPTZ,
+    cost          NUMERIC(12,2) CHECK (cost >= 0),
+    "createdById" INTEGER       NOT NULL REFERENCES users(id),
+    "createdAt"   TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
+    CONSTRAINT chk_maintenance_dates CHECK ("endDate" IS NULL OR "endDate" > "startDate")
+);
+
+CREATE INDEX idx_maintenance_resource_id   ON maintenance_records("resourceId");
+CREATE INDEX idx_maintenance_created_by_id ON maintenance_records("createdById");
+CREATE INDEX idx_maintenance_start_date    ON maintenance_records("startDate");
+
+-- ─── AUDIT LOGS ───────────────────────────────────────────────────────────────
+CREATE TABLE audit_logs (
+    id           SERIAL       PRIMARY KEY,
+    "userId"     INTEGER      REFERENCES users(id),
+    action       VARCHAR(100) NOT NULL,
+    "entityType" VARCHAR(100) NOT NULL,
+    "entityId"   INTEGER,
+    description  TEXT,
+    "createdAt"  TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX idx_audit_logs_user_id     ON audit_logs("userId");
+CREATE INDEX idx_audit_logs_entity_type ON audit_logs("entityType");
+CREATE INDEX idx_audit_logs_entity_id   ON audit_logs("entityId");
+CREATE INDEX idx_audit_logs_action      ON audit_logs(action);
+CREATE INDEX idx_audit_logs_created_at  ON audit_logs("createdAt");
+
+-- ─── GUEST BOOKINGS ───────────────────────────────────────────────────────────
+CREATE TABLE guest_bookings (
+    id               SERIAL         PRIMARY KEY,
+    "guestName"      VARCHAR(150)   NOT NULL,
+    "guestEmail"     VARCHAR(255)   NOT NULL,
+    "guestPhone"     VARCHAR(20)    NOT NULL,
+    "departmentName" VARCHAR(100)   NOT NULL,
+    "resourceId"     INTEGER        NOT NULL REFERENCES resources(id),
+    "startDate"      TIMESTAMPTZ    NOT NULL,
+    "endDate"        TIMESTAMPTZ    NOT NULL,
+    purpose          TEXT           NOT NULL,
+    status           booking_status NOT NULL DEFAULT 'PENDING',
+    "accessToken"    VARCHAR(64)    NOT NULL UNIQUE,
+    "approvedById"   INTEGER        REFERENCES users(id),
+    "approvedAt"     TIMESTAMPTZ,
+    "rejectionNote"  TEXT,
+    "returnedAt"     TIMESTAMPTZ,
+    "createdAt"      TIMESTAMPTZ    NOT NULL DEFAULT NOW(),
+    "updatedAt"      TIMESTAMPTZ    NOT NULL DEFAULT NOW(),
+    CONSTRAINT chk_guest_dates CHECK ("endDate" > "startDate")
+);
+
+CREATE INDEX idx_guest_bookings_token       ON guest_bookings("accessToken");
+CREATE INDEX idx_guest_bookings_email       ON guest_bookings("guestEmail");
+CREATE INDEX idx_guest_bookings_status      ON guest_bookings(status);
+CREATE INDEX idx_guest_bookings_resource_id ON guest_bookings("resourceId");
+
+-- ─── ATTACHMENTS ──────────────────────────────────────────────────────────────
+-- filePath: relative path in uploads/ directory (e.g. "2024/01/uuid_filename.jpg")
+CREATE TABLE attachments (
+    id             SERIAL       PRIMARY KEY,
+    "uploadedById" INTEGER      NOT NULL REFERENCES users(id),
+    "vehicleId"    INTEGER      REFERENCES vehicles(id)  ON DELETE CASCADE,
+    "roomId"       INTEGER      REFERENCES rooms(id)     ON DELETE CASCADE,
+    "bookingId"    INTEGER      REFERENCES bookings(id)  ON DELETE CASCADE,
+    "filePath"     VARCHAR(500) NOT NULL,
+    "fileName"     VARCHAR(255) NOT NULL,
+    "fileType"     VARCHAR(100) NOT NULL,
+    "fileSize"     INTEGER      NULL,
+    description    TEXT         NULL,
+    "createdAt"    TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+    CONSTRAINT chk_one_target CHECK (
+        (CASE WHEN "vehicleId" IS NOT NULL THEN 1 ELSE 0 END +
+         CASE WHEN "roomId"    IS NOT NULL THEN 1 ELSE 0 END +
+         CASE WHEN "bookingId" IS NOT NULL THEN 1 ELSE 0 END) = 1
+    )
+);
+
+CREATE INDEX idx_att_vehicle  ON attachments("vehicleId");
+CREATE INDEX idx_att_room     ON attachments("roomId");
+CREATE INDEX idx_att_booking  ON attachments("bookingId");
+CREATE INDEX idx_att_uploader ON attachments("uploadedById");
+
+-- ─── TRIGGERS ─────────────────────────────────────────────────────────────────
+CREATE OR REPLACE FUNCTION trigger_set_updated_at()
+RETURNS TRIGGER AS $$
+BEGIN
+    NEW."updatedAt" = NOW();
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER set_updated_at_users
+    BEFORE UPDATE ON users FOR EACH ROW EXECUTE FUNCTION trigger_set_updated_at();
+CREATE TRIGGER set_updated_at_resources
+    BEFORE UPDATE ON resources FOR EACH ROW EXECUTE FUNCTION trigger_set_updated_at();
+CREATE TRIGGER set_updated_at_bookings
+    BEFORE UPDATE ON bookings FOR EACH ROW EXECUTE FUNCTION trigger_set_updated_at();
+CREATE TRIGGER set_updated_at_guest_bookings
+    BEFORE UPDATE ON guest_bookings FOR EACH ROW EXECUTE FUNCTION trigger_set_updated_at();
+CREATE TRIGGER set_updated_at_master_settings
+    BEFORE UPDATE ON master_settings FOR EACH ROW EXECUTE FUNCTION trigger_set_updated_at();
+
+-- ─── VIEWS ────────────────────────────────────────────────────────────────────
+CREATE OR REPLACE VIEW v_active_bookings AS
+SELECT
+    b.id AS booking_id, b.status, b."startDate", b."endDate", b.purpose,
+    u.name AS user_name, u."employeeId",
+    dept.name AS department,
+    r.name AS resource_name, r.type AS resource_type,
+    drv.id AS assigned_driver_id,
+    du.name AS assigned_driver_name,
+    drv."phoneNumber" AS driver_phone,
+    v.id AS assigned_vehicle_id,
+    v."plateNumber" AS vehicle_plate,
+    v.capacity AS vehicle_capacity
+FROM bookings b
+JOIN users u ON u.id = b."userId"
+JOIN departments dept ON dept.id = u."departmentId"
+JOIN resources r ON r.id = b."resourceId"
+LEFT JOIN drivers drv ON drv.id = b."assignedDriverId"
+LEFT JOIN users du ON du.id = drv."userId"
+LEFT JOIN vehicles v ON v.id = b."assignedVehicleId"
+WHERE b.status IN ('PENDING', 'APPROVED', 'ONGOING');
+
+CREATE OR REPLACE VIEW v_vehicle_summary AS
+SELECT
+    v.id, r.name AS vehicle_name, v."plateNumber",
+    vc.name AS category, v.capacity, r.status, v."currentOdometer",
+    COUNT(DISTINCT b.id) AS total_bookings,
+    SUM(CASE WHEN b.status = 'COMPLETED' THEN 1 ELSE 0 END) AS completed_bookings,
+    COALESCE(SUM(CASE WHEN fe."fuelType" = 'BBM' THEN fe.liter ELSE 0 END), 0) AS total_liter_bbm,
+    COALESCE(SUM(CASE WHEN fe."fuelType" = 'BBM' THEN fe."totalAmount" ELSE 0 END), 0) AS total_cost_bbm,
+    COALESCE(SUM(CASE WHEN fe."fuelType" = 'LISTRIK' THEN fe.kwh ELSE 0 END), 0) AS total_kwh_listrik,
+    COALESCE(SUM(CASE WHEN fe."fuelType" = 'LISTRIK' THEN fe."totalAmount" ELSE 0 END), 0) AS total_cost_listrik,
+    COALESCE(SUM(fe."totalAmount"), 0) AS total_fuel_cost
+FROM vehicles v
+JOIN resources r ON r.id = v."resourceId"
+JOIN vehicle_categories vc ON vc.id = v."categoryId"
+LEFT JOIN bookings b ON b."resourceId" = r.id
+LEFT JOIN fuel_expenses fe ON fe."vehicleId" = v.id
+GROUP BY v.id, r.name, v."plateNumber", vc.name, v.capacity, r.status, v."currentOdometer";
+
+CREATE OR REPLACE VIEW v_driver_ratings_summary AS
+SELECT
+    d.id AS driver_id, u.name AS driver_name, u."employeeId", d."isActive",
+    COUNT(dr.id) AS total_ratings,
+    ROUND(AVG(dr.rating)::NUMERIC, 2) AS average_rating,
+    SUM(CASE WHEN dr.rating = 5 THEN 1 ELSE 0 END) AS bintang_5,
+    SUM(CASE WHEN dr.rating = 4 THEN 1 ELSE 0 END) AS bintang_4,
+    SUM(CASE WHEN dr.rating = 3 THEN 1 ELSE 0 END) AS bintang_3,
+    SUM(CASE WHEN dr.rating = 2 THEN 1 ELSE 0 END) AS bintang_2,
+    SUM(CASE WHEN dr.rating = 1 THEN 1 ELSE 0 END) AS bintang_1
+FROM drivers d
+JOIN users u ON u.id = d."userId"
+LEFT JOIN driver_ratings dr ON dr."driverId" = d.id
+GROUP BY d.id, u.name, u."employeeId", d."isActive";
+
+CREATE OR REPLACE VIEW v_fuel_expense_summary AS
+SELECT
+    v.id AS vehicle_id, v."plateNumber", r.name AS vehicle_name, vc.name AS category,
+    COUNT(CASE WHEN fe."fuelType" = 'BBM' THEN 1 END) AS bbm_entries,
+    COALESCE(SUM(CASE WHEN fe."fuelType" = 'BBM' THEN fe.liter END), 0) AS total_liter,
+    COALESCE(SUM(CASE WHEN fe."fuelType" = 'BBM' THEN fe."totalAmount" END), 0) AS total_cost_bbm,
+    COUNT(CASE WHEN fe."fuelType" = 'LISTRIK' THEN 1 END) AS listrik_entries,
+    COALESCE(SUM(CASE WHEN fe."fuelType" = 'LISTRIK' THEN fe.kwh END), 0) AS total_kwh,
+    COALESCE(SUM(CASE WHEN fe."fuelType" = 'LISTRIK' THEN fe."totalAmount" END), 0) AS total_cost_listrik,
+    COALESCE(SUM(fe."totalAmount"), 0) AS grand_total
+FROM vehicles v
+JOIN resources r ON r.id = v."resourceId"
+JOIN vehicle_categories vc ON vc.id = v."categoryId"
+LEFT JOIN fuel_expenses fe ON fe."vehicleId" = v.id
+GROUP BY v.id, v."plateNumber", r.name, vc.name;
+
+-- ─── SEED DATA ────────────────────────────────────────────────────────────────
+INSERT INTO roles (name) VALUES ('EMPLOYEE'), ('ADMIN'), ('DRIVER');
+
+INSERT INTO departments (name) VALUES
+    ('Information Technology'), ('Human Resources'),
+    ('Finance & Accounting'), ('Operations'), ('Marketing');
+
+-- Passwords: bcrypt of "Password123!" (except admin = "admin")
+INSERT INTO users ("employeeId", name, email, password, "isActive", "roleId", "departmentId") VALUES
+    ('ADM001', 'Admin Utama',     'admin@company.com',           'admin',                                                         TRUE, 2, 1),
+    ('EMP001', 'John Doe',        'john.doe@company.com',        '$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewKyNiAYQkGDsQtW', TRUE, 1, 1),
+    ('EMP002', 'Jane Smith',      'jane.smith@company.com',      '$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewKyNiAYQkGDsQtW', TRUE, 1, 3),
+    ('EMP003', 'Dewi Lestari',    'dewi.lestari@company.com',    '$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewKyNiAYQkGDsQtW', TRUE, 1, 5),
+    ('EMP004', 'Reza Firmansyah', 'reza.firmansyah@company.com', '$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewKyNiAYQkGDsQtW', TRUE, 1, 4),
+    ('DRV001', 'Pak Supir Satu',  'supir1@company.com',          '$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewKyNiAYQkGDsQtW', TRUE, 3, 4),
+    ('DRV002', 'Pak Supir Dua',   'supir2@company.com',          '$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewKyNiAYQkGDsQtW', TRUE, 3, 4);
+
+INSERT INTO vehicle_categories (name) VALUES
+    ('MPV'), ('SUV'), ('Sedan'), ('Pickup'), ('Bus / Minibus'), ('Listrik / EV');
+
+INSERT INTO resources (name, type, status) VALUES
+    ('Toyota Avanza - B 1234 XY',   'VEHICLE', 'AVAILABLE'),
+    ('Honda CR-V - B 5678 AB',       'VEHICLE', 'AVAILABLE'),
+    ('Toyota Fortuner - B 9999 CD',  'VEHICLE', 'AVAILABLE'),
+    ('Mitsubishi L300 - B 2222 EF',  'VEHICLE', 'MAINTENANCE'),
+    ('Daihatsu Xenia - B 3333 GH',   'VEHICLE', 'AVAILABLE'),
+    ('Toyota HiAce - B 4444 IJ',     'VEHICLE', 'INACTIVE'),
+    ('Hyundai Ioniq 5 - B 5555 EV',  'VEHICLE', 'AVAILABLE'),
+    ('Meeting Room A - Lt.2',        'ROOM',    'AVAILABLE'),
+    ('Meeting Room B - Lt.3',        'ROOM',    'AVAILABLE'),
+    ('Board Room - Lt.5',             'ROOM',    'AVAILABLE'),
+    ('Training Room - Annex Lt.1',   'ROOM',    'INACTIVE');
+
+INSERT INTO vehicles ("resourceId", "plateNumber", brand, model, year, "currentOdometer", "categoryId", capacity) VALUES
+    (1, 'B 1234 XY', 'Toyota',     'Avanza',   2022, 15000, 1, 7),
+    (2, 'B 5678 AB', 'Honda',      'CR-V',     2021, 28500, 2, 5),
+    (3, 'B 9999 CD', 'Toyota',     'Fortuner', 2023,  5200, 2, 7),
+    (4, 'B 2222 EF', 'Mitsubishi', 'L300',     2020, 72000, 4, 8),
+    (5, 'B 3333 GH', 'Daihatsu',   'Xenia',    2022, 18300, 1, 7),
+    (6, 'B 4444 IJ', 'Toyota',     'HiAce',    2019, 95000, 5, 15),
+    (7, 'B 5555 EV', 'Hyundai',    'Ioniq 5',  2024,  3200, 6, 5);
+
+INSERT INTO rooms ("resourceId", location, capacity) VALUES
+    ( 8, 'Gedung Utama Lt. 2', 10),
+    ( 9, 'Gedung Utama Lt. 3', 20),
+    (10, 'Gedung Utama Lt. 5', 50),
+    (11, 'Gedung Annex Lt. 1', 30);
+
+INSERT INTO drivers ("userId", "licenseNumber", "phoneNumber", "isActive") VALUES
+    (6, 'SIM-B1-2024-001', '+6281234567890', TRUE),
+    (7, 'SIM-B1-2024-002', '+6287654321098', TRUE);
+
+INSERT INTO driver_assignments ("driverId", "vehicleId", "assignedAt") VALUES
+    (1, 1, NOW() - INTERVAL '30 days'),
+    (2, 2, NOW() - INTERVAL '15 days');
+
+INSERT INTO master_settings (key, value, unit, description) VALUES
+    ('price_per_liter_bbm',   10000.0000, 'IDR/liter', 'Harga bensin Pertalite per liter'),
+    ('price_per_kwh_listrik',  2466.0000, 'IDR/kWh',   'Tarif listrik PLN per kWh');

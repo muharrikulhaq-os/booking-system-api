@@ -1,0 +1,75 @@
+-- name: ListVehicles :many
+SELECT v.*, r.name AS resource_name, r.status AS resource_status,
+       vc.name AS category_name
+FROM vehicles v
+JOIN resources r ON r.id = v."resourceId"
+JOIN vehicle_categories vc ON vc.id = v."categoryId"
+WHERE (sqlc.narg(search)::text IS NULL
+       OR r.name ILIKE '%' || sqlc.narg(search)::text || '%'
+       OR v."plateNumber" ILIKE '%' || sqlc.narg(search)::text || '%'
+       OR v.brand ILIKE '%' || sqlc.narg(search)::text || '%')
+  AND (sqlc.narg(category_id)::int IS NULL OR v."categoryId" = sqlc.narg(category_id)::int)
+  AND (sqlc.narg(status)::resource_status IS NULL OR r.status = sqlc.narg(status)::resource_status)
+ORDER BY r."createdAt" DESC
+LIMIT $1 OFFSET $2;
+
+-- name: CountVehicles :one
+SELECT COUNT(*) FROM vehicles v
+JOIN resources r ON r.id = v."resourceId"
+WHERE (sqlc.narg(search)::text IS NULL
+       OR r.name ILIKE '%' || sqlc.narg(search)::text || '%'
+       OR v."plateNumber" ILIKE '%' || sqlc.narg(search)::text || '%')
+  AND (sqlc.narg(category_id)::int IS NULL OR v."categoryId" = sqlc.narg(category_id)::int)
+  AND (sqlc.narg(status)::resource_status IS NULL OR r.status = sqlc.narg(status)::resource_status);
+
+-- name: GetVehicleByID :one
+SELECT v.*, r.name AS resource_name, r.status AS resource_status,
+       vc.name AS category_name
+FROM vehicles v
+JOIN resources r ON r.id = v."resourceId"
+JOIN vehicle_categories vc ON vc.id = v."categoryId"
+WHERE v.id = $1 LIMIT 1;
+
+-- name: GetVehicleByPlate :one
+SELECT * FROM vehicles WHERE "plateNumber" = $1 LIMIT 1;
+
+-- name: CreateResource :one
+INSERT INTO resources (name, type, status) VALUES ($1, $2, 'AVAILABLE') RETURNING *;
+
+-- name: CreateVehicle :one
+INSERT INTO vehicles ("resourceId", "plateNumber", brand, model, year,
+                       "currentOdometer", "categoryId", capacity)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *;
+
+-- name: UpdateVehicle :one
+UPDATE vehicles
+SET "plateNumber" = $2, brand = $3, model = $4, year = $5,
+    "currentOdometer" = $6, "categoryId" = $7, capacity = $8
+WHERE id = $1 RETURNING *;
+
+-- name: UpdateResourceName :exec
+UPDATE resources SET name = $2, "updatedAt" = NOW() WHERE id = $1;
+
+-- name: UpdateResourceStatus :one
+UPDATE resources SET status = $2, "updatedAt" = NOW() WHERE id = $1 RETURNING *;
+
+-- name: DeleteResource :exec
+DELETE FROM resources WHERE id = $1;
+
+-- name: UpdateVehiclePhoto :one
+UPDATE vehicles SET "photoUrl" = $2 WHERE id = $1 RETURNING *;
+
+-- name: ListVehicleCategories :many
+SELECT * FROM vehicle_categories ORDER BY name;
+
+-- name: GetVehicleCategoryByID :one
+SELECT * FROM vehicle_categories WHERE id = $1 LIMIT 1;
+
+-- name: CreateVehicleCategory :one
+INSERT INTO vehicle_categories (name) VALUES ($1) RETURNING *;
+
+-- name: DeleteVehicleCategory :exec
+DELETE FROM vehicle_categories WHERE id = $1;
+
+-- name: GetResourceByID :one
+SELECT * FROM resources WHERE id = $1 LIMIT 1;

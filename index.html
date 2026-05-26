@@ -1,0 +1,1286 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Booking System</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg: #0f172a; --surface: #1e293b; --border: #334155;
+      --accent: #3b82f6; --accent-hover: #2563eb;
+      --text: #e2e8f0; --muted: #94a3b8;
+      --success: #22c55e; --danger: #ef4444; --warn: #f59e0b;
+      --radius: 8px;
+    }
+    body { background: var(--bg); color: var(--text); font-family: system-ui, sans-serif; min-height: 100vh; display: flex; flex-direction: column; }
+    header { background: var(--surface); border-bottom: 1px solid var(--border); padding: 12px 24px; display: flex; align-items: center; justify-content: space-between; }
+    header h1 { font-size: 1.2rem; font-weight: 700; }
+    #auth-info { display: flex; align-items: center; gap: 12px; font-size: .85rem; color: var(--muted); }
+    #auth-info span { color: var(--text); }
+    #logout-btn { background: var(--danger); border: none; color: #fff; padding: 6px 14px; border-radius: var(--radius); cursor: pointer; font-size: .8rem; }
+    .layout { display: flex; flex: 1; overflow: hidden; }
+    nav { width: 220px; background: var(--surface); border-right: 1px solid var(--border); padding: 16px 0; flex-shrink: 0; overflow-y: auto; }
+    nav a { display: block; padding: 10px 20px; color: var(--muted); text-decoration: none; font-size: .9rem; cursor: pointer; border-left: 3px solid transparent; transition: .15s; }
+    nav a:hover, nav a.active { color: var(--text); background: rgba(59,130,246,.1); border-left-color: var(--accent); }
+    nav .nav-group { padding: 8px 20px 4px; font-size: .7rem; text-transform: uppercase; color: var(--border); letter-spacing: 1px; }
+    main { flex: 1; overflow-y: auto; padding: 24px; }
+    .page { display: none; }
+    .page.active { display: block; }
+    h2 { font-size: 1.3rem; margin-bottom: 16px; }
+    h3 { font-size: 1rem; margin-bottom: 12px; color: var(--muted); }
+    .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px; margin-bottom: 16px; }
+    .form-row { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
+    .form-group { display: flex; flex-direction: column; gap: 4px; flex: 1; min-width: 160px; }
+    label { font-size: .8rem; color: var(--muted); }
+    input, select, textarea { background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius); color: var(--text); padding: 8px 12px; font-size: .9rem; width: 100%; outline: none; }
+    input:focus, select:focus, textarea:focus { border-color: var(--accent); }
+    textarea { resize: vertical; min-height: 80px; }
+    .btn { padding: 8px 18px; border: none; border-radius: var(--radius); cursor: pointer; font-size: .875rem; font-weight: 600; transition: .15s; }
+    .btn-primary { background: var(--accent); color: #fff; }
+    .btn-primary:hover { background: var(--accent-hover); }
+    .btn-danger { background: var(--danger); color: #fff; }
+    .btn-success { background: var(--success); color: #000; }
+    .btn-warn { background: var(--warn); color: #000; }
+    .btn-ghost { background: transparent; color: var(--muted); border: 1px solid var(--border); }
+    .btn-ghost:hover { color: var(--text); border-color: var(--text); }
+    .btn-sm { padding: 5px 12px; font-size: .8rem; }
+    table { width: 100%; border-collapse: collapse; font-size: .875rem; }
+    th { text-align: left; padding: 10px 12px; color: var(--muted); border-bottom: 1px solid var(--border); font-weight: 600; font-size: .8rem; }
+    td { padding: 10px 12px; border-bottom: 1px solid var(--border); vertical-align: top; }
+    tr:hover td { background: rgba(255,255,255,.03); }
+    .badge { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: .75rem; font-weight: 600; }
+    .badge-pending { background: rgba(245,158,11,.2); color: var(--warn); }
+    .badge-approved { background: rgba(34,197,94,.2); color: var(--success); }
+    .badge-rejected { background: rgba(239,68,68,.2); color: var(--danger); }
+    .badge-ongoing { background: rgba(59,130,246,.2); color: var(--accent); }
+    .badge-completed { background: rgba(148,163,184,.2); color: var(--muted); }
+    .badge-overdue { background: rgba(239,68,68,.3); color: #fca5a5; }
+    .badge-available { background: rgba(34,197,94,.2); color: var(--success); }
+    .badge-maintenance { background: rgba(245,158,11,.2); color: var(--warn); }
+    .toast-container { position: fixed; bottom: 24px; right: 24px; display: flex; flex-direction: column; gap: 8px; z-index: 9999; }
+    .toast { padding: 12px 18px; border-radius: var(--radius); font-size: .875rem; max-width: 340px; animation: slide-in .2s ease; }
+    .toast-success { background: #14532d; color: #86efac; border: 1px solid #166534; }
+    .toast-error { background: #450a0a; color: #fca5a5; border: 1px solid #7f1d1d; }
+    .toast-info { background: #1e3a5f; color: #93c5fd; border: 1px solid #1e40af; }
+    @keyframes slide-in { from { transform: translateX(60px); opacity: 0; } to { transform: none; opacity: 1; } }
+    .pagination { display: flex; gap: 8px; align-items: center; margin-top: 16px; font-size: .85rem; }
+    .pagination button { padding: 5px 12px; }
+    .pagination span { color: var(--muted); }
+    .empty { color: var(--muted); text-align: center; padding: 40px 0; font-size: .9rem; }
+    pre.json { background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px; font-size: .8rem; overflow-x: auto; white-space: pre-wrap; color: #86efac; max-height: 400px; overflow-y: auto; }
+    .flex { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+    .section-actions { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+    .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.7); z-index: 1000; align-items: center; justify-content: center; }
+    .modal-overlay.open { display: flex; }
+    .modal { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 24px; width: 500px; max-width: 95vw; max-height: 90vh; overflow-y: auto; }
+    .modal h3 { margin-bottom: 16px; }
+    .modal-footer { display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px; }
+    #login-page { display: flex; align-items: center; justify-content: center; min-height: 100vh; background: var(--bg); }
+    #login-card { width: 380px; }
+    #login-card h2 { text-align: center; margin-bottom: 24px; }
+    #api-base { font-size: .75rem; color: var(--muted); background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius); padding: 6px 10px; width: 100%; margin-bottom: 16px; outline: none; }
+  </style>
+</head>
+<body>
+
+<!-- LOGIN PAGE -->
+<div id="login-page">
+  <div class="card" id="login-card">
+    <h2>Booking System</h2>
+    <input id="api-base" value="http://localhost:8080/api/v1" placeholder="API Base URL" />
+    <div class="form-group" style="margin-bottom:12px">
+      <label>Email</label>
+      <input id="login-email" type="email" value="admin@company.com" />
+    </div>
+    <div class="form-group" style="margin-bottom:16px">
+      <label>Password</label>
+      <input id="login-pass" type="password" value="admin" />
+    </div>
+    <button class="btn btn-primary" style="width:100%" onclick="doLogin()">Sign In</button>
+    <p id="login-err" style="color:var(--danger);font-size:.85rem;margin-top:8px;text-align:center"></p>
+  </div>
+</div>
+
+<!-- MAIN APP -->
+<div id="app" style="display:none;flex:1;flex-direction:column">
+  <header>
+    <h1>📅 Booking System</h1>
+    <div id="auth-info">
+      Signed in as <span id="user-name-badge">-</span>
+      <span id="user-role-badge" class="badge badge-approved">-</span>
+      <button id="logout-btn" onclick="doLogout()">Logout</button>
+    </div>
+  </header>
+  <div class="layout">
+    <nav id="sidenav">
+      <div class="nav-group">Core</div>
+      <a onclick="showPage('dashboard')">📊 Dashboard</a>
+      <a onclick="showPage('bookings')">📋 Bookings</a>
+      <a onclick="showPage('vehicles')">🚗 Vehicles</a>
+      <a onclick="showPage('rooms')">🏠 Rooms</a>
+      <div class="nav-group">People</div>
+      <a onclick="showPage('drivers')">🚦 Drivers</a>
+      <a onclick="showPage('users')" id="nav-users">👤 Users</a>
+      <div class="nav-group">Operations</div>
+      <a onclick="showPage('fuel')">⛽ Fuel Expenses</a>
+      <a onclick="showPage('maintenance')">🔧 Maintenance</a>
+      <a onclick="showPage('guest-bookings')">🌐 Guest Bookings</a>
+      <div class="nav-group">Admin</div>
+      <a onclick="showPage('reports')" id="nav-reports">📈 Reports</a>
+      <a onclick="showPage('settings')" id="nav-settings">⚙ Settings</a>
+    </nav>
+    <main id="main-content">
+
+      <!-- DASHBOARD -->
+      <div class="page" id="page-dashboard">
+        <h2>Dashboard</h2>
+        <div class="form-row">
+          <div class="card" style="flex:1;min-width:140px;text-align:center">
+            <div style="font-size:2rem" id="dash-bookings">-</div>
+            <div style="color:var(--muted);font-size:.85rem">Total Bookings</div>
+          </div>
+          <div class="card" style="flex:1;min-width:140px;text-align:center">
+            <div style="font-size:2rem" id="dash-vehicles">-</div>
+            <div style="color:var(--muted);font-size:.85rem">Vehicles</div>
+          </div>
+          <div class="card" style="flex:1;min-width:140px;text-align:center">
+            <div style="font-size:2rem" id="dash-rooms">-</div>
+            <div style="color:var(--muted);font-size:.85rem">Rooms</div>
+          </div>
+          <div class="card" style="flex:1;min-width:140px;text-align:center">
+            <div style="font-size:2rem" id="dash-drivers">-</div>
+            <div style="color:var(--muted);font-size:.85rem">Drivers</div>
+          </div>
+        </div>
+        <div class="card">
+          <h3>Recent Bookings</h3>
+          <div id="dash-recent"></div>
+        </div>
+      </div>
+
+      <!-- BOOKINGS -->
+      <div class="page" id="page-bookings">
+        <div class="section-actions">
+          <h2>Bookings</h2>
+          <button class="btn btn-primary" onclick="openModal('modal-create-booking')">+ New Booking</button>
+        </div>
+        <div class="card">
+          <div class="flex" style="margin-bottom:12px">
+            <select id="filter-booking-status" style="width:160px" onchange="loadBookings()">
+              <option value="">All Status</option>
+              <option>PENDING</option><option>APPROVED</option><option>REJECTED</option>
+              <option>ONGOING</option><option>COMPLETED</option><option>CANCELLED</option><option>OVERDUE</option>
+            </select>
+            <select id="filter-booking-type" style="width:160px" onchange="loadBookings()">
+              <option value="">All Types</option>
+              <option value="VEHICLE">Vehicle</option>
+              <option value="ROOM">Room</option>
+            </select>
+            <button class="btn btn-ghost btn-sm" onclick="loadBookings()">Refresh</button>
+          </div>
+          <div id="bookings-table"></div>
+          <div class="pagination" id="bookings-pagination"></div>
+        </div>
+      </div>
+
+      <!-- VEHICLES -->
+      <div class="page" id="page-vehicles">
+        <div class="section-actions">
+          <h2>Vehicles</h2>
+          <button class="btn btn-primary" id="btn-add-vehicle" onclick="openModal('modal-create-vehicle')">+ Add Vehicle</button>
+        </div>
+        <div class="card">
+          <div id="vehicles-table"></div>
+          <div class="pagination" id="vehicles-pagination"></div>
+        </div>
+      </div>
+
+      <!-- ROOMS -->
+      <div class="page" id="page-rooms">
+        <div class="section-actions">
+          <h2>Rooms</h2>
+          <button class="btn btn-primary" id="btn-add-room" onclick="openModal('modal-create-room')">+ Add Room</button>
+        </div>
+        <div class="card">
+          <div id="rooms-table"></div>
+          <div class="pagination" id="rooms-pagination"></div>
+        </div>
+      </div>
+
+      <!-- DRIVERS -->
+      <div class="page" id="page-drivers">
+        <div class="section-actions">
+          <h2>Drivers</h2>
+          <button class="btn btn-primary" id="btn-add-driver" onclick="openModal('modal-create-driver')">+ Add Driver</button>
+        </div>
+        <div class="card">
+          <div id="drivers-table"></div>
+          <div class="pagination" id="drivers-pagination"></div>
+        </div>
+      </div>
+
+      <!-- USERS -->
+      <div class="page" id="page-users">
+        <div class="section-actions">
+          <h2>Users</h2>
+          <button class="btn btn-primary" onclick="openModal('modal-create-user')">+ Add User</button>
+        </div>
+        <div class="card">
+          <div class="flex" style="margin-bottom:12px">
+            <input id="filter-user-search" placeholder="Search name/email..." style="width:240px" oninput="debounce(loadUsers,400)()" />
+            <select id="filter-user-role" style="width:140px" onchange="loadUsers()">
+              <option value="">All Roles</option>
+              <option value="1">Admin</option><option value="2">Employee</option><option value="3">Driver</option>
+            </select>
+          </div>
+          <div id="users-table"></div>
+          <div class="pagination" id="users-pagination"></div>
+        </div>
+      </div>
+
+      <!-- FUEL -->
+      <div class="page" id="page-fuel">
+        <div class="section-actions">
+          <h2>Fuel Expenses</h2>
+          <div class="flex">
+            <button class="btn btn-primary btn-sm" onclick="openModal('modal-create-bbm')">+ BBM</button>
+            <button class="btn btn-warn btn-sm" onclick="openModal('modal-create-listrik')">+ Listrik</button>
+          </div>
+        </div>
+        <div class="card">
+          <div id="fuel-table"></div>
+          <div class="pagination" id="fuel-pagination"></div>
+        </div>
+      </div>
+
+      <!-- MAINTENANCE -->
+      <div class="page" id="page-maintenance">
+        <div class="section-actions">
+          <h2>Maintenance</h2>
+          <button class="btn btn-primary" id="btn-add-maintenance" onclick="openModal('modal-create-maintenance')">+ Add Record</button>
+        </div>
+        <div class="card">
+          <div id="maintenance-table"></div>
+          <div class="pagination" id="maintenance-pagination"></div>
+        </div>
+      </div>
+
+      <!-- GUEST BOOKINGS -->
+      <div class="page" id="page-guest-bookings">
+        <div class="section-actions">
+          <h2>Guest Bookings</h2>
+          <button class="btn btn-ghost btn-sm" onclick="loadGuestBookings()">Refresh</button>
+        </div>
+        <div class="card">
+          <div id="guest-table"></div>
+          <div class="pagination" id="guest-pagination"></div>
+        </div>
+      </div>
+
+      <!-- REPORTS -->
+      <div class="page" id="page-reports">
+        <h2>Reports</h2>
+        <div class="flex" style="margin-bottom:16px;flex-wrap:wrap">
+          <button class="btn btn-ghost btn-sm" onclick="loadReport('bookings')">Booking Summary</button>
+          <button class="btn btn-ghost btn-sm" onclick="loadReport('resource-usage')">Resource Usage</button>
+          <button class="btn btn-ghost btn-sm" onclick="loadReport('fuel-expenses')">Fuel Expenses</button>
+          <button class="btn btn-ghost btn-sm" onclick="loadReport('maintenance-cost')">Maintenance Cost</button>
+          <button class="btn btn-ghost btn-sm" onclick="loadReport('driver-ratings')">Driver Ratings</button>
+          <button class="btn btn-ghost btn-sm" onclick="loadReport('overdue-bookings')">Overdue Bookings</button>
+        </div>
+        <div class="card">
+          <h3 id="report-title">Select a report above</h3>
+          <pre class="json" id="report-output">// report data will appear here</pre>
+        </div>
+      </div>
+
+      <!-- SETTINGS -->
+      <div class="page" id="page-settings">
+        <h2>Master Settings</h2>
+        <div class="card">
+          <div id="settings-list"></div>
+        </div>
+      </div>
+
+    </main>
+  </div>
+</div>
+
+<!-- MODALS -->
+<div class="modal-overlay" id="modal-create-booking">
+  <div class="modal">
+    <h3>Create Booking</h3>
+    <div class="form-group" style="margin-bottom:12px">
+      <label>Resource ID</label>
+      <input id="new-booking-resource" type="number" placeholder="Resource ID" />
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Start Date</label>
+        <input id="new-booking-start" type="datetime-local" />
+      </div>
+      <div class="form-group">
+        <label>End Date</label>
+        <input id="new-booking-end" type="datetime-local" />
+      </div>
+    </div>
+    <div class="form-group" style="margin-bottom:12px">
+      <label>Purpose</label>
+      <textarea id="new-booking-purpose" placeholder="Purpose of booking"></textarea>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-create-booking')">Cancel</button>
+      <button class="btn btn-primary" onclick="createBooking()">Submit</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="modal-create-vehicle">
+  <div class="modal">
+    <h3>Add Vehicle</h3>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Name</label>
+        <input id="new-v-name" placeholder="Vehicle name" />
+      </div>
+      <div class="form-group">
+        <label>Plate Number</label>
+        <input id="new-v-plate" placeholder="B 1234 ABC" />
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Brand</label>
+        <input id="new-v-brand" placeholder="Toyota" />
+      </div>
+      <div class="form-group">
+        <label>Model</label>
+        <input id="new-v-model" placeholder="Avanza" />
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Year</label>
+        <input id="new-v-year" type="number" placeholder="2023" />
+      </div>
+      <div class="form-group">
+        <label>Capacity</label>
+        <input id="new-v-cap" type="number" placeholder="7" />
+      </div>
+      <div class="form-group">
+        <label>Category ID</label>
+        <input id="new-v-cat" type="number" placeholder="1" />
+      </div>
+    </div>
+    <div class="form-group" style="margin-bottom:12px">
+      <label>Fuel Type</label>
+      <select id="new-v-fuel">
+        <option value="BENSIN">BENSIN</option>
+        <option value="SOLAR">SOLAR</option>
+        <option value="LISTRIK">LISTRIK</option>
+      </select>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-create-vehicle')">Cancel</button>
+      <button class="btn btn-primary" onclick="createVehicle()">Add</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="modal-create-room">
+  <div class="modal">
+    <h3>Add Room</h3>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Name</label>
+        <input id="new-r-name" placeholder="Meeting Room A" />
+      </div>
+      <div class="form-group">
+        <label>Capacity</label>
+        <input id="new-r-cap" type="number" placeholder="10" />
+      </div>
+    </div>
+    <div class="form-group" style="margin-bottom:12px">
+      <label>Location</label>
+      <input id="new-r-loc" placeholder="Floor 2, Building A" />
+    </div>
+    <div class="form-group" style="margin-bottom:12px">
+      <label>Facilities (comma separated)</label>
+      <input id="new-r-fac" placeholder="Projector, AC, Whiteboard" />
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-create-room')">Cancel</button>
+      <button class="btn btn-primary" onclick="createRoom()">Add</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="modal-create-driver">
+  <div class="modal">
+    <h3>Add Driver</h3>
+    <div class="form-row">
+      <div class="form-group">
+        <label>User ID</label>
+        <input id="new-d-user" type="number" placeholder="User ID" />
+      </div>
+      <div class="form-group">
+        <label>License Number</label>
+        <input id="new-d-license" placeholder="SIM A 12345" />
+      </div>
+    </div>
+    <div class="form-group" style="margin-bottom:12px">
+      <label>Phone Number</label>
+      <input id="new-d-phone" placeholder="08123456789" />
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-create-driver')">Cancel</button>
+      <button class="btn btn-primary" onclick="createDriver()">Add</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="modal-create-user">
+  <div class="modal">
+    <h3>Create User</h3>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Employee ID</label>
+        <input id="new-u-empid" placeholder="EMP001" />
+      </div>
+      <div class="form-group">
+        <label>Name</label>
+        <input id="new-u-name" placeholder="Full name" />
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Email</label>
+        <input id="new-u-email" type="email" placeholder="user@example.com" />
+      </div>
+      <div class="form-group">
+        <label>Password</label>
+        <input id="new-u-pass" type="password" placeholder="min 8 chars" />
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Role ID</label>
+        <input id="new-u-role" type="number" value="2" />
+      </div>
+      <div class="form-group">
+        <label>Department ID</label>
+        <input id="new-u-dept" type="number" value="1" />
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-create-user')">Cancel</button>
+      <button class="btn btn-primary" onclick="createUser()">Create</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="modal-create-bbm">
+  <div class="modal">
+    <h3>Record BBM Expense</h3>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Vehicle ID</label>
+        <input id="bbm-vehicle" type="number" />
+      </div>
+      <div class="form-group">
+        <label>Driver ID</label>
+        <input id="bbm-driver" type="number" />
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Liter</label>
+        <input id="bbm-liter" type="number" step="0.1" />
+      </div>
+      <div class="form-group">
+        <label>Price/Liter</label>
+        <input id="bbm-price" type="number" step="100" />
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Odometer Before</label>
+        <input id="bbm-odo-before" type="number" />
+      </div>
+      <div class="form-group">
+        <label>Odometer After</label>
+        <input id="bbm-odo-after" type="number" />
+      </div>
+    </div>
+    <div class="form-group" style="margin-bottom:12px">
+      <label>Note</label>
+      <input id="bbm-note" placeholder="Optional note" />
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-create-bbm')">Cancel</button>
+      <button class="btn btn-primary" onclick="createBBM()">Submit</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="modal-create-listrik">
+  <div class="modal">
+    <h3>Record Listrik Expense</h3>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Vehicle ID</label>
+        <input id="listrik-vehicle" type="number" />
+      </div>
+      <div class="form-group">
+        <label>Driver ID</label>
+        <input id="listrik-driver" type="number" />
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>kWh</label>
+        <input id="listrik-kwh" type="number" step="0.1" />
+      </div>
+      <div class="form-group">
+        <label>Price/kWh</label>
+        <input id="listrik-price" type="number" step="100" />
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Battery Before (%)</label>
+        <input id="listrik-bat-before" type="number" min="0" max="100" />
+      </div>
+      <div class="form-group">
+        <label>Battery After (%)</label>
+        <input id="listrik-bat-after" type="number" min="0" max="100" />
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-create-listrik')">Cancel</button>
+      <button class="btn btn-primary" onclick="createListrik()">Submit</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="modal-create-maintenance">
+  <div class="modal">
+    <h3>Add Maintenance Record</h3>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Resource ID</label>
+        <input id="maint-resource" type="number" />
+      </div>
+      <div class="form-group">
+        <label>Start Date</label>
+        <input id="maint-start" type="datetime-local" />
+      </div>
+    </div>
+    <div class="form-group" style="margin-bottom:12px">
+      <label>Description</label>
+      <textarea id="maint-desc" placeholder="Maintenance description"></textarea>
+    </div>
+    <div class="form-group" style="margin-bottom:12px">
+      <label>Cost (optional)</label>
+      <input id="maint-cost" type="number" step="1000" placeholder="0" />
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-create-maintenance')">Cancel</button>
+      <button class="btn btn-primary" onclick="createMaintenance()">Submit</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="modal-booking-detail">
+  <div class="modal" style="width:620px">
+    <h3 id="booking-detail-title">Booking Detail</h3>
+    <pre class="json" id="booking-detail-json"></pre>
+    <div id="booking-detail-actions" class="flex" style="margin-top:12px"></div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-booking-detail')">Close</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast-container" id="toast-container"></div>
+
+<script>
+// ─── STATE ────────────────────────────────────────────────────────────────────
+let state = { token: null, user: null, role: null, pages: {} };
+const API = () => document.getElementById('api-base').value.replace(/\/$/, '');
+
+// ─── UTILS ───────────────────────────────────────────────────────────────────
+function toast(msg, type = 'info') {
+  const c = document.getElementById('toast-container');
+  const t = document.createElement('div');
+  t.className = `toast toast-${type}`;
+  t.textContent = msg;
+  c.appendChild(t);
+  setTimeout(() => t.remove(), 3500);
+}
+
+function debounce(fn, ms) {
+  let timer;
+  return (...args) => { clearTimeout(timer); timer = setTimeout(() => fn(...args), ms); };
+}
+
+function openModal(id) { document.getElementById(id).classList.add('open'); }
+function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+
+// close modal on overlay click
+document.querySelectorAll('.modal-overlay').forEach(o => {
+  o.addEventListener('click', e => { if (e.target === o) o.classList.remove('open'); });
+});
+
+function badge(status) {
+  const s = (status || '').toLowerCase().replace('_', '-');
+  return `<span class="badge badge-${s}">${status}</span>`;
+}
+
+function fmtDate(d) {
+  if (!d) return '-';
+  return new Date(d).toLocaleString('id-ID', { dateStyle: 'medium', timeStyle: 'short' });
+}
+
+// ─── API ─────────────────────────────────────────────────────────────────────
+async function api(method, path, body, multipart) {
+  const headers = {};
+  if (state.token) headers['Authorization'] = 'Bearer ' + state.token;
+  if (body && !multipart) headers['Content-Type'] = 'application/json';
+
+  const res = await fetch(API() + path, {
+    method,
+    headers,
+    body: body ? (multipart ? body : JSON.stringify(body)) : undefined,
+  });
+
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(json.message || json.error || `HTTP ${res.status}`);
+  return json;
+}
+
+const GET = (path) => api('GET', path);
+const POST = (path, b) => api('POST', path, b);
+const PUT = (path, b) => api('PUT', path, b);
+const PATCH = (path, b) => api('PATCH', path, b);
+const DELETE = (path) => api('DELETE', path);
+
+// ─── AUTH ─────────────────────────────────────────────────────────────────────
+async function doLogin() {
+  const email = document.getElementById('login-email').value;
+  const pass = document.getElementById('login-pass').value;
+  try {
+    const r = await POST('/auth/login', { email, password: pass });
+    state.token = r.data.accessToken;
+    state.user = r.data.user;
+    state.role = r.data.user.role;
+    document.getElementById('user-name-badge').textContent = state.user.name;
+    document.getElementById('user-role-badge').textContent = state.role;
+    document.getElementById('login-page').style.display = 'none';
+    document.getElementById('app').style.display = 'flex';
+    adjustForRole();
+    showPage('dashboard');
+    loadDashboard();
+    toast('Welcome, ' + state.user.name, 'success');
+  } catch (e) {
+    document.getElementById('login-err').textContent = e.message;
+  }
+}
+
+function doLogout() {
+  state.token = null; state.user = null; state.role = null;
+  document.getElementById('app').style.display = 'none';
+  document.getElementById('login-page').style.display = 'flex';
+}
+
+function adjustForRole() {
+  if (state.role !== 'ADMIN') {
+    document.getElementById('nav-reports').style.display = 'none';
+    document.getElementById('nav-settings').style.display = 'none';
+    document.getElementById('btn-add-vehicle') && (document.getElementById('btn-add-vehicle').style.display = 'none');
+    document.getElementById('btn-add-room') && (document.getElementById('btn-add-room').style.display = 'none');
+    document.getElementById('btn-add-driver') && (document.getElementById('btn-add-driver').style.display = 'none');
+    document.getElementById('btn-add-maintenance') && (document.getElementById('btn-add-maintenance').style.display = 'none');
+  }
+}
+
+// ─── NAVIGATION ───────────────────────────────────────────────────────────────
+function showPage(name) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('nav a').forEach(a => a.classList.remove('active'));
+  const page = document.getElementById('page-' + name);
+  if (page) {
+    page.classList.add('active');
+    // try to trigger load
+    const loaders = {
+      dashboard: loadDashboard, bookings: loadBookings, vehicles: loadVehicles,
+      rooms: loadRooms, drivers: loadDrivers, users: loadUsers, fuel: loadFuel,
+      maintenance: loadMaintenance, 'guest-bookings': loadGuestBookings, settings: loadSettings,
+    };
+    if (loaders[name]) loaders[name]();
+  }
+}
+
+// ─── DASHBOARD ────────────────────────────────────────────────────────────────
+async function loadDashboard() {
+  try {
+    const [b, v, r, d] = await Promise.allSettled([
+      GET('/bookings?limit=1'), GET('/vehicles?limit=1'),
+      GET('/rooms?limit=1'), GET('/drivers?limit=1'),
+    ]);
+    document.getElementById('dash-bookings').textContent = b.value?.data?.total ?? '-';
+    document.getElementById('dash-vehicles').textContent = v.value?.data?.total ?? '-';
+    document.getElementById('dash-rooms').textContent = r.value?.data?.total ?? '-';
+    document.getElementById('dash-drivers').textContent = d.value?.data?.total ?? '-';
+
+    const rb = await GET('/bookings?limit=5');
+    const rows = (rb.data?.items || []).map(b => `
+      <tr>
+        <td>${b.id}</td>
+        <td>${b.user?.name || '-'}</td>
+        <td>${b.resource?.name || '-'} (${b.resource?.type || '-'})</td>
+        <td>${fmtDate(b.startDate)}</td>
+        <td>${badge(b.status)}</td>
+      </tr>`).join('');
+    document.getElementById('dash-recent').innerHTML = rows
+      ? `<table><thead><tr><th>ID</th><th>User</th><th>Resource</th><th>Start</th><th>Status</th></tr></thead><tbody>${rows}</tbody></table>`
+      : '<div class="empty">No bookings yet</div>';
+  } catch(e) { toast(e.message, 'error'); }
+}
+
+// ─── BOOKINGS ────────────────────────────────────────────────────────────────
+let bookingPage = 1;
+async function loadBookings(page = 1) {
+  bookingPage = page;
+  const status = document.getElementById('filter-booking-status').value;
+  const type = document.getElementById('filter-booking-type').value;
+  let q = `?page=${page}&limit=15`;
+  if (status) q += `&status=${status}`;
+  if (type) q += `&resourceType=${type}`;
+  try {
+    const r = await GET('/bookings' + q);
+    const items = r.data?.items || [];
+    const total = r.data?.total || 0;
+    const rows = items.map(b => `
+      <tr style="cursor:pointer" onclick="viewBooking(${b.id})">
+        <td>${b.id}</td>
+        <td>${b.user?.name || '-'}</td>
+        <td>${b.resource?.name || '-'}</td>
+        <td>${badge(b.resource?.type)}</td>
+        <td>${fmtDate(b.startDate)}</td>
+        <td>${fmtDate(b.endDate)}</td>
+        <td>${badge(b.status)}</td>
+        <td><button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();viewBooking(${b.id})">View</button></td>
+      </tr>`).join('');
+    document.getElementById('bookings-table').innerHTML = rows
+      ? `<table><thead><tr><th>ID</th><th>User</th><th>Resource</th><th>Type</th><th>Start</th><th>End</th><th>Status</th><th></th></tr></thead><tbody>${rows}</tbody></table>`
+      : '<div class="empty">No bookings found</div>';
+    renderPagination('bookings-pagination', total, 15, page, p => loadBookings(p));
+  } catch(e) { toast(e.message, 'error'); }
+}
+
+async function viewBooking(id) {
+  try {
+    const r = await GET('/bookings/' + id);
+    const b = r.data;
+    document.getElementById('booking-detail-title').textContent = `Booking #${id}`;
+    document.getElementById('booking-detail-json').textContent = JSON.stringify(b, null, 2);
+    const actions = document.getElementById('booking-detail-actions');
+    actions.innerHTML = '';
+    if (state.role === 'ADMIN') {
+      if (b.status === 'PENDING') {
+        actions.innerHTML += `<button class="btn btn-success btn-sm" onclick="approveBooking(${id})">Approve</button>`;
+        actions.innerHTML += `<button class="btn btn-danger btn-sm" onclick="rejectBooking(${id})">Reject</button>`;
+      }
+      if (b.status === 'APPROVED' && b.resource?.type === 'VEHICLE') {
+        actions.innerHTML += `<button class="btn btn-primary btn-sm" onclick="assignVehicleModal(${id})">Assign Vehicle</button>`;
+      }
+      if (b.status === 'ONGOING' || b.status === 'OVERDUE') {
+        actions.innerHTML += `<button class="btn btn-success btn-sm" onclick="completeBooking(${id})">Complete</button>`;
+      }
+    }
+    if (b.status === 'PENDING') {
+      actions.innerHTML += `<button class="btn btn-ghost btn-sm" onclick="cancelBooking(${id})">Cancel</button>`;
+    }
+    openModal('modal-booking-detail');
+  } catch(e) { toast(e.message, 'error'); }
+}
+
+async function approveBooking(id) {
+  try {
+    await POST(`/bookings/${id}/approve`, { note: '' });
+    toast('Booking approved', 'success');
+    closeModal('modal-booking-detail');
+    loadBookings(bookingPage);
+  } catch(e) { toast(e.message, 'error'); }
+}
+
+async function rejectBooking(id) {
+  const note = prompt('Rejection reason:');
+  if (!note) return;
+  try {
+    await POST(`/bookings/${id}/reject`, { note });
+    toast('Booking rejected', 'success');
+    closeModal('modal-booking-detail');
+    loadBookings(bookingPage);
+  } catch(e) { toast(e.message, 'error'); }
+}
+
+async function cancelBooking(id) {
+  if (!confirm('Cancel this booking?')) return;
+  try {
+    await PATCH(`/bookings/${id}/cancel`);
+    toast('Booking cancelled', 'success');
+    closeModal('modal-booking-detail');
+    loadBookings(bookingPage);
+  } catch(e) { toast(e.message, 'error'); }
+}
+
+async function completeBooking(id) {
+  try {
+    await PATCH(`/bookings/${id}/complete`);
+    toast('Booking completed', 'success');
+    closeModal('modal-booking-detail');
+    loadBookings(bookingPage);
+  } catch(e) { toast(e.message, 'error'); }
+}
+
+async function assignVehicleModal(bookingId) {
+  const driverID = prompt('Driver ID:');
+  const vehicleID = prompt('Vehicle ID:');
+  if (!driverID || !vehicleID) return;
+  try {
+    await POST(`/bookings/${bookingId}/assign-vehicle`, { driverId: +driverID, vehicleId: +vehicleID });
+    toast('Vehicle assigned', 'success');
+    closeModal('modal-booking-detail');
+    loadBookings(bookingPage);
+  } catch(e) { toast(e.message, 'error'); }
+}
+
+async function createBooking() {
+  try {
+    const body = {
+      resourceId: +document.getElementById('new-booking-resource').value,
+      startDate: new Date(document.getElementById('new-booking-start').value).toISOString(),
+      endDate: new Date(document.getElementById('new-booking-end').value).toISOString(),
+      purpose: document.getElementById('new-booking-purpose').value,
+    };
+    await POST('/bookings', body);
+    toast('Booking created', 'success');
+    closeModal('modal-create-booking');
+    loadBookings();
+  } catch(e) { toast(e.message, 'error'); }
+}
+
+// ─── VEHICLES ────────────────────────────────────────────────────────────────
+let vehiclePage = 1;
+async function loadVehicles(page = 1) {
+  vehiclePage = page;
+  try {
+    const r = await GET(`/vehicles?page=${page}&limit=15`);
+    const items = r.data?.items || [];
+    const rows = items.map(v => `
+      <tr>
+        <td>${v.id}</td>
+        <td>${v.name}</td>
+        <td>${v.plateNumber}</td>
+        <td>${v.brand} ${v.model}</td>
+        <td>${v.year}</td>
+        <td>${v.capacity} seats</td>
+        <td>${badge(v.status)}</td>
+        <td>${state.role === 'ADMIN' ? `<button class="btn btn-danger btn-sm" onclick="deleteVehicle(${v.id})">Del</button>` : ''}</td>
+      </tr>`).join('');
+    document.getElementById('vehicles-table').innerHTML = rows
+      ? `<table><thead><tr><th>ID</th><th>Name</th><th>Plate</th><th>Brand/Model</th><th>Year</th><th>Capacity</th><th>Status</th><th></th></tr></thead><tbody>${rows}</tbody></table>`
+      : '<div class="empty">No vehicles</div>';
+    renderPagination('vehicles-pagination', r.data?.total, 15, page, p => loadVehicles(p));
+  } catch(e) { toast(e.message, 'error'); }
+}
+
+async function createVehicle() {
+  try {
+    const body = {
+      name: document.getElementById('new-v-name').value,
+      plateNumber: document.getElementById('new-v-plate').value,
+      brand: document.getElementById('new-v-brand').value,
+      model: document.getElementById('new-v-model').value,
+      year: +document.getElementById('new-v-year').value,
+      capacity: +document.getElementById('new-v-cap').value,
+      categoryId: +document.getElementById('new-v-cat').value,
+      fuelType: document.getElementById('new-v-fuel').value,
+    };
+    await POST('/vehicles', body);
+    toast('Vehicle added', 'success');
+    closeModal('modal-create-vehicle');
+    loadVehicles();
+  } catch(e) { toast(e.message, 'error'); }
+}
+
+async function deleteVehicle(id) {
+  if (!confirm('Delete vehicle?')) return;
+  try {
+    await DELETE('/vehicles/' + id);
+    toast('Vehicle deleted', 'success');
+    loadVehicles(vehiclePage);
+  } catch(e) { toast(e.message, 'error'); }
+}
+
+// ─── ROOMS ───────────────────────────────────────────────────────────────────
+let roomPage = 1;
+async function loadRooms(page = 1) {
+  roomPage = page;
+  try {
+    const r = await GET(`/rooms?page=${page}&limit=15`);
+    const items = r.data?.items || [];
+    const rows = items.map(v => `
+      <tr>
+        <td>${v.id}</td>
+        <td>${v.name}</td>
+        <td>${v.capacity} pax</td>
+        <td>${v.location || '-'}</td>
+        <td>${badge(v.status)}</td>
+        <td>${state.role === 'ADMIN' ? `<button class="btn btn-danger btn-sm" onclick="deleteRoom(${v.id})">Del</button>` : ''}</td>
+      </tr>`).join('');
+    document.getElementById('rooms-table').innerHTML = rows
+      ? `<table><thead><tr><th>ID</th><th>Name</th><th>Capacity</th><th>Location</th><th>Status</th><th></th></tr></thead><tbody>${rows}</tbody></table>`
+      : '<div class="empty">No rooms</div>';
+    renderPagination('rooms-pagination', r.data?.total, 15, page, p => loadRooms(p));
+  } catch(e) { toast(e.message, 'error'); }
+}
+
+async function createRoom() {
+  try {
+    const body = {
+      name: document.getElementById('new-r-name').value,
+      capacity: +document.getElementById('new-r-cap').value,
+      location: document.getElementById('new-r-loc').value,
+      facilities: document.getElementById('new-r-fac').value.split(',').map(s => s.trim()).filter(Boolean),
+    };
+    await POST('/rooms', body);
+    toast('Room added', 'success');
+    closeModal('modal-create-room');
+    loadRooms();
+  } catch(e) { toast(e.message, 'error'); }
+}
+
+async function deleteRoom(id) {
+  if (!confirm('Delete room?')) return;
+  try {
+    await DELETE('/rooms/' + id);
+    toast('Room deleted', 'success');
+    loadRooms(roomPage);
+  } catch(e) { toast(e.message, 'error'); }
+}
+
+// ─── DRIVERS ─────────────────────────────────────────────────────────────────
+let driverPage = 1;
+async function loadDrivers(page = 1) {
+  driverPage = page;
+  try {
+    const r = await GET(`/drivers?page=${page}&limit=15`);
+    const items = r.data?.items || [];
+    const rows = items.map(d => `
+      <tr>
+        <td>${d.id}</td>
+        <td>${d.name}</td>
+        <td>${d.licenseNumber}</td>
+        <td>${d.phoneNumber || '-'}</td>
+        <td>${d.isActive ? '<span class="badge badge-approved">Active</span>' : '<span class="badge badge-rejected">Inactive</span>'}</td>
+        <td>${state.role === 'ADMIN' ? `<button class="btn btn-ghost btn-sm" onclick="toggleDriver(${d.id})">Toggle</button>` : ''}</td>
+      </tr>`).join('');
+    document.getElementById('drivers-table').innerHTML = rows
+      ? `<table><thead><tr><th>ID</th><th>Name</th><th>License</th><th>Phone</th><th>Status</th><th></th></tr></thead><tbody>${rows}</tbody></table>`
+      : '<div class="empty">No drivers</div>';
+    renderPagination('drivers-pagination', r.data?.total, 15, page, p => loadDrivers(p));
+  } catch(e) { toast(e.message, 'error'); }
+}
+
+async function createDriver() {
+  try {
+    const body = {
+      userId: +document.getElementById('new-d-user').value,
+      licenseNumber: document.getElementById('new-d-license').value,
+      phoneNumber: document.getElementById('new-d-phone').value,
+    };
+    await POST('/drivers', body);
+    toast('Driver added', 'success');
+    closeModal('modal-create-driver');
+    loadDrivers();
+  } catch(e) { toast(e.message, 'error'); }
+}
+
+async function toggleDriver(id) {
+  try {
+    await PATCH(`/drivers/${id}/toggle-active`);
+    toast('Driver status updated', 'success');
+    loadDrivers(driverPage);
+  } catch(e) { toast(e.message, 'error'); }
+}
+
+// ─── USERS ───────────────────────────────────────────────────────────────────
+let userPage = 1;
+async function loadUsers(page = 1) {
+  userPage = page;
+  const search = document.getElementById('filter-user-search')?.value || '';
+  const roleId = document.getElementById('filter-user-role')?.value || '';
+  let q = `?page=${page}&limit=15`;
+  if (search) q += `&search=${encodeURIComponent(search)}`;
+  if (roleId) q += `&roleId=${roleId}`;
+  try {
+    const r = await GET('/users' + q);
+    const items = r.data?.items || [];
+    const rows = items.map(u => `
+      <tr>
+        <td>${u.id}</td>
+        <td>${u.employeeId}</td>
+        <td>${u.name}</td>
+        <td>${u.email}</td>
+        <td>${u.role?.name || '-'}</td>
+        <td>${u.department?.name || '-'}</td>
+        <td>${u.isActive ? '<span class="badge badge-approved">Active</span>' : '<span class="badge badge-rejected">Inactive</span>'}</td>
+        <td>${state.role === 'ADMIN' ? `<button class="btn btn-ghost btn-sm" onclick="toggleUser(${u.id})">Toggle</button>` : ''}</td>
+      </tr>`).join('');
+    document.getElementById('users-table').innerHTML = rows
+      ? `<table><thead><tr><th>ID</th><th>EmpID</th><th>Name</th><th>Email</th><th>Role</th><th>Dept</th><th>Active</th><th></th></tr></thead><tbody>${rows}</tbody></table>`
+      : '<div class="empty">No users</div>';
+    renderPagination('users-pagination', r.data?.total, 15, page, p => loadUsers(p));
+  } catch(e) { toast(e.message, 'error'); }
+}
+
+async function createUser() {
+  try {
+    const body = {
+      employeeId: document.getElementById('new-u-empid').value,
+      name: document.getElementById('new-u-name').value,
+      email: document.getElementById('new-u-email').value,
+      password: document.getElementById('new-u-pass').value,
+      roleId: +document.getElementById('new-u-role').value,
+      departmentId: +document.getElementById('new-u-dept').value,
+    };
+    await POST('/auth/register', body);
+    toast('User created', 'success');
+    closeModal('modal-create-user');
+    loadUsers();
+  } catch(e) { toast(e.message, 'error'); }
+}
+
+async function toggleUser(id) {
+  try {
+    await PATCH('/users/' + id + '/toggle-active');
+    toast('User status updated', 'success');
+    loadUsers(userPage);
+  } catch(e) { toast(e.message, 'error'); }
+}
+
+// ─── FUEL ────────────────────────────────────────────────────────────────────
+let fuelPage = 1;
+async function loadFuel(page = 1) {
+  fuelPage = page;
+  try {
+    const r = await GET(`/fuel-expenses?page=${page}&limit=15`);
+    const items = r.data?.items || [];
+    const rows = items.map(f => `
+      <tr>
+        <td>${f.id}</td>
+        <td>${f.driverName}</td>
+        <td>${f.vehicleName}</td>
+        <td>${badge(f.fuelType)}</td>
+        <td>${f.totalAmount}</td>
+        <td>${fmtDate(f.createdAt)}</td>
+        <td>${state.role === 'ADMIN' ? `<button class="btn btn-danger btn-sm" onclick="deleteFuel(${f.id})">Del</button>` : ''}</td>
+      </tr>`).join('');
+    document.getElementById('fuel-table').innerHTML = rows
+      ? `<table><thead><tr><th>ID</th><th>Driver</th><th>Vehicle</th><th>Type</th><th>Total</th><th>Date</th><th></th></tr></thead><tbody>${rows}</tbody></table>`
+      : '<div class="empty">No records</div>';
+    renderPagination('fuel-pagination', r.data?.total, 15, page, p => loadFuel(p));
+  } catch(e) { toast(e.message, 'error'); }
+}
+
+async function createBBM() {
+  try {
+    const driverId = document.getElementById('bbm-driver').value;
+    const body = {
+      vehicleId: +document.getElementById('bbm-vehicle').value,
+      liter: +document.getElementById('bbm-liter').value,
+      pricePerLiter: +document.getElementById('bbm-price').value,
+      odometerBefore: +document.getElementById('bbm-odo-before').value,
+      odometerAfter: +document.getElementById('bbm-odo-after').value,
+      note: document.getElementById('bbm-note').value,
+    };
+    await POST(`/fuel-expenses/bbm?driverId=${driverId}`, body);
+    toast('BBM expense recorded', 'success');
+    closeModal('modal-create-bbm');
+    loadFuel();
+  } catch(e) { toast(e.message, 'error'); }
+}
+
+async function createListrik() {
+  try {
+    const driverId = document.getElementById('listrik-driver').value;
+    const body = {
+      vehicleId: +document.getElementById('listrik-vehicle').value,
+      kwh: +document.getElementById('listrik-kwh').value,
+      pricePerKwh: +document.getElementById('listrik-price').value,
+      batteryBefore: +document.getElementById('listrik-bat-before').value,
+      batteryAfter: +document.getElementById('listrik-bat-after').value,
+    };
+    await POST(`/fuel-expenses/listrik?driverId=${driverId}`, body);
+    toast('Listrik expense recorded', 'success');
+    closeModal('modal-create-listrik');
+    loadFuel();
+  } catch(e) { toast(e.message, 'error'); }
+}
+
+async function deleteFuel(id) {
+  if (!confirm('Delete record?')) return;
+  try {
+    await DELETE('/fuel-expenses/' + id);
+    toast('Deleted', 'success');
+    loadFuel(fuelPage);
+  } catch(e) { toast(e.message, 'error'); }
+}
+
+// ─── MAINTENANCE ─────────────────────────────────────────────────────────────
+let maintPage = 1;
+async function loadMaintenance(page = 1) {
+  maintPage = page;
+  try {
+    const r = await GET(`/maintenance?page=${page}&limit=15`);
+    const items = r.data?.items || [];
+    const rows = items.map(m => `
+      <tr>
+        <td>${m.id}</td>
+        <td>${m.resourceName}</td>
+        <td>${badge(m.resourceType)}</td>
+        <td>${m.description}</td>
+        <td>${fmtDate(m.startDate)}</td>
+        <td>${m.endDate ? fmtDate(m.endDate) : '-'}</td>
+        <td>${m.cost || '-'}</td>
+      </tr>`).join('');
+    document.getElementById('maintenance-table').innerHTML = rows
+      ? `<table><thead><tr><th>ID</th><th>Resource</th><th>Type</th><th>Description</th><th>Start</th><th>End</th><th>Cost</th></tr></thead><tbody>${rows}</tbody></table>`
+      : '<div class="empty">No records</div>';
+    renderPagination('maintenance-pagination', r.data?.total, 15, page, p => loadMaintenance(p));
+  } catch(e) { toast(e.message, 'error'); }
+}
+
+async function createMaintenance() {
+  try {
+    const cost = document.getElementById('maint-cost').value;
+    const body = {
+      resourceId: +document.getElementById('maint-resource').value,
+      description: document.getElementById('maint-desc').value,
+      startDate: new Date(document.getElementById('maint-start').value).toISOString(),
+      ...(cost ? { cost: +cost } : {}),
+    };
+    await POST('/maintenance', body);
+    toast('Maintenance record added', 'success');
+    closeModal('modal-create-maintenance');
+    loadMaintenance();
+  } catch(e) { toast(e.message, 'error'); }
+}
+
+// ─── GUEST BOOKINGS ──────────────────────────────────────────────────────────
+let guestPage = 1;
+async function loadGuestBookings(page = 1) {
+  guestPage = page;
+  try {
+    const r = await GET(`/guest-bookings?page=${page}&limit=15`);
+    const items = r.data?.items || [];
+    const rows = items.map(g => `
+      <tr>
+        <td>${g.id}</td>
+        <td>${g.guestName}</td>
+        <td>${g.guestEmail}</td>
+        <td>${g.resource?.name || '-'}</td>
+        <td>${fmtDate(g.startDate)}</td>
+        <td>${badge(g.status)}</td>
+        <td>
+          ${state.role === 'ADMIN' && g.status === 'PENDING'
+            ? `<button class="btn btn-success btn-sm" onclick="approveGuest(${g.id})">Approve</button>
+               <button class="btn btn-danger btn-sm" onclick="rejectGuest(${g.id})">Reject</button>`
+            : ''}
+        </td>
+      </tr>`).join('');
+    document.getElementById('guest-table').innerHTML = rows
+      ? `<table><thead><tr><th>ID</th><th>Guest</th><th>Email</th><th>Resource</th><th>Start</th><th>Status</th><th></th></tr></thead><tbody>${rows}</tbody></table>`
+      : '<div class="empty">No guest bookings</div>';
+    renderPagination('guest-pagination', r.data?.total, 15, page, p => loadGuestBookings(p));
+  } catch(e) { toast(e.message, 'error'); }
+}
+
+async function approveGuest(id) {
+  try {
+    await POST(`/guest-bookings/${id}/approve`);
+    toast('Approved', 'success');
+    loadGuestBookings(guestPage);
+  } catch(e) { toast(e.message, 'error'); }
+}
+
+async function rejectGuest(id) {
+  const note = prompt('Rejection reason:');
+  if (!note) return;
+  try {
+    await POST(`/guest-bookings/${id}/reject`, { note });
+    toast('Rejected', 'success');
+    loadGuestBookings(guestPage);
+  } catch(e) { toast(e.message, 'error'); }
+}
+
+// ─── REPORTS ─────────────────────────────────────────────────────────────────
+async function loadReport(type) {
+  document.getElementById('report-title').textContent = type.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+  try {
+    const r = await GET('/reports/' + type);
+    document.getElementById('report-output').textContent = JSON.stringify(r.data, null, 2);
+  } catch(e) {
+    document.getElementById('report-output').textContent = 'Error: ' + e.message;
+    toast(e.message, 'error');
+  }
+}
+
+// ─── SETTINGS ────────────────────────────────────────────────────────────────
+async function loadSettings() {
+  try {
+    const r = await GET('/master-settings');
+    const items = Array.isArray(r.data) ? r.data : [];
+    const rows = items.map(s => `
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 0;border-bottom:1px solid var(--border)">
+        <div>
+          <div style="font-weight:600">${s.key}</div>
+          <div style="color:var(--muted);font-size:.85rem">${s.description || ''}</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <span style="font-size:1rem">${s.value} ${s.unit || ''}</span>
+          ${state.role === 'ADMIN' ? `<button class="btn btn-ghost btn-sm" onclick="editSetting('${s.key}', ${s.value})">Edit</button>` : ''}
+        </div>
+      </div>`).join('');
+    document.getElementById('settings-list').innerHTML = rows || '<div class="empty">No settings</div>';
+  } catch(e) { toast(e.message, 'error'); }
+}
+
+async function editSetting(key, current) {
+  const val = prompt(`New value for "${key}" (current: ${current}):`, current);
+  if (val === null || val === '') return;
+  try {
+    await PUT(`/master-settings/${key}`, { value: +val });
+    toast('Setting updated', 'success');
+    loadSettings();
+  } catch(e) { toast(e.message, 'error'); }
+}
+
+// ─── PAGINATION ──────────────────────────────────────────────────────────────
+function renderPagination(containerId, total, limit, current, onPage) {
+  const pages = Math.ceil(total / limit);
+  const c = document.getElementById(containerId);
+  if (pages <= 1) { c.innerHTML = ''; return; }
+  let html = `<span>${total} records</span>`;
+  if (current > 1) html += `<button class="btn btn-ghost btn-sm" onclick="(${onPage.toString()})(${current - 1})">← Prev</button>`;
+  html += `<span>Page ${current} / ${pages}</span>`;
+  if (current < pages) html += `<button class="btn btn-ghost btn-sm" onclick="(${onPage.toString()})(${current + 1})">Next →</button>`;
+  c.innerHTML = html;
+}
+</script>
+</body>
+</html>

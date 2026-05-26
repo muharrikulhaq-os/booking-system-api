@@ -1,0 +1,57 @@
+-- name: ListUsers :many
+SELECT u.*, r.name AS role_name, d.name AS department_name
+FROM users u
+JOIN roles r ON r.id = u."roleId"
+JOIN departments d ON d.id = u."departmentId"
+WHERE (sqlc.narg(search)::text IS NULL
+       OR u.name ILIKE '%' || sqlc.narg(search)::text || '%'
+       OR u.email ILIKE '%' || sqlc.narg(search)::text || '%'
+       OR u."employeeId" ILIKE '%' || sqlc.narg(search)::text || '%')
+  AND (sqlc.narg(role_id)::int IS NULL OR u."roleId" = sqlc.narg(role_id)::int)
+  AND (sqlc.narg(is_active)::boolean IS NULL OR u."isActive" = sqlc.narg(is_active)::boolean)
+ORDER BY u."createdAt" DESC
+LIMIT $1 OFFSET $2;
+
+-- name: CountUsers :one
+SELECT COUNT(*) FROM users u
+WHERE (sqlc.narg(search)::text IS NULL
+       OR u.name ILIKE '%' || sqlc.narg(search)::text || '%'
+       OR u.email ILIKE '%' || sqlc.narg(search)::text || '%'
+       OR u."employeeId" ILIKE '%' || sqlc.narg(search)::text || '%')
+  AND (sqlc.narg(role_id)::int IS NULL OR u."roleId" = sqlc.narg(role_id)::int)
+  AND (sqlc.narg(is_active)::boolean IS NULL OR u."isActive" = sqlc.narg(is_active)::boolean);
+
+-- name: CreateUser :one
+INSERT INTO users ("employeeId", name, email, password, "isActive", "roleId", "departmentId")
+VALUES ($1, $2, $3, $4, $5, $6, $7)
+RETURNING *;
+
+-- name: UpdateUser :one
+UPDATE users
+SET name = $2, email = $3, "roleId" = $4, "departmentId" = $5, "updatedAt" = NOW()
+WHERE id = $1
+RETURNING *;
+
+-- name: ToggleUserActive :one
+UPDATE users SET "isActive" = NOT "isActive", "updatedAt" = NOW()
+WHERE id = $1 RETURNING *;
+
+-- name: DeleteUser :exec
+DELETE FROM users WHERE id = $1;
+
+-- name: UpdateProfilePhoto :one
+UPDATE users SET "profilePhoto" = $2, "updatedAt" = NOW()
+WHERE id = $1 RETURNING *;
+
+-- name: DeleteProfilePhoto :one
+UPDATE users SET "profilePhoto" = NULL, "updatedAt" = NOW()
+WHERE id = $1 RETURNING *;
+
+-- name: GetUserByEmployeeID :one
+SELECT * FROM users WHERE "employeeId" = $1 LIMIT 1;
+
+-- name: ListRoles :many
+SELECT * FROM roles ORDER BY id;
+
+-- name: ListDepartments :many
+SELECT * FROM departments ORDER BY name;
