@@ -303,6 +303,17 @@ type AuditLog struct {
 	CreatedAt   time.Time      `json:"createdAt"`
 }
 
+type AuditLogResponse struct {
+	ID          int32   `json:"id"`
+	UserID      *int32  `json:"userId"`
+	Action      string  `json:"action"`
+	EntityType  string  `json:"entityType"`
+	EntityID    *int32  `json:"entityId"`
+	Description *string `json:"description"`
+	CreatedAt   string  `json:"createdAt"`
+	UserName    *string `json:"user_name"`
+}
+
 type Booking struct {
 	ID                int32         `json:"id"`
 	UserId            int32         `json:"userId"`
@@ -485,17 +496,17 @@ type VActiveBooking struct {
 }
 
 type VDriverRatingsSummary struct {
-	DriverID      int32  `json:"driver_id"`
-	DriverName    string `json:"driver_name"`
-	EmployeeId    string `json:"employeeId"`
-	IsActive      bool   `json:"isActive"`
-	TotalRatings  int64  `json:"total_ratings"`
-	AverageRating string `json:"average_rating"`
-	Bintang5      int64  `json:"bintang_5"`
-	Bintang4      int64  `json:"bintang_4"`
-	Bintang3      int64  `json:"bintang_3"`
-	Bintang2      int64  `json:"bintang_2"`
-	Bintang1      int64  `json:"bintang_1"`
+	DriverID      int32    `json:"driver_id"`
+	DriverName    string   `json:"driver_name"`
+	EmployeeId    string   `json:"employeeId"`
+	IsActive      bool     `json:"isActive"`
+	TotalRatings  int64    `json:"total_ratings"`
+	AverageRating *float64 `json:"average_rating"`
+	Bintang5      int64    `json:"bintang_5"`
+	Bintang4      int64    `json:"bintang_4"`
+	Bintang3      int64    `json:"bintang_3"`
+	Bintang2      int64    `json:"bintang_2"`
+	Bintang1      int64    `json:"bintang_1"`
 }
 
 type VFuelExpenseSummary struct {
