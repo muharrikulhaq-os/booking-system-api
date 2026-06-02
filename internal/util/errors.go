@@ -5,6 +5,8 @@ import "errors"
 var (
 	ErrNotFound          = errors.New("not found")
 	ErrUnauthorized      = errors.New("unauthorized")
+	ErrWrongEmail        = errors.New("email didnt match any accounts")
+	ErrWrongPassword     = errors.New("incorrect password")
 	ErrForbidden         = errors.New("forbidden")
 	ErrConflict          = errors.New("conflict")
 	ErrBadRequest        = errors.New("bad request")

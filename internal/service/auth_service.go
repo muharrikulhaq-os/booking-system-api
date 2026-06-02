@@ -62,10 +62,10 @@ type ChangePasswordRequest struct {
 func (s *AuthService) Login(ctx context.Context, req LoginRequest) (map[string]any, error) {
 	user, err := s.q.GetUserByEmail(ctx, req.Email)
 	if err != nil {
-		return nil, util.ErrUnauthorized
+		return nil, util.ErrWrongEmail
 	}
 	if !util.CheckPassword(req.Password, user.Password) {
-		return nil, util.ErrUnauthorized
+		return nil, util.ErrWrongPassword
 	}
 	if !user.IsActive {
 		return nil, util.ErrAccountInactive

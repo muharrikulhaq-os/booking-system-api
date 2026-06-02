@@ -46,6 +46,10 @@ func ErrorHandler(c *fiber.Ctx, err error) error {
 		code, msg = fiber.StatusUnauthorized, err.Error()
 	case errors.Is(err, util.ErrSelfApproval):
 		code, msg = fiber.StatusForbidden, err.Error()
+	case errors.Is(err, util.ErrWrongEmail):
+		code, msg = fiber.StatusUnauthorized, "email didnt match any accounts"
+	case errors.Is(err, util.ErrWrongPassword):
+		code, msg = fiber.StatusUnauthorized, "incorrect password"
 	default:
 		log.Printf("[ERROR] %v", err)
 	}
