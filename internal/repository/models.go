@@ -18,7 +18,7 @@ const (
 	ApprovalActionREJECTED ApprovalAction = "REJECTED"
 )
 
-func (e *ApprovalAction) Scan(src any) error {
+func (e *ApprovalAction) Scan(src interface{}) error {
 	switch s := src.(type) {
 	case []byte:
 		*e = ApprovalAction(s)
@@ -36,7 +36,7 @@ type NullApprovalAction struct {
 }
 
 // Scan implements the Scanner interface.
-func (ns *NullApprovalAction) Scan(value any) error {
+func (ns *NullApprovalAction) Scan(value interface{}) error {
 	if value == nil {
 		ns.ApprovalAction, ns.Valid = "", false
 		return nil
@@ -65,7 +65,7 @@ const (
 	BookingStatusOVERDUE   BookingStatus = "OVERDUE"
 )
 
-func (e *BookingStatus) Scan(src any) error {
+func (e *BookingStatus) Scan(src interface{}) error {
 	switch s := src.(type) {
 	case []byte:
 		*e = BookingStatus(s)
@@ -83,7 +83,7 @@ type NullBookingStatus struct {
 }
 
 // Scan implements the Scanner interface.
-func (ns *NullBookingStatus) Scan(value any) error {
+func (ns *NullBookingStatus) Scan(value interface{}) error {
 	if value == nil {
 		ns.BookingStatus, ns.Valid = "", false
 		return nil
@@ -107,7 +107,7 @@ const (
 	FuelTypeLISTRIK FuelType = "LISTRIK"
 )
 
-func (e *FuelType) Scan(src any) error {
+func (e *FuelType) Scan(src interface{}) error {
 	switch s := src.(type) {
 	case []byte:
 		*e = FuelType(s)
@@ -125,7 +125,7 @@ type NullFuelType struct {
 }
 
 // Scan implements the Scanner interface.
-func (ns *NullFuelType) Scan(value any) error {
+func (ns *NullFuelType) Scan(value interface{}) error {
 	if value == nil {
 		ns.FuelType, ns.Valid = "", false
 		return nil
@@ -150,7 +150,7 @@ const (
 	ResourceStatusINACTIVE    ResourceStatus = "INACTIVE"
 )
 
-func (e *ResourceStatus) Scan(src any) error {
+func (e *ResourceStatus) Scan(src interface{}) error {
 	switch s := src.(type) {
 	case []byte:
 		*e = ResourceStatus(s)
@@ -168,7 +168,7 @@ type NullResourceStatus struct {
 }
 
 // Scan implements the Scanner interface.
-func (ns *NullResourceStatus) Scan(value any) error {
+func (ns *NullResourceStatus) Scan(value interface{}) error {
 	if value == nil {
 		ns.ResourceStatus, ns.Valid = "", false
 		return nil
@@ -192,7 +192,7 @@ const (
 	ResourceTypeROOM    ResourceType = "ROOM"
 )
 
-func (e *ResourceType) Scan(src any) error {
+func (e *ResourceType) Scan(src interface{}) error {
 	switch s := src.(type) {
 	case []byte:
 		*e = ResourceType(s)
@@ -210,7 +210,7 @@ type NullResourceType struct {
 }
 
 // Scan implements the Scanner interface.
-func (ns *NullResourceType) Scan(value any) error {
+func (ns *NullResourceType) Scan(value interface{}) error {
 	if value == nil {
 		ns.ResourceType, ns.Valid = "", false
 		return nil
@@ -235,7 +235,7 @@ const (
 	RoleNameDRIVER   RoleName = "DRIVER"
 )
 
-func (e *RoleName) Scan(src any) error {
+func (e *RoleName) Scan(src interface{}) error {
 	switch s := src.(type) {
 	case []byte:
 		*e = RoleName(s)
@@ -253,7 +253,7 @@ type NullRoleName struct {
 }
 
 // Scan implements the Scanner interface.
-func (ns *NullRoleName) Scan(value any) error {
+func (ns *NullRoleName) Scan(value interface{}) error {
 	if value == nil {
 		ns.RoleName, ns.Valid = "", false
 		return nil
@@ -301,17 +301,6 @@ type AuditLog struct {
 	EntityId    sql.NullInt32  `json:"entityId"`
 	Description sql.NullString `json:"description"`
 	CreatedAt   time.Time      `json:"createdAt"`
-}
-
-type AuditLogResponse struct {
-	ID          int32   `json:"id"`
-	UserID      *int32  `json:"userId"`
-	Action      string  `json:"action"`
-	EntityType  string  `json:"entityType"`
-	EntityID    *int32  `json:"entityId"`
-	Description *string `json:"description"`
-	CreatedAt   string  `json:"createdAt"`
-	UserName    *string `json:"user_name"`
 }
 
 type Booking struct {
@@ -496,31 +485,31 @@ type VActiveBooking struct {
 }
 
 type VDriverRatingsSummary struct {
-	DriverID      int32    `json:"driver_id"`
-	DriverName    string   `json:"driver_name"`
-	EmployeeId    string   `json:"employeeId"`
-	IsActive      bool     `json:"isActive"`
-	TotalRatings  int64    `json:"total_ratings"`
-	AverageRating *float64 `json:"average_rating"`
-	Bintang5      int64    `json:"bintang_5"`
-	Bintang4      int64    `json:"bintang_4"`
-	Bintang3      int64    `json:"bintang_3"`
-	Bintang2      int64    `json:"bintang_2"`
-	Bintang1      int64    `json:"bintang_1"`
+	DriverID      int32  `json:"driver_id"`
+	DriverName    string `json:"driver_name"`
+	EmployeeId    string `json:"employeeId"`
+	IsActive      bool   `json:"isActive"`
+	TotalRatings  int64  `json:"total_ratings"`
+	AverageRating string `json:"average_rating"`
+	Bintang5      int64  `json:"bintang_5"`
+	Bintang4      int64  `json:"bintang_4"`
+	Bintang3      int64  `json:"bintang_3"`
+	Bintang2      int64  `json:"bintang_2"`
+	Bintang1      int64  `json:"bintang_1"`
 }
 
 type VFuelExpenseSummary struct {
-	VehicleID        int32  `json:"vehicle_id"`
-	PlateNumber      string `json:"plateNumber"`
-	VehicleName      string `json:"vehicle_name"`
-	Category         string `json:"category"`
-	BbmEntries       int64  `json:"bbm_entries"`
-	TotalLiter       any    `json:"total_liter"`
-	TotalCostBbm     any    `json:"total_cost_bbm"`
-	ListrikEntries   int64  `json:"listrik_entries"`
-	TotalKwh         any    `json:"total_kwh"`
-	TotalCostListrik any    `json:"total_cost_listrik"`
-	GrandTotal       any    `json:"grand_total"`
+	VehicleID        int32       `json:"vehicle_id"`
+	PlateNumber      string      `json:"plateNumber"`
+	VehicleName      string      `json:"vehicle_name"`
+	Category         string      `json:"category"`
+	BbmEntries       int64       `json:"bbm_entries"`
+	TotalLiter       interface{} `json:"total_liter"`
+	TotalCostBbm     interface{} `json:"total_cost_bbm"`
+	ListrikEntries   int64       `json:"listrik_entries"`
+	TotalKwh         interface{} `json:"total_kwh"`
+	TotalCostListrik interface{} `json:"total_cost_listrik"`
+	GrandTotal       interface{} `json:"grand_total"`
 }
 
 type VVehicleSummary struct {
@@ -533,11 +522,11 @@ type VVehicleSummary struct {
 	CurrentOdometer   int32          `json:"currentOdometer"`
 	TotalBookings     int64          `json:"total_bookings"`
 	CompletedBookings int64          `json:"completed_bookings"`
-	TotalLiterBbm     any            `json:"total_liter_bbm"`
-	TotalCostBbm      any            `json:"total_cost_bbm"`
-	TotalKwhListrik   any            `json:"total_kwh_listrik"`
-	TotalCostListrik  any            `json:"total_cost_listrik"`
-	TotalFuelCost     any            `json:"total_fuel_cost"`
+	TotalLiterBbm     interface{}    `json:"total_liter_bbm"`
+	TotalCostBbm      interface{}    `json:"total_cost_bbm"`
+	TotalKwhListrik   interface{}    `json:"total_kwh_listrik"`
+	TotalCostListrik  interface{}    `json:"total_cost_listrik"`
+	TotalFuelCost     interface{}    `json:"total_fuel_cost"`
 }
 
 type Vehicle struct {

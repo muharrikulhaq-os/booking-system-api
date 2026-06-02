@@ -22,8 +22,8 @@ func main() {
 	db := repository.DB
 
 	app := fiber.New(fiber.Config{
-		ErrorHandler:  middleware.ErrorHandler,
-		BodyLimit:     int(config.C.MaxFileSizeMB) * 1024 * 1024,
+		ErrorHandler: middleware.ErrorHandler,
+		BodyLimit:    int(config.C.MaxFileSizeMB) * 1024 * 1024,
 	})
 
 	app.Use(fiberlog.New())
@@ -45,23 +45,25 @@ func main() {
 	app.Get("/files/*", middleware.Auth(), httph.ServeFile(config.C.UploadDir))
 
 	// init services
-	authSvc       := service.NewAuthService(db)
-	userSvc       := service.NewUserService(db)
-	vehicleSvc    := service.NewVehicleService(db)
-	roomSvc       := service.NewRoomService(db)
-	driverSvc     := service.NewDriverService(db)
-	bookingSvc    := service.NewBookingService(db)
-	fuelSvc       := service.NewFuelExpenseService(db)
-	maintSvc      := service.NewMaintenanceService(db)
-	attachSvc     := service.NewAttachmentService(db)
-	guestSvc      := service.NewGuestBookingService(db)
-	settingSvc    := service.NewMasterSettingService(db)
-	reportSvc     := service.NewReportService(db)
+	authSvc := service.NewAuthService(db)
+	userSvc := service.NewUserService(db)
+	vehicleSvc := service.NewVehicleService(db)
+	roomSvc := service.NewRoomService(db)
+	driverSvc := service.NewDriverService(db)
+	bookingSvc := service.NewBookingService(db)
+	fuelSvc := service.NewFuelExpenseService(db)
+	maintSvc := service.NewMaintenanceService(db)
+	attachSvc := service.NewAttachmentService(db)
+	guestSvc := service.NewGuestBookingService(db)
+	settingSvc := service.NewMasterSettingService(db)
+	reportSvc := service.NewReportService(db)
+	dashboardSvc := service.NewDashboardService(db)
 
 	// register routes
 	v1 := app.Group("/api/v1")
 	httph.NewAuthHandler(authSvc).Register(v1)
 	httph.NewUserHandler(userSvc, attachSvc).Register(v1)
+	httph.NewDashboardHandler(dashboardSvc).Register(v1)
 	httph.NewVehicleHandler(vehicleSvc, attachSvc).Register(v1)
 	httph.NewRoomHandler(roomSvc, attachSvc).Register(v1)
 	httph.NewDriverHandler(driverSvc).Register(v1)
