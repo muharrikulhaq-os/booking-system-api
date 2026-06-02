@@ -1,0 +1,1579 @@
+{
+  "info": {
+    "_postman_id": "bsa-collection-v1",
+    "name": "Booking System API",
+    "description": "Complete API collection for the Booking System. Set {{base_url}} to http://localhost:8080 and {{token}} to your JWT access token.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:8080",
+      "type": "string"
+    },
+    {
+      "key": "token",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "refresh_token",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Health Check",
+      "item": [
+        {
+          "name": "Health Check",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/health",
+              "host": ["{{base_url}}"],
+              "path": ["health"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Register",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"employeeId\": \"EMP001\",\n  \"name\": \"John Doe\",\n  \"email\": \"john.doe@company.com\",\n  \"password\": \"password123\",\n  \"roleId\": 2,\n  \"departmentId\": 1\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/auth/register",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "auth", "register"]
+            }
+          }
+        },
+        {
+          "name": "Login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var json = pm.response.json();",
+                  "if (json.data && json.data.accessToken) {",
+                  "  pm.collectionVariables.set('token', json.data.accessToken);",
+                  "}",
+                  "if (json.data && json.data.refreshToken) {",
+                  "  pm.collectionVariables.set('refresh_token', json.data.refreshToken);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"admin@company.com\",\n  \"password\": \"password123\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/auth/login",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "auth", "login"]
+            }
+          }
+        },
+        {
+          "name": "Refresh Token",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refreshToken\": \"{{refresh_token}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/auth/refresh",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "auth", "refresh"]
+            }
+          }
+        },
+        {
+          "name": "Logout",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refreshToken\": \"{{refresh_token}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/auth/logout",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "auth", "logout"]
+            }
+          }
+        },
+        {
+          "name": "Forgot Password",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"john.doe@company.com\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/auth/forgot-password",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "auth", "forgot-password"]
+            }
+          }
+        },
+        {
+          "name": "Verify OTP",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"john.doe@company.com\",\n  \"otpCode\": \"123456\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/auth/verify-otp",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "auth", "verify-otp"]
+            }
+          }
+        },
+        {
+          "name": "Reset Password",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"resetToken\": \"<token-from-verify-otp>\",\n  \"newPassword\": \"newpassword123\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/auth/reset-password",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "auth", "reset-password"]
+            }
+          }
+        },
+        {
+          "name": "Change Password",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"currentPassword\": \"password123\",\n  \"newPassword\": \"newpassword123\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/auth/change-password",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "auth", "change-password"]
+            }
+          }
+        },
+        {
+          "name": "Get Me (Auth)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/auth/me",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "auth", "me"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Users",
+      "item": [
+        {
+          "name": "List Users",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/users?page=1&limit=20&search=&roleId=",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "users"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "20" },
+                { "key": "search", "value": "", "disabled": true },
+                { "key": "roleId", "value": "", "disabled": true }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get My Profile",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/users/me",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "users", "me"]
+            }
+          }
+        },
+        {
+          "name": "List Roles",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/users/roles",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "users", "roles"]
+            }
+          }
+        },
+        {
+          "name": "List Departments",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/users/departments",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "users", "departments"]
+            }
+          }
+        },
+        {
+          "name": "Get User by ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/users/1",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "users", "1"]
+            }
+          }
+        },
+        {
+          "name": "Create User",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"employeeId\": \"EMP002\",\n  \"name\": \"Jane Smith\",\n  \"email\": \"jane.smith@company.com\",\n  \"password\": \"password123\",\n  \"roleId\": 2,\n  \"departmentId\": 1\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/users",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "users"]
+            }
+          }
+        },
+        {
+          "name": "Update User",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Jane Smith Updated\",\n  \"email\": \"jane.smith@company.com\",\n  \"roleId\": 2,\n  \"departmentId\": 2\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/users/1",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "users", "1"]
+            }
+          }
+        },
+        {
+          "name": "Toggle Active",
+          "request": {
+            "method": "PATCH",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/users/1/toggle-active",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "users", "1", "toggle-active"]
+            }
+          }
+        },
+        {
+          "name": "Delete User",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/users/1",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "users", "1"]
+            }
+          }
+        },
+        {
+          "name": "Upload My Profile Photo",
+          "request": {
+            "method": "PUT",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                { "key": "photo", "type": "file", "src": "" }
+              ]
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/users/me/profile-photo",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "users", "me", "profile-photo"]
+            }
+          }
+        },
+        {
+          "name": "Delete My Profile Photo",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/users/me/profile-photo",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "users", "me", "profile-photo"]
+            }
+          }
+        },
+        {
+          "name": "Upload User Profile Photo (Admin)",
+          "request": {
+            "method": "PUT",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                { "key": "photo", "type": "file", "src": "" }
+              ]
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/users/1/profile-photo",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "users", "1", "profile-photo"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Dashboard",
+      "item": [
+        {
+          "name": "Get Summary",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/dashboard/summary",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "dashboard", "summary"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Vehicles",
+      "item": [
+        {
+          "name": "List Vehicles",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/vehicles?page=1&limit=20&search=&categoryId=&status=",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "vehicles"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "20" },
+                { "key": "search", "value": "", "disabled": true },
+                { "key": "categoryId", "value": "", "disabled": true },
+                { "key": "status", "value": "", "disabled": true, "description": "AVAILABLE | MAINTENANCE | INACTIVE" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "List Vehicle Categories",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/vehicles/categories",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "vehicles", "categories"]
+            }
+          }
+        },
+        {
+          "name": "Get Vehicle by ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/vehicles/1",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "vehicles", "1"]
+            }
+          }
+        },
+        {
+          "name": "Create Vehicle",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Toyota Innova\",\n  \"plateNumber\": \"B 1234 XYZ\",\n  \"brand\": \"Toyota\",\n  \"model\": \"Innova\",\n  \"year\": 2022,\n  \"currentOdometer\": 0,\n  \"categoryId\": 1,\n  \"capacity\": 7\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/vehicles",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "vehicles"]
+            }
+          }
+        },
+        {
+          "name": "Create Vehicle Category",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"SUV\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/vehicles/categories",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "vehicles", "categories"]
+            }
+          }
+        },
+        {
+          "name": "Update Vehicle",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Toyota Innova Updated\",\n  \"plateNumber\": \"B 1234 XYZ\",\n  \"brand\": \"Toyota\",\n  \"model\": \"Innova Reborn\",\n  \"year\": 2023,\n  \"currentOdometer\": 5000,\n  \"categoryId\": 1,\n  \"capacity\": 7\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/vehicles/1",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "vehicles", "1"]
+            }
+          }
+        },
+        {
+          "name": "Update Vehicle Status",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"MAINTENANCE\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/vehicles/1/status",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "vehicles", "1", "status"],
+              "description": "status: AVAILABLE | MAINTENANCE | INACTIVE"
+            }
+          }
+        },
+        {
+          "name": "Update Vehicle Photo",
+          "request": {
+            "method": "PATCH",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                { "key": "photo", "type": "file", "src": "" }
+              ]
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/vehicles/1/photo",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "vehicles", "1", "photo"]
+            }
+          }
+        },
+        {
+          "name": "Delete Vehicle",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/vehicles/1",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "vehicles", "1"]
+            }
+          }
+        },
+        {
+          "name": "Delete Vehicle Category",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/vehicles/categories/1",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "vehicles", "categories", "1"]
+            }
+          }
+        },
+        {
+          "name": "List Vehicle Attachments",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/vehicles/1/attachments",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "vehicles", "1", "attachments"]
+            }
+          }
+        },
+        {
+          "name": "Upload Vehicle Attachment",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                { "key": "file", "type": "file", "src": "" },
+                { "key": "description", "value": "STNK document", "type": "text" }
+              ]
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/vehicles/1/attachments",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "vehicles", "1", "attachments"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Rooms",
+      "item": [
+        {
+          "name": "List Rooms",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/rooms?page=1&limit=20&search=&status=",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "rooms"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "20" },
+                { "key": "search", "value": "", "disabled": true },
+                { "key": "status", "value": "", "disabled": true, "description": "AVAILABLE | MAINTENANCE | INACTIVE" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Room by ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/rooms/1",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "rooms", "1"]
+            }
+          }
+        },
+        {
+          "name": "Create Room",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Ruang Rapat A\",\n  \"location\": \"Lantai 2, Gedung Utama\",\n  \"capacity\": 20\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/rooms",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "rooms"]
+            }
+          }
+        },
+        {
+          "name": "Update Room",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Ruang Rapat A Updated\",\n  \"location\": \"Lantai 3, Gedung Utama\",\n  \"capacity\": 25\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/rooms/1",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "rooms", "1"]
+            }
+          }
+        },
+        {
+          "name": "Update Room Status",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"MAINTENANCE\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/rooms/1/status",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "rooms", "1", "status"],
+              "description": "status: AVAILABLE | MAINTENANCE | INACTIVE"
+            }
+          }
+        },
+        {
+          "name": "Update Room Photo",
+          "request": {
+            "method": "PATCH",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                { "key": "photo", "type": "file", "src": "" }
+              ]
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/rooms/1/photo",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "rooms", "1", "photo"]
+            }
+          }
+        },
+        {
+          "name": "Delete Room",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/rooms/1",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "rooms", "1"]
+            }
+          }
+        },
+        {
+          "name": "List Room Attachments",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/rooms/1/attachments",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "rooms", "1", "attachments"]
+            }
+          }
+        },
+        {
+          "name": "Upload Room Attachment",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                { "key": "file", "type": "file", "src": "" },
+                { "key": "description", "value": "Room layout", "type": "text" }
+              ]
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/rooms/1/attachments",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "rooms", "1", "attachments"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Drivers",
+      "item": [
+        {
+          "name": "List Drivers",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/drivers?page=1&limit=20",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "drivers"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "20" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Driver by ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/drivers/1",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "drivers", "1"]
+            }
+          }
+        },
+        {
+          "name": "Create Driver",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": 5,\n  \"licenseNumber\": \"SIM12345678\",\n  \"phoneNumber\": \"081234567890\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/drivers",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "drivers"]
+            }
+          }
+        },
+        {
+          "name": "Update Driver",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"licenseNumber\": \"SIM99999999\",\n  \"phoneNumber\": \"089876543210\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/drivers/1",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "drivers", "1"]
+            }
+          }
+        },
+        {
+          "name": "Toggle Driver Active",
+          "request": {
+            "method": "PATCH",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/drivers/1/toggle-active",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "drivers", "1", "toggle-active"]
+            }
+          }
+        },
+        {
+          "name": "Assign Driver to Vehicle",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"vehicleId\": 2\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/drivers/1/assign",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "drivers", "1", "assign"]
+            }
+          }
+        },
+        {
+          "name": "Release Driver from Vehicle",
+          "request": {
+            "method": "PATCH",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/drivers/1/release",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "drivers", "1", "release"]
+            }
+          }
+        },
+        {
+          "name": "Get Driver Assignments",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/drivers/1/assignments",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "drivers", "1", "assignments"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Bookings",
+      "item": [
+        {
+          "name": "List Bookings",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/bookings?page=1&limit=20&status=&userId=&resourceId=&resourceType=&driverId=&startDate=&endDate=",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "bookings"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "20" },
+                { "key": "status", "value": "", "disabled": true, "description": "PENDING | APPROVED | REJECTED | CANCELLED | IN_PROGRESS | COMPLETED" },
+                { "key": "userId", "value": "", "disabled": true },
+                { "key": "resourceId", "value": "", "disabled": true },
+                { "key": "resourceType", "value": "", "disabled": true, "description": "VEHICLE | ROOM" },
+                { "key": "driverId", "value": "", "disabled": true },
+                { "key": "startDate", "value": "", "disabled": true, "description": "RFC3339 e.g. 2026-06-01T00:00:00Z" },
+                { "key": "endDate", "value": "", "disabled": true, "description": "RFC3339 e.g. 2026-06-30T23:59:59Z" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Booking by ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/bookings/1",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "bookings", "1"]
+            }
+          }
+        },
+        {
+          "name": "Create Booking",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"resourceId\": 1,\n  \"startDate\": \"2026-06-10T08:00:00Z\",\n  \"endDate\": \"2026-06-10T17:00:00Z\",\n  \"purpose\": \"Meeting with client\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/bookings",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "bookings"]
+            }
+          }
+        },
+        {
+          "name": "Cancel Booking",
+          "request": {
+            "method": "PATCH",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/bookings/1/cancel",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "bookings", "1", "cancel"]
+            }
+          }
+        },
+        {
+          "name": "Approve Booking",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"note\": \"Approved\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/bookings/1/approve",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "bookings", "1", "approve"]
+            }
+          }
+        },
+        {
+          "name": "Reject Booking",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"note\": \"Resource not available on the requested date\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/bookings/1/reject",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "bookings", "1", "reject"]
+            }
+          }
+        },
+        {
+          "name": "Assign Vehicle to Booking",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"driverId\": 1,\n  \"vehicleId\": 2\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/bookings/1/assign-vehicle",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "bookings", "1", "assign-vehicle"]
+            }
+          }
+        },
+        {
+          "name": "Start Booking",
+          "request": {
+            "method": "PATCH",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/bookings/1/start",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "bookings", "1", "start"]
+            }
+          }
+        },
+        {
+          "name": "Complete Booking",
+          "request": {
+            "method": "PATCH",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/bookings/1/complete",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "bookings", "1", "complete"]
+            }
+          }
+        },
+        {
+          "name": "Rate Driver",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"rating\": 5,\n  \"review\": \"Very professional and on time\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/bookings/1/rate-driver",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "bookings", "1", "rate-driver"]
+            }
+          }
+        },
+        {
+          "name": "Get Driver Ratings",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/bookings/drivers/1/ratings",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "bookings", "drivers", "1", "ratings"]
+            }
+          }
+        },
+        {
+          "name": "Get Booking Approval Log",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/bookings/1/approval-log",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "bookings", "1", "approval-log"]
+            }
+          }
+        },
+        {
+          "name": "List Booking Attachments",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/bookings/1/attachments",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "bookings", "1", "attachments"]
+            }
+          }
+        },
+        {
+          "name": "Upload Booking Attachment",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                { "key": "file", "type": "file", "src": "" },
+                { "key": "description", "value": "Trip document", "type": "text" }
+              ]
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/bookings/1/attachments",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "bookings", "1", "attachments"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Fuel Expenses",
+      "item": [
+        {
+          "name": "List Fuel Expenses",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/fuel-expenses?page=1&limit=20&driverId=&vehicleId=&fuelType=",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "fuel-expenses"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "20" },
+                { "key": "driverId", "value": "", "disabled": true },
+                { "key": "vehicleId", "value": "", "disabled": true },
+                { "key": "fuelType", "value": "", "disabled": true, "description": "BBM | LISTRIK" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Fuel Expense by ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/fuel-expenses/1",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "fuel-expenses", "1"]
+            }
+          }
+        },
+        {
+          "name": "Create BBM Expense",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"vehicleId\": 1,\n  \"bookingId\": null,\n  \"liter\": 40.5,\n  \"pricePerLiter\": 10000,\n  \"odometerBefore\": 5000,\n  \"odometerAfter\": 5450,\n  \"note\": \"Isi bensin di SPBU Pertamina\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/fuel-expenses/bbm?driverId=1",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "fuel-expenses", "bbm"],
+              "query": [
+                { "key": "driverId", "value": "1" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Create Listrik Expense",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"vehicleId\": 2,\n  \"bookingId\": null,\n  \"kwh\": 30.0,\n  \"pricePerKwh\": 2500,\n  \"batteryBefore\": 20,\n  \"batteryAfter\": 80,\n  \"note\": \"Charge di SPKLU PLN\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/fuel-expenses/listrik?driverId=1",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "fuel-expenses", "listrik"],
+              "query": [
+                { "key": "driverId", "value": "1" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Delete Fuel Expense",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/fuel-expenses/1",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "fuel-expenses", "1"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Maintenance",
+      "item": [
+        {
+          "name": "List Maintenance",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/maintenance?page=1&limit=20&resourceId=",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "maintenance"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "20" },
+                { "key": "resourceId", "value": "", "disabled": true }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Maintenance by ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/maintenance/1",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "maintenance", "1"]
+            }
+          }
+        },
+        {
+          "name": "Create Maintenance",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"resourceId\": 1,\n  \"description\": \"Penggantian oli dan filter udara\",\n  \"startDate\": \"2026-06-05T08:00:00Z\",\n  \"cost\": 500000\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/maintenance",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "maintenance"]
+            }
+          }
+        },
+        {
+          "name": "Update Maintenance",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"description\": \"Penggantian oli, filter udara, dan ban\",\n  \"startDate\": \"2026-06-05T08:00:00Z\",\n  \"endDate\": \"2026-06-06T17:00:00Z\",\n  \"cost\": 1500000\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/maintenance/1",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "maintenance", "1"]
+            }
+          }
+        },
+        {
+          "name": "Delete Maintenance",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/maintenance/1",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "maintenance", "1"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Attachments",
+      "item": [
+        {
+          "name": "Delete Attachment",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/attachments/1",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "attachments", "1"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Guest Bookings",
+      "item": [
+        {
+          "name": "Create Guest Booking (Public)",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"guestName\": \"Budi Santoso\",\n  \"guestEmail\": \"budi.santoso@external.com\",\n  \"guestPhone\": \"081234567890\",\n  \"departmentName\": \"PT. Mitra Sejahtera\",\n  \"resourceId\": 1,\n  \"startDate\": \"2026-06-15T09:00:00Z\",\n  \"endDate\": \"2026-06-15T12:00:00Z\",\n  \"purpose\": \"Presentasi kerjasama\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/guest-bookings",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "guest-bookings"]
+            }
+          }
+        },
+        {
+          "name": "Get Guest Booking by Token (Public)",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/guest-bookings/<access-token>",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "guest-bookings", "<access-token>"]
+            }
+          }
+        },
+        {
+          "name": "Complete Guest Booking by Token (Public)",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "PATCH",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/guest-bookings/<access-token>/complete",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "guest-bookings", "<access-token>", "complete"]
+            }
+          }
+        },
+        {
+          "name": "Cancel Guest Booking by Token (Public)",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "PATCH",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/guest-bookings/<access-token>/cancel",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "guest-bookings", "<access-token>", "cancel"]
+            }
+          }
+        },
+        {
+          "name": "List Guest Bookings (Admin)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/guest-bookings?page=1&limit=20&status=",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "guest-bookings"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "20" },
+                { "key": "status", "value": "", "disabled": true, "description": "PENDING | APPROVED | REJECTED | IN_PROGRESS | COMPLETED | CANCELLED" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Approve Guest Booking (Admin)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/guest-bookings/1/approve",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "guest-bookings", "1", "approve"]
+            }
+          }
+        },
+        {
+          "name": "Reject Guest Booking (Admin)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"note\": \"Resource tidak tersedia pada tanggal tersebut\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/guest-bookings/1/reject",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "guest-bookings", "1", "reject"]
+            }
+          }
+        },
+        {
+          "name": "Start Guest Booking (Admin)",
+          "request": {
+            "method": "PATCH",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/guest-bookings/1/start",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "guest-bookings", "1", "start"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Master Settings",
+      "item": [
+        {
+          "name": "List Settings",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/master-settings",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "master-settings"]
+            }
+          }
+        },
+        {
+          "name": "Get Setting by Key",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/master-settings/fuel_price_per_liter",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "master-settings", "fuel_price_per_liter"]
+            }
+          }
+        },
+        {
+          "name": "Upsert Setting (Admin)",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"value\": 12000,\n  \"unit\": \"IDR/liter\",\n  \"description\": \"Harga BBM per liter\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/master-settings/fuel_price_per_liter",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "master-settings", "fuel_price_per_liter"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Reports",
+      "item": [
+        {
+          "name": "Booking Summary",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/reports/bookings?startDate=2026-06-01T00:00:00Z&endDate=2026-06-30T23:59:59Z",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "reports", "bookings"],
+              "query": [
+                { "key": "startDate", "value": "2026-06-01T00:00:00Z", "description": "RFC3339 format" },
+                { "key": "endDate", "value": "2026-06-30T23:59:59Z", "description": "RFC3339 format" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Resource Usage",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/reports/resource-usage",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "reports", "resource-usage"]
+            }
+          }
+        },
+        {
+          "name": "Fuel Expenses Report",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/reports/fuel-expenses",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "reports", "fuel-expenses"]
+            }
+          }
+        },
+        {
+          "name": "Maintenance Cost Report",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/reports/maintenance-cost",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "reports", "maintenance-cost"]
+            }
+          }
+        },
+        {
+          "name": "Driver Ratings Report",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/reports/driver-ratings",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "reports", "driver-ratings"]
+            }
+          }
+        },
+        {
+          "name": "Driver Activity Report",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/reports/driver-activity",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "reports", "driver-activity"]
+            }
+          }
+        },
+        {
+          "name": "Overdue Bookings",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/reports/overdue-bookings",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "reports", "overdue-bookings"]
+            }
+          }
+        },
+        {
+          "name": "Audit Logs",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/reports/audit-logs?page=1&limit=50&entityType=&userId=",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "reports", "audit-logs"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "50" },
+                { "key": "entityType", "value": "", "disabled": true, "description": "e.g. User, Booking, Vehicle" },
+                { "key": "userId", "value": "", "disabled": true }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Files",
+      "item": [
+        {
+          "name": "Serve File",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/files/<relative-path-to-file>",
+              "host": ["{{base_url}}"],
+              "path": ["files", "<relative-path-to-file>"],
+              "description": "Replace <relative-path-to-file> with the actual path returned in photoUrl or attachment url fields."
+            }
+          }
+        }
+      ]
+    }
+  ]
+}
