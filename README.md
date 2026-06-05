@@ -1365,6 +1365,51 @@ Riwayat approve/reject suatu booking.
 
 ---
 
+### `GET /api/v1/bookings/:id/activity`
+Riwayat seluruh aktivitas pada suatu booking — termasuk pembuatan, approve/reject, penggantian resource, assignment, mulai, selesai, pembatalan, dan rating driver. Note dari setiap aksi (termasuk note penggantian resource) tersedia di field `description`.
+
+**Akses:** User (hanya miliknya) / Admin (semua)
+
+**Response `200`:**
+```json
+{
+  "success": true,
+  "message": "Activity log retrieved",
+  "data": [
+    {
+      "id": 12,
+      "action": "CREATE",
+      "description": null,
+      "actor": "Budi Santoso",
+      "createdAt": "2025-06-01T08:00:00Z"
+    },
+    {
+      "id": 15,
+      "action": "SUBSTITUTE_RESOURCE",
+      "description": "Mobil yang diminta sedang dalam perawatan mendadak, digantikan dengan Mobil B",
+      "actor": "Admin Utama",
+      "createdAt": "2025-06-01T09:30:00Z"
+    },
+    {
+      "id": 18,
+      "action": "APPROVE",
+      "description": "Disetujui. Silakan hubungi driver.",
+      "actor": "Admin Utama",
+      "createdAt": "2025-06-01T10:00:00Z"
+    }
+  ]
+}
+```
+
+| Field | Type | Keterangan |
+|-------|------|-----------|
+| `action` | string | `CREATE` \| `APPROVE` \| `REJECT` \| `CANCEL` \| `ASSIGN` \| `START` \| `COMPLETE` \| `RATE_DRIVER` \| `SUBSTITUTE_RESOURCE` |
+| `description` | string\|null | Catatan/note yang dimasukkan saat aksi dilakukan |
+| `actor` | string\|null | Nama user yang melakukan aksi (null jika aksi sistem) |
+| `createdAt` | string | Waktu aksi dilakukan (RFC3339) |
+
+---
+
 ### `GET /api/v1/bookings/:id/attachments`
 Daftar lampiran pada suatu booking.
 

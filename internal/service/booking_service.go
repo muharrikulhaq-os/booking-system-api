@@ -611,3 +611,28 @@ func (s *BookingService) SubstituteResource(ctx context.Context, id int32, req S
 	full, _ := s.q.GetBookingByID(ctx, id)
 	return serializeBookingByID(full), nil
 }
+
+func (s *BookingService) GetActivity(ctx context.Context, id int32, callerID int, callerRole string) (any, error) {
+	b, err := s.q.GetBookingByID(ctx, id)
+	if err != nil {
+		return nil, util.ErrNotFound
+	}
+	if callerRole != "ADMIN" && int(b.UserId) != callerID {
+		return nil, util.ErrForbidden
+	}
+	rows, err := s.q.GetBookingActivity(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]map[string]any, len(rows))
+	for i, r := range rows {
+		out[i] = map[string]any{
+			"id":          r.ID,
+			"action":      r.Action,
+			"description": nullStr(r.Description),
+			"actor":       nullStr(r.UserName),
+			"createdAt":   r.CreatedAt,
+		}
+	}
+	return out, nil
+}

@@ -38,6 +38,7 @@ func (h *BookingHandler) Register(r fiber.Router) {
 	g.Patch("/:id/complete", admin, h.Complete)
 	g.Post("/:id/rate-driver", h.RateDriver)
 	g.Get("/:id/approval-log", admin, h.ApprovalLog)
+	g.Get("/:id/activity", auth, h.Activity)
 	g.Get("/:id/attachments", h.ListAttachments)
 	g.Post("/:id/attachments", h.UploadAttachment)
 }
@@ -230,6 +231,18 @@ func (h *BookingHandler) ApprovalLog(c *fiber.Ctx) error {
 		return err
 	}
 	return util.OK(c, "Approval log retrieved", data)
+}
+
+func (h *BookingHandler) Activity(c *fiber.Ctx) error {
+	id, err := parseID(c, "id")
+	if err != nil {
+		return err
+	}
+	data, err := h.svc.GetActivity(c.Context(), id, middleware.GetUserID(c), middleware.GetUserRole(c))
+	if err != nil {
+		return err
+	}
+	return util.OK(c, "Activity log retrieved", data)
 }
 
 func (h *BookingHandler) ListAttachments(c *fiber.Ctx) error {

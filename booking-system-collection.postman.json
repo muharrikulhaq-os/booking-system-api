@@ -1923,6 +1923,27 @@
           }
         },
         {
+          "name": "Get Booking Activity Log",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/bookings/1/activity",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "bookings",
+                "1",
+                "activity"
+              ]
+            },
+            "description": "Riwayat seluruh aktivitas booking (CREATE, APPROVE, REJECT, SUBSTITUTE_RESOURCE, ASSIGN, START, COMPLETE, dll). Field `description` berisi note yang diinput admin saat melakukan aksi, termasuk alasan penggantian resource. Akses: Admin (semua booking) atau User (hanya booking milik sendiri)."
+          }
+        },
+        {
           "name": "List Booking Attachments",
           "request": {
             "method": "GET",
