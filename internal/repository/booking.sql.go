@@ -785,6 +785,38 @@ func (q *Queries) StartBooking(ctx context.Context, id int32) (Booking, error) {
 	return i, err
 }
 
+const updateBookingResource = `-- name: UpdateBookingResource :one
+UPDATE bookings SET "resourceId" = $2, "updatedAt" = NOW() WHERE id = $1 RETURNING id, "userId", "resourceId", "startDate", "endDate", purpose, status, "approvedById", "approvedAt", "assignedDriverId", "assignedVehicleId", "assignedAt", "returnedAt", "createdAt", "updatedAt"
+`
+
+type UpdateBookingResourceParams struct {
+	ID         int32 `json:"id"`
+	ResourceId int32 `json:"resourceId"`
+}
+
+func (q *Queries) UpdateBookingResource(ctx context.Context, arg UpdateBookingResourceParams) (Booking, error) {
+	row := q.db.QueryRowContext(ctx, updateBookingResource, arg.ID, arg.ResourceId)
+	var i Booking
+	err := row.Scan(
+		&i.ID,
+		&i.UserId,
+		&i.ResourceId,
+		&i.StartDate,
+		&i.EndDate,
+		&i.Purpose,
+		&i.Status,
+		&i.ApprovedById,
+		&i.ApprovedAt,
+		&i.AssignedDriverId,
+		&i.AssignedVehicleId,
+		&i.AssignedAt,
+		&i.ReturnedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const updateBookingStatus = `-- name: UpdateBookingStatus :one
 UPDATE bookings SET status = $2, "updatedAt" = NOW() WHERE id = $1 RETURNING id, "userId", "resourceId", "startDate", "endDate", purpose, status, "approvedById", "approvedAt", "assignedDriverId", "assignedVehicleId", "assignedAt", "returnedAt", "createdAt", "updatedAt"
 `

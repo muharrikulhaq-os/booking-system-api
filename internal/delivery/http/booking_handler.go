@@ -32,6 +32,7 @@ func (h *BookingHandler) Register(r fiber.Router) {
 	g.Patch("/:id/cancel", h.Cancel)
 	g.Post("/:id/approve", admin, h.Approve)
 	g.Post("/:id/reject", admin, h.Reject)
+	g.Patch("/:id/substitute-resource", admin, h.SubstituteResource)
 	g.Post("/:id/assign-vehicle", admin, h.AssignVehicle)
 	g.Patch("/:id/start", adminOrDriver, h.Start)
 	g.Patch("/:id/complete", admin, h.Complete)
@@ -133,6 +134,22 @@ func (h *BookingHandler) Reject(c *fiber.Ctx) error {
 		return err
 	}
 	return util.OK(c, "Booking rejected", data)
+}
+
+func (h *BookingHandler) SubstituteResource(c *fiber.Ctx) error {
+	id, err := parseID(c, "id")
+	if err != nil {
+		return err
+	}
+	var req service.SubstituteResourceRequest
+	if err := bindAndValidate(c, &req); err != nil {
+		return err
+	}
+	data, err := h.svc.SubstituteResource(c.Context(), id, req, middleware.GetUserID(c))
+	if err != nil {
+		return err
+	}
+	return util.OK(c, "Resource substituted", data)
 }
 
 func (h *BookingHandler) AssignVehicle(c *fiber.Ctx) error {

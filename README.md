@@ -1216,6 +1216,34 @@ Tolak booking.
 
 ---
 
+### `PATCH /api/v1/bookings/:id/substitute-resource`
+Ganti resource (mobil/ruangan) pada booking yang masih berstatus **PENDING**. Admin dapat mengubah pilihan resource pemohon ke resource lain yang tersedia, selama tipe resource tetap sama (mobil→mobil, ruangan→ruangan).
+
+**Akses:** Admin
+
+**Request Body:**
+```json
+{
+  "resourceId": 5,
+  "note": "Mobil yang diminta sedang dalam perawatan mendadak, digantikan dengan Mobil B"
+}
+```
+
+| Field | Type | Required | Keterangan |
+|-------|------|----------|-----------|
+| `resourceId` | integer | ✅ | ID resource pengganti |
+| `note` | string | ❌ | Alasan penggantian (opsional) |
+
+**Validasi:**
+- Booking harus berstatus `PENDING`
+- Resource baru harus bertipe sama (VEHICLE↔VEHICLE, ROOM↔ROOM)
+- Resource baru harus berstatus `AVAILABLE`
+- Tidak boleh ada konflik jadwal di resource baru pada periode yang sama
+
+**Response `200`:** *(data booking dengan `resource` yang sudah diperbarui)*
+
+---
+
 ### `POST /api/v1/bookings/:id/assign-vehicle`
 Tugaskan kendaraan dan driver ke booking yang sudah disetujui.
 

@@ -38,6 +38,11 @@ type AssignVehicleRequest struct {
 	VehicleID int32 `json:"vehicleId" validate:"required"`
 }
 
+type SubstituteResourceRequest struct {
+	ResourceID int32  `json:"resourceId" validate:"required"`
+	Note       string `json:"note"`
+}
+
 type RateDriverRequest struct {
 	Rating int16  `json:"rating" validate:"required,min=1,max=5"`
 	Review string `json:"review"`
@@ -550,4 +555,59 @@ func (s *BookingService) MarkOverdue(ctx context.Context) (int, error) {
 		return 0, err
 	}
 	return len(rows), nil
+}
+
+func (s *BookingService) SubstituteResource(ctx context.Context, id int32, req SubstituteResourceRequest, adminID int) (map[string]any, error) {
+	b, err := s.q.GetBookingByID(ctx, id)
+	if err != nil {
+		return nil, util.ErrNotFound
+	}
+	if b.Status != repository.BookingStatusPENDING {
+		return nil, util.NewError(409, "resource substitution only allowed for PENDING bookings", util.ErrConflict)
+	}
+	if req.ResourceID == b.ResourceId {
+		return nil, util.NewError(400, "new resource is the same as the current resource", util.ErrBadRequest)
+	}
+
+	newResource, err := s.q.GetResourceByID(ctx, req.ResourceID)
+	if err != nil {
+		return nil, util.NewError(404, "resource not found", util.ErrNotFound)
+	}
+	if newResource.Type != b.ResourceType {
+		return nil, util.NewError(400, "resource type mismatch: cannot substitute with a different resource type", util.ErrBadRequest)
+	}
+	if newResource.Status != repository.ResourceStatusAVAILABLE {
+		return nil, util.NewError(409, "new resource is not available", util.ErrConflict)
+	}
+
+	count, _ := s.q.CheckBookingConflict(ctx, repository.CheckBookingConflictParams{
+		ResourceId: req.ResourceID,
+		StartDate:  b.StartDate,
+		EndDate:    b.EndDate,
+	})
+	if count > 0 {
+		return nil, util.NewError(409, "new resource has a schedule conflict in this period", util.ErrConflict)
+	}
+
+	if _, err = s.q.UpdateBookingResource(ctx, repository.UpdateBookingResourceParams{
+		ID:         id,
+		ResourceId: req.ResourceID,
+	}); err != nil {
+		return nil, err
+	}
+
+	note := req.Note
+	if note == "" {
+		note = "Resource substituted by admin"
+	}
+	_, _ = s.q.CreateAuditLog(ctx, repository.CreateAuditLogParams{
+		UserId:      sql.NullInt32{Int32: int32(adminID), Valid: true},
+		Action:      "SUBSTITUTE_RESOURCE",
+		EntityType:  "Booking",
+		EntityId:    sql.NullInt32{Int32: id, Valid: true},
+		Description: sql.NullString{String: note, Valid: true},
+	})
+
+	full, _ := s.q.GetBookingByID(ctx, id)
+	return serializeBookingByID(full), nil
 }
