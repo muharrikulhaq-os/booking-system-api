@@ -62,8 +62,9 @@
 | Role | Keterangan |
 |------|-----------|
 | `ADMIN` | Akses penuh ke semua fitur manajemen |
-| `USER` | Pengguna internal, bisa membuat booking |
-| `DRIVER` | Pengemudi, bisa mulai perjalanan & input BBM |
+| `EMPLOYEE` | Pengguna internal, bisa membuat booking |
+| `DRIVER` | Pengemudi, bisa mulai & input BBM untuk booking kendaraan |
+| `ROOM_KEEPER` | Pengawas ruangan, bisa start & complete booking ruangan |
 
 ---
 
@@ -1257,14 +1258,37 @@ Tugaskan kendaraan dan driver ke booking yang sudah disetujui.
 }
 ```
 
-**Response `200`:** *(data booking dengan info driver dan vehicle)*
+**Catatan Pengalihan Resource:** Jika kendaraan yang ditugaskan berbeda dari resource yang di-booking user, sistem secara otomatis:
+1. Memperbarui `resourceId` booking ke resource kendaraan aktual (kalender & cek konflik akan akurat)
+2. Menyimpan resource awal user di `originalResourceId`
+
+Response akan menyertakan `isReassigned: true` dan field `originalResource` berisi info resource awal.
+
+**Response `200`:**
+```json
+{
+  "success": true,
+  "message": "Vehicle assigned",
+  "data": {
+    "id": 11,
+    "resource": { "id": 8, "name": "Toyota Tuktuk - A 1234 CFD", "type": "VEHICLE" },
+    "isReassigned": true,
+    "originalResource": { "id": 2, "name": "Honda CR-V - B 5678 AB", "type": "VEHICLE" },
+    "assignedDriver": { "id": 1, "name": "Pak Supir Satu" },
+    "assignedVehicle": { "id": 8, "plateNumber": "A 1234 CFD", "brand": "Toyota", "model": "Tuktuk" }
+  }
+}
+```
 
 ---
 
 ### `PATCH /api/v1/bookings/:id/start`
-Mulai perjalanan/penggunaan (status: `ONGOING`).
+Mulai perjalanan/penggunaan booking (status: `ONGOING`).
 
-**Akses:** Driver / Admin
+**Akses:**
+- `ADMIN` — dapat memulai booking kendaraan atau ruangan
+- `DRIVER` — hanya booking kendaraan yang ditugaskan kepada dirinya
+- `ROOM_KEEPER` — hanya booking ruangan
 
 **Response `200`:** *(data booking dengan status `ONGOING`)*
 
@@ -1273,9 +1297,95 @@ Mulai perjalanan/penggunaan (status: `ONGOING`).
 ### `PATCH /api/v1/bookings/:id/complete`
 Selesaikan booking (status: `COMPLETED`).
 
-**Akses:** Admin
+**Akses:**
+- `ADMIN` — dapat menyelesaikan booking kendaraan atau ruangan
+- `ROOM_KEEPER` — hanya booking ruangan
 
 **Response `200`:** *(data booking dengan status `COMPLETED`)*
+
+---
+
+### `POST /api/v1/bookings/:id/merge`
+Gabungkan dua booking kendaraan ke satu perjalanan bersama.
+
+**Akses:** Admin
+
+**Request Body:**
+```json
+{
+  "targetBookingId": 2,
+  "reason": "Tujuan yang sama, kapasitas kendaraan cukup",
+  "startDate": "2026-06-10T08:00:00Z",
+  "endDate": "2026-06-10T10:00:00Z"
+}
+```
+
+| Field | Type | Required | Keterangan |
+|-------|------|----------|-----------|
+| `targetBookingId` | integer | ✅ | ID booking yang akan digabungkan |
+| `reason` | string | ❌ | Alasan penggabungan |
+| `startDate` | datetime | ❌ | Override waktu mulai perjalanan gabungan. Jika tidak diisi, otomatis diambil dari waktu tercepat antara kedua booking |
+| `endDate` | datetime | ❌ | Override waktu selesai perjalanan gabungan. Jika tidak diisi, otomatis diambil dari waktu terlama antara kedua booking |
+
+**Aturan merge:**
+- Kedua booking harus berstatus `PENDING` atau `APPROVED`
+- Kedua booking harus untuk resource tipe `VEHICLE`
+- Kedua booking belum pernah digabungkan sebelumnya
+- Booking yang menjadi target endpoint (`:id`) adalah **primary** (pemegang kendaraan)
+- Sistem otomatis memperluas waktu primary booking ke union kedua rentang waktu (start paling awal, end paling akhir). Admin dapat mengoverride dengan `startDate`/`endDate`
+- Jika perluasan waktu primary booking bertabrakan dengan booking lain pada resource yang sama, merge ditolak
+
+**Response `201`:**
+```json
+{
+  "success": true,
+  "message": "Bookings merged",
+  "data": {
+    "mergeId": 1,
+    "primaryBookingId": 1,
+    "mergedBookingId": 2,
+    "mergedBy": 1,
+    "reason": "Tujuan yang sama",
+    "effectiveStartDate": "2026-06-10T08:00:00Z",
+    "effectiveEndDate": "2026-06-10T10:00:00Z",
+    "createdAt": "2026-06-06T10:00:00Z"
+  }
+}
+```
+
+---
+
+### `GET /api/v1/bookings/:id/merge-info`
+Lihat informasi penggabungan untuk suatu booking.
+
+**Akses:** Auth required (Employee hanya dapat melihat booking sendiri)
+
+**Response `200`:**
+```json
+{
+  "success": true,
+  "message": "Merge info retrieved",
+  "data": [
+    {
+      "mergeId": 1,
+      "primaryBookingId": 1,
+      "mergedBookingId": 2,
+      "isPrimary": true,
+      "mergedBy": "Admin Utama",
+      "reason": "Tujuan yang sama",
+      "createdAt": "2026-06-06T10:00:00Z",
+      "linkedBooking": {
+        "bookingId": 2,
+        "userId": 3,
+        "userName": "Jane Smith",
+        "employeeId": "EMP002",
+        "department": "Finance & Accounting",
+        "purpose": "Kunjungan klien Bandung"
+      }
+    }
+  ]
+}
+```
 
 ---
 
@@ -1403,7 +1513,7 @@ Riwayat seluruh aktivitas pada suatu booking — termasuk pembuatan, approve/rej
 
 | Field | Type | Keterangan |
 |-------|------|-----------|
-| `action` | string | `CREATE` \| `APPROVE` \| `REJECT` \| `CANCEL` \| `ASSIGN` \| `START` \| `COMPLETE` \| `RATE_DRIVER` \| `SUBSTITUTE_RESOURCE` |
+| `action` | string | `CREATE` \| `APPROVE` \| `REJECT` \| `CANCEL` \| `ASSIGN` \| `START` \| `COMPLETE` \| `RATE_DRIVER` \| `SUBSTITUTE_RESOURCE` \| `MERGE` |
 | `description` | string\|null | Catatan/note yang dimasukkan saat aksi dilakukan |
 | `actor` | string\|null | Nama user yang melakukan aksi (null jika aksi sistem) |
 | `createdAt` | string | Waktu aksi dilakukan (RFC3339) |

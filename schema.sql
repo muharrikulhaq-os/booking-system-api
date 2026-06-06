@@ -24,10 +24,12 @@ CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 -- ═══════════════════════════════════════════════════════════════════════════════
 
 -- [REQ 3] APPROVER dihapus — Admin saja yang approve
+-- ROOM_KEEPER: pengawas ruangan (dapat start/complete booking ruangan)
 CREATE TYPE role_name AS ENUM (
     'EMPLOYEE',
     'ADMIN',
-    'DRIVER'
+    'DRIVER',
+    'ROOM_KEEPER'
 );
 
 CREATE TYPE resource_type AS ENUM (
@@ -221,6 +223,24 @@ COMMENT ON TABLE rooms IS 'Detail ruang rapat — relasi 1:1 ke resources';
 
 
 -- ═══════════════════════════════════════════════════════════════════════════════
+-- ROOM KEEPERS
+-- ═══════════════════════════════════════════════════════════════════════════════
+
+CREATE TABLE room_keepers (
+    id            SERIAL      PRIMARY KEY,
+    "userId"      INTEGER     NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,
+    "phoneNumber" VARCHAR(20) NOT NULL,
+    "isActive"    BOOLEAN     NOT NULL DEFAULT TRUE,
+    "createdAt"   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX idx_room_keepers_user_id   ON room_keepers("userId");
+CREATE INDEX idx_room_keepers_is_active ON room_keepers("isActive");
+
+COMMENT ON TABLE room_keepers IS 'Pengawas ruangan — dapat start/complete booking room';
+
+
+-- ═══════════════════════════════════════════════════════════════════════════════
 -- DRIVERS
 -- ═══════════════════════════════════════════════════════════════════════════════
 
@@ -260,6 +280,9 @@ CREATE TABLE bookings (
     "returnedAt"         TIMESTAMPTZ,
     "createdAt"          TIMESTAMPTZ    NOT NULL DEFAULT NOW(),
     "updatedAt"          TIMESTAMPTZ    NOT NULL DEFAULT NOW(),
+    -- Saat admin assign kendaraan berbeda dari yang di-booking user,
+    -- resourceId diupdate ke kendaraan aktual dan originalResourceId menyimpan resource awal
+    "originalResourceId" INTEGER        REFERENCES resources(id),
 
     CONSTRAINT chk_booking_dates CHECK ("endDate" > "startDate")
 );
@@ -298,6 +321,30 @@ CREATE INDEX idx_approval_logs_booking_id  ON approval_logs("bookingId");
 CREATE INDEX idx_approval_logs_approver_id ON approval_logs("approverId");
 
 COMMENT ON TABLE approval_logs IS 'Riwayat aksi approve/reject pada booking';
+
+
+-- ═══════════════════════════════════════════════════════════════════════════════
+-- BOOKING MERGES
+-- ═══════════════════════════════════════════════════════════════════════════════
+
+-- Menggabungkan dua booking kendaraan ke satu perjalanan bersama.
+-- Kedua booking tetap memiliki riwayat sendiri.
+-- Untuk laporan: hanya primaryBooking yang dihitung sebagai 1 trip kendaraan.
+CREATE TABLE booking_merges (
+    id                  SERIAL       PRIMARY KEY,
+    "primaryBookingId"  INTEGER      NOT NULL REFERENCES bookings(id),
+    "mergedBookingId"   INTEGER      NOT NULL REFERENCES bookings(id),
+    "mergedById"        INTEGER      NOT NULL REFERENCES users(id),
+    reason              TEXT,
+    "createdAt"         TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+    CONSTRAINT chk_different_bookings CHECK ("primaryBookingId" != "mergedBookingId"),
+    UNIQUE("primaryBookingId", "mergedBookingId")
+);
+
+CREATE INDEX idx_booking_merges_primary ON booking_merges("primaryBookingId");
+CREATE INDEX idx_booking_merges_merged  ON booking_merges("mergedBookingId");
+
+COMMENT ON TABLE booking_merges IS 'Penggabungan booking kendaraan — primary = booking utama pemegang kendaraan';
 
 
 -- ═══════════════════════════════════════════════════════════════════════════════
@@ -577,9 +624,10 @@ CREATE TRIGGER set_updated_at_master_settings
 
 -- ─── Roles ────────────────────────────────────────────────────────────────────
 INSERT INTO roles (name) VALUES
-    ('EMPLOYEE'),   -- id 1
-    ('ADMIN'),      -- id 2
-    ('DRIVER');     -- id 3
+    ('EMPLOYEE'),     -- id 1
+    ('ADMIN'),        -- id 2
+    ('DRIVER'),       -- id 3
+    ('ROOM_KEEPER');  -- id 4
 
 -- ─── Departments ──────────────────────────────────────────────────────────────
 INSERT INTO departments (name) VALUES

@@ -22,7 +22,8 @@ func NewBookingHandler(svc *service.BookingService, attachSvc *service.Attachmen
 func (h *BookingHandler) Register(r fiber.Router) {
 	auth := middleware.Auth()
 	admin := middleware.RequireRole("ADMIN")
-	adminOrDriver := middleware.RequireRole("ADMIN", "DRIVER")
+	adminOrDriver := middleware.RequireRole("ADMIN", "DRIVER", "ROOM_KEEPER")
+	adminOrRoomKeeper := middleware.RequireRole("ADMIN", "ROOM_KEEPER")
 
 	g := r.Group("/bookings", auth)
 	g.Get("", h.List)
@@ -35,7 +36,9 @@ func (h *BookingHandler) Register(r fiber.Router) {
 	g.Patch("/:id/substitute-resource", admin, h.SubstituteResource)
 	g.Post("/:id/assign-vehicle", admin, h.AssignVehicle)
 	g.Patch("/:id/start", adminOrDriver, h.Start)
-	g.Patch("/:id/complete", admin, h.Complete)
+	g.Patch("/:id/complete", adminOrRoomKeeper, h.Complete)
+	g.Post("/:id/merge", admin, h.MergeBooking)
+	g.Get("/:id/merge-info", auth, h.MergeInfo)
 	g.Post("/:id/rate-driver", h.RateDriver)
 	g.Get("/:id/approval-log", admin, h.ApprovalLog)
 	g.Get("/:id/activity", auth, h.Activity)
@@ -186,11 +189,39 @@ func (h *BookingHandler) Complete(c *fiber.Ctx) error {
 	if err != nil {
 		return err
 	}
-	data, err := h.svc.Complete(c.Context(), id)
+	data, err := h.svc.Complete(c.Context(), id, middleware.GetUserID(c), middleware.GetUserRole(c))
 	if err != nil {
 		return err
 	}
 	return util.OK(c, "Booking completed", data)
+}
+
+func (h *BookingHandler) MergeBooking(c *fiber.Ctx) error {
+	id, err := parseID(c, "id")
+	if err != nil {
+		return err
+	}
+	var req service.MergeBookingRequest
+	if err := bindAndValidate(c, &req); err != nil {
+		return err
+	}
+	data, err := h.svc.MergeBookings(c.Context(), id, req, middleware.GetUserID(c))
+	if err != nil {
+		return err
+	}
+	return util.Created(c, "Bookings merged", data)
+}
+
+func (h *BookingHandler) MergeInfo(c *fiber.Ctx) error {
+	id, err := parseID(c, "id")
+	if err != nil {
+		return err
+	}
+	data, err := h.svc.GetMergeInfo(c.Context(), id, middleware.GetUserID(c), middleware.GetUserRole(c))
+	if err != nil {
+		return err
+	}
+	return util.OK(c, "Merge info retrieved", data)
 }
 
 func (h *BookingHandler) RateDriver(c *fiber.Ctx) error {

@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"database/sql"
+	"strconv"
 	"time"
 
 	"booking-system-api/internal/repository"
@@ -48,6 +49,13 @@ type RateDriverRequest struct {
 	Review string `json:"review"`
 }
 
+type MergeBookingRequest struct {
+	TargetBookingID int32      `json:"targetBookingId" validate:"required"`
+	Reason          string     `json:"reason"`
+	StartDate       *time.Time `json:"startDate"` // optional: override merged time window start
+	EndDate         *time.Time `json:"endDate"`   // optional: override merged time window end
+}
+
 func serializeBookingRow(b repository.ListBookingsRow) map[string]any {
 	out := map[string]any{
 		"id":      b.ID,
@@ -71,6 +79,7 @@ func serializeBookingRow(b repository.ListBookingsRow) map[string]any {
 		"updatedAt":       b.UpdatedAt,
 		"assignedDriver":  nil,
 		"assignedVehicle": nil,
+		"isReassigned":    b.OriginalResourceId.Valid,
 	}
 	if b.ApproverName.Valid {
 		out["approvedBy"] = map[string]any{"id": b.ApprovedById.Int32, "name": b.ApproverName.String}
@@ -102,16 +111,18 @@ func serializeBookingByID(b repository.GetBookingByIDRow) map[string]any {
 			"id": b.ResourceId, "name": b.ResourceName,
 			"type": string(b.ResourceType), "status": string(b.ResourceStatus),
 		},
-		"startDate":       b.StartDate,
-		"endDate":         b.EndDate,
-		"approvedBy":      nil,
-		"approvedAt":      nullTime(b.ApprovedAt),
-		"assignedAt":      nullTime(b.AssignedAt),
-		"returnedAt":      nullTime(b.ReturnedAt),
-		"createdAt":       b.CreatedAt,
-		"updatedAt":       b.UpdatedAt,
-		"assignedDriver":  nil,
-		"assignedVehicle": nil,
+		"startDate":        b.StartDate,
+		"endDate":          b.EndDate,
+		"approvedBy":       nil,
+		"approvedAt":       nullTime(b.ApprovedAt),
+		"assignedAt":       nullTime(b.AssignedAt),
+		"returnedAt":       nullTime(b.ReturnedAt),
+		"createdAt":        b.CreatedAt,
+		"updatedAt":        b.UpdatedAt,
+		"assignedDriver":   nil,
+		"assignedVehicle":  nil,
+		"isReassigned":     b.OriginalResourceId.Valid,
+		"originalResource": nil,
 	}
 	if b.ApproverName.Valid {
 		out["approvedBy"] = map[string]any{"id": b.ApprovedById.Int32, "name": b.ApproverName.String}
@@ -125,6 +136,13 @@ func serializeBookingByID(b repository.GetBookingByIDRow) map[string]any {
 		out["assignedVehicle"] = map[string]any{
 			"id": b.VehicleID.Int32, "plateNumber": b.PlateNumber.String,
 			"brand": b.Brand.String, "model": b.Model.String, "capacity": b.Capacity.Int16,
+		}
+	}
+	if b.OriginalResourceId.Valid {
+		out["originalResource"] = map[string]any{
+			"id":   b.OriginalResourceId.Int32,
+			"name": b.OriginalResourceName.String,
+			"type": b.OriginalResourceType.String,
 		}
 	}
 	return out
@@ -364,6 +382,13 @@ func (s *BookingService) Reject(ctx context.Context, id int32, req RejectBooking
 		Action:     repository.ApprovalActionREJECTED,
 		Note:       sql.NullString{String: req.Note, Valid: true},
 	})
+	_, _ = s.q.CreateAuditLog(ctx, repository.CreateAuditLogParams{
+		UserId:      sql.NullInt32{Int32: int32(approverID), Valid: true},
+		Action:      "REJECT",
+		EntityType:  "Booking",
+		EntityId:    sql.NullInt32{Int32: id, Valid: true},
+		Description: sql.NullString{String: "Booking rejected: " + req.Note, Valid: true},
+	})
 
 	full, _ := s.q.GetBookingByID(ctx, id)
 	go util.SendBookingStatusEmail(b.UserName, b.UserName, int(id), b.ResourceName, "REJECTED", req.Note)
@@ -382,13 +407,16 @@ func (s *BookingService) AssignVehicle(ctx context.Context, id int32, req Assign
 		return nil, util.NewError(400, "assignment only applies to vehicle bookings", util.ErrBadRequest)
 	}
 
-	// check driver
 	driver, err := s.q.GetDriverByID(ctx, req.DriverID)
 	if err != nil || !driver.IsActive {
 		return nil, util.NewError(404, "active driver not found", util.ErrNotFound)
 	}
 
-	// check vehicle conflict
+	vehicle, err := s.q.GetVehicleByID(ctx, req.VehicleID)
+	if err != nil {
+		return nil, util.NewError(404, "vehicle not found", util.ErrNotFound)
+	}
+
 	count, _ := s.q.CheckVehicleConflict(ctx, repository.CheckVehicleConflictParams{
 		AssignedVehicleId: sql.NullInt32{Int32: req.VehicleID, Valid: true},
 		StartDate:         b.StartDate,
@@ -399,13 +427,22 @@ func (s *BookingService) AssignVehicle(ctx context.Context, id int32, req Assign
 		return nil, util.NewError(409, "vehicle is already assigned to another booking in this period", util.ErrConflict)
 	}
 
-	if _, err = s.q.AssignVehicleToBooking(ctx, repository.AssignVehicleToBookingParams{
-		ID:                id,
-		AssignedDriverId:  sql.NullInt32{Int32: req.DriverID, Valid: true},
-		AssignedVehicleId: sql.NullInt32{Int32: req.VehicleID, Valid: true},
-	}); err != nil {
+	if err = s.q.AssignVehicleAndUpdateResource(ctx, id, req.DriverID, req.VehicleID, vehicle.ResourceId); err != nil {
 		return nil, err
 	}
+
+	isReassigned := vehicle.ResourceId != b.ResourceId
+	desc := "Driver and vehicle assigned to booking"
+	if isReassigned {
+		desc = "Vehicle reassigned: resource updated from original booking resource"
+	}
+	_, _ = s.q.CreateAuditLog(ctx, repository.CreateAuditLogParams{
+		UserId:      sql.NullInt32{Int32: int32(adminID), Valid: true},
+		Action:      "ASSIGN",
+		EntityType:  "Booking",
+		EntityId:    sql.NullInt32{Int32: id, Valid: true},
+		Description: sql.NullString{String: desc, Valid: true},
+	})
 
 	full, _ := s.q.GetBookingByID(ctx, id)
 	return serializeBookingByID(full), nil
@@ -419,15 +456,30 @@ func (s *BookingService) Start(ctx context.Context, id int32, userID int, role s
 	if b.Status != repository.BookingStatusAPPROVED {
 		return nil, util.NewError(409, "only APPROVED bookings can be started", util.ErrForbidden)
 	}
-	if b.ResourceType != repository.ResourceTypeVEHICLE {
-		return nil, util.NewError(400, "only vehicle bookings can be started", util.ErrBadRequest)
-	}
-	if role == "DRIVER" {
+
+	switch role {
+	case "DRIVER":
+		if b.ResourceType != repository.ResourceTypeVEHICLE {
+			return nil, util.NewError(400, "driver can only start vehicle bookings", util.ErrBadRequest)
+		}
 		d, err := s.q.GetDriverByUserID(ctx, int32(userID))
 		if err != nil || !b.AssignedDriverId.Valid || b.AssignedDriverId.Int32 != d.ID {
+			return nil, util.ErrForbidden  
+		}
+	case "ROOM_KEEPER":
+		if b.ResourceType != repository.ResourceTypeROOM {
+			return nil, util.NewError(400, "room keeper can only start room bookings", util.ErrBadRequest)
+		}
+		rk, err := s.q.GetRoomKeeperByUserID(ctx, int32(userID))
+		if err != nil || !rk.IsActive {
 			return nil, util.ErrForbidden
 		}
+	case "ADMIN":
+		// admin can start any type
+	default:
+		return nil, util.ErrForbidden
 	}
+
 	now := time.Now().UTC()
 	if now.Before(b.StartDate) {
 		return nil, util.NewError(400, "cannot start before scheduled time", util.ErrBadRequest)
@@ -439,11 +491,19 @@ func (s *BookingService) Start(ctx context.Context, id int32, userID int, role s
 	if _, err = s.q.StartBooking(ctx, id); err != nil {
 		return nil, err
 	}
+	_, _ = s.q.CreateAuditLog(ctx, repository.CreateAuditLogParams{
+		UserId:      sql.NullInt32{Int32: int32(userID), Valid: true},
+		Action:      "START",
+		EntityType:  "Booking",
+		EntityId:    sql.NullInt32{Int32: id, Valid: true},
+		Description: sql.NullString{String: "Booking started", Valid: true},
+	})
+
 	full, _ := s.q.GetBookingByID(ctx, id)
 	return serializeBookingByID(full), nil
 }
 
-func (s *BookingService) Complete(ctx context.Context, id int32) (map[string]any, error) {
+func (s *BookingService) Complete(ctx context.Context, id int32, userID int, role string) (map[string]any, error) {
 	b, err := s.q.GetBookingByID(ctx, id)
 	if err != nil {
 		return nil, util.ErrNotFound
@@ -451,9 +511,27 @@ func (s *BookingService) Complete(ctx context.Context, id int32) (map[string]any
 	if b.Status != repository.BookingStatusONGOING && b.Status != repository.BookingStatusOVERDUE {
 		return nil, util.NewError(409, "booking must be ONGOING or OVERDUE to complete", util.ErrForbidden)
 	}
+	if role == "ROOM_KEEPER" {
+		if b.ResourceType != repository.ResourceTypeROOM {
+			return nil, util.NewError(400, "room keeper can only complete room bookings", util.ErrBadRequest)
+		}
+		rk, err := s.q.GetRoomKeeperByUserID(ctx, int32(userID))
+		if err != nil || !rk.IsActive {
+			return nil, util.ErrForbidden
+		}
+	}
+
 	if _, err = s.q.CompleteBooking(ctx, id); err != nil {
 		return nil, err
 	}
+	_, _ = s.q.CreateAuditLog(ctx, repository.CreateAuditLogParams{
+		UserId:      sql.NullInt32{Int32: int32(userID), Valid: true},
+		Action:      "COMPLETE",
+		EntityType:  "Booking",
+		EntityId:    sql.NullInt32{Int32: id, Valid: true},
+		Description: sql.NullString{String: "Booking completed", Valid: true},
+	})
+
 	full, _ := s.q.GetBookingByID(ctx, id)
 	return serializeBookingByID(full), nil
 }
@@ -636,3 +714,161 @@ func (s *BookingService) GetActivity(ctx context.Context, id int32, callerID int
 	}
 	return out, nil
 }
+
+func (s *BookingService) MergeBookings(ctx context.Context, primaryID int32, req MergeBookingRequest, adminID int) (map[string]any, error) {
+	if primaryID == req.TargetBookingID {
+		return nil, util.NewError(400, "cannot merge a booking with itself", util.ErrBadRequest)
+	}
+
+	primary, err := s.q.GetBookingByID(ctx, primaryID)
+	if err != nil {
+		return nil, util.NewError(404, "primary booking not found", util.ErrNotFound)
+	}
+	target, err := s.q.GetBookingByID(ctx, req.TargetBookingID)
+	if err != nil {
+		return nil, util.NewError(404, "target booking not found", util.ErrNotFound)
+	}
+
+	allowedStatuses := map[repository.BookingStatus]bool{
+		repository.BookingStatusAPPROVED: true,
+		repository.BookingStatusPENDING:  true,
+	}
+	if !allowedStatuses[primary.Status] {
+		return nil, util.NewError(409, "primary booking must be PENDING or APPROVED", util.ErrConflict)
+	}
+	if !allowedStatuses[target.Status] {
+		return nil, util.NewError(409, "target booking must be PENDING or APPROVED", util.ErrConflict)
+	}
+	if primary.ResourceType != repository.ResourceTypeVEHICLE {
+		return nil, util.NewError(400, "merge is only supported for vehicle bookings", util.ErrBadRequest)
+	}
+	if target.ResourceType != repository.ResourceTypeVEHICLE {
+		return nil, util.NewError(400, "target booking must also be a vehicle booking", util.ErrBadRequest)
+	}
+
+	alreadyMerged, _ := s.q.CheckBookingAlreadyMerged(ctx, primaryID, req.TargetBookingID)
+	if alreadyMerged {
+		return nil, util.NewError(409, "these bookings are already merged", util.ErrConflict)
+	}
+
+	// Determine effective time window for the primary booking.
+	// Default: union of both bookings (earliest start, latest end).
+	// Admin may override via request body.
+	effectiveStart := primary.StartDate
+	if target.StartDate.Before(effectiveStart) {
+		effectiveStart = target.StartDate
+	}
+	effectiveEnd := primary.EndDate
+	if target.EndDate.After(effectiveEnd) {
+		effectiveEnd = target.EndDate
+	}
+	if req.StartDate != nil {
+		effectiveStart = *req.StartDate
+	}
+	if req.EndDate != nil {
+		effectiveEnd = *req.EndDate
+	}
+	if !effectiveEnd.After(effectiveStart) {
+		return nil, util.NewError(400, "effective end date must be after start date", util.ErrBadRequest)
+	}
+
+	// Check that the expanded time window doesn't conflict with another booking on the same resource.
+	conflictCount, _ := s.q.CheckBookingConflict(ctx, repository.CheckBookingConflictParams{
+		ResourceId: primary.ResourceId,
+		StartDate:  effectiveStart,
+		EndDate:    effectiveEnd,
+		ExcludeID:  sql.NullInt32{Int32: primaryID, Valid: true},
+	})
+	if conflictCount > 0 {
+		return nil, util.NewError(409, "the merged time window conflicts with another booking on this resource", util.ErrConflict)
+	}
+
+	// Update primary booking's time window if it changed.
+	if !effectiveStart.Equal(primary.StartDate) || !effectiveEnd.Equal(primary.EndDate) {
+		if err = s.q.UpdateBookingDates(ctx, primaryID, effectiveStart, effectiveEnd); err != nil {
+			return nil, err
+		}
+	}
+
+	merge, err := s.q.CreateBookingMerge(ctx, primaryID, req.TargetBookingID, int32(adminID), req.Reason)
+	if err != nil {
+		return nil, err
+	}
+
+	desc := "Booking merged with #" + itoa(req.TargetBookingID)
+	if req.Reason != "" {
+		desc += ": " + req.Reason
+	}
+	_, _ = s.q.CreateAuditLog(ctx, repository.CreateAuditLogParams{
+		UserId:      sql.NullInt32{Int32: int32(adminID), Valid: true},
+		Action:      "MERGE",
+		EntityType:  "Booking",
+		EntityId:    sql.NullInt32{Int32: primaryID, Valid: true},
+		Description: sql.NullString{String: desc, Valid: true},
+	})
+	_, _ = s.q.CreateAuditLog(ctx, repository.CreateAuditLogParams{
+		UserId:      sql.NullInt32{Int32: int32(adminID), Valid: true},
+		Action:      "MERGE",
+		EntityType:  "Booking",
+		EntityId:    sql.NullInt32{Int32: req.TargetBookingID, Valid: true},
+		Description: sql.NullString{String: "Booking merged into primary #" + itoa(primaryID), Valid: true},
+	})
+
+	return map[string]any{
+		"mergeId":            merge.ID,
+		"primaryBookingId":   merge.PrimaryBookingID,
+		"mergedBookingId":    merge.MergedBookingID,
+		"mergedBy":           adminID,
+		"reason":             nullStr(merge.Reason),
+		"effectiveStartDate": effectiveStart,
+		"effectiveEndDate":   effectiveEnd,
+		"createdAt":          merge.CreatedAt,
+	}, nil
+}
+
+func (s *BookingService) GetMergeInfo(ctx context.Context, id int32, callerID int, callerRole string) (any, error) {
+	b, err := s.q.GetBookingByID(ctx, id)
+	if err != nil {
+		return nil, util.ErrNotFound
+	}
+	if callerRole == "EMPLOYEE" && int(b.UserId) != callerID {
+		return nil, util.ErrForbidden
+	}
+	if callerRole == "DRIVER" {
+		d, dErr := s.q.GetDriverByUserID(ctx, int32(callerID))
+		if dErr != nil || !b.AssignedDriverId.Valid || b.AssignedDriverId.Int32 != d.ID {
+			return nil, util.ErrForbidden
+		}
+	}
+
+	merges, err := s.q.GetBookingMerges(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]map[string]any, len(merges))
+	for i, m := range merges {
+		out[i] = map[string]any{
+			"mergeId":          m.ID,
+			"primaryBookingId": m.PrimaryBookingID,
+			"mergedBookingId":  m.MergedBookingID,
+			"isPrimary":        m.IsPrimary,
+			"mergedBy":         m.MergedByName,
+			"reason":           nullStr(m.Reason),
+			"createdAt":        m.CreatedAt,
+			"linkedBooking": map[string]any{
+				"bookingId":  m.OtherBookingID,
+				"userId":     m.OtherUserID,
+				"userName":   m.OtherUserName,
+				"employeeId": m.OtherEmployeeID,
+				"department": m.OtherDepartment,
+				"purpose":    m.OtherPurpose,
+			},
+		}
+	}
+	return out, nil
+}
+
+func itoa(n int32) string {
+	return strconv.FormatInt(int64(n), 10)
+}
+

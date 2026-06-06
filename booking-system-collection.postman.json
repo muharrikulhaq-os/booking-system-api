@@ -1804,7 +1804,8 @@
                 "1",
                 "assign-vehicle"
               ]
-            }
+            },
+            "description": "Admin menugaskan driver dan kendaraan ke booking yang sudah APPROVED. Jika kendaraan yang ditugaskan berbeda dari resource yang di-booking user, sistem otomatis memperbarui resourceId booking ke kendaraan aktual dan menyimpan resource awal di originalResourceId. Response akan menyertakan isReassigned: true dan originalResource jika terjadi pengalihan."
           }
         },
         {
@@ -1844,7 +1845,64 @@
                 "1",
                 "complete"
               ]
-            }
+            },
+            "description": "Menyelesaikan booking. Admin dapat menyelesaikan booking kendaraan maupun ruangan. ROOM_KEEPER dapat menyelesaikan booking ruangan saja."
+          }
+        },
+        {
+          "name": "Merge Bookings (Admin)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"targetBookingId\": 2,\n  \"reason\": \"Tujuan yang sama, kapasitas kendaraan cukup\",\n  \"startDate\": \"2026-06-10T08:00:00Z\",\n  \"endDate\": \"2026-06-10T10:00:00Z\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/bookings/1/merge",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "bookings",
+                "1",
+                "merge"
+              ]
+            },
+            "description": "Admin menggabungkan dua booking kendaraan (PENDING atau APPROVED) ke satu perjalanan bersama. Primary booking menjadi booking utama pemegang kendaraan. Sistem otomatis memperluas waktu primary booking ke union kedua rentang waktu (startDate paling awal, endDate paling akhir). Admin dapat mengoverride waktu gabungan dengan field startDate/endDate."
+          }
+        },
+        {
+          "name": "Get Booking Merge Info",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/bookings/1/merge-info",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "bookings",
+                "1",
+                "merge-info"
+              ]
+            },
+            "description": "Mendapatkan informasi penggabungan booking. Berlaku untuk primary maupun booking yang digabungkan. Response mencakup linkedBooking (booking lain yang tergabung), isPrimary (apakah ini booking utama), dan siapa yang melakukan merge."
           }
         },
         {

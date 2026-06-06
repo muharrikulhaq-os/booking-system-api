@@ -386,12 +386,13 @@ func (q *Queries) GetApprovalLogs(ctx context.Context, bookingid int32) ([]GetAp
 }
 
 const getBookingByID = `-- name: GetBookingByID :one
-SELECT b.id, b."userId", b."resourceId", b."startDate", b."endDate", b.purpose, b.status, b."approvedById", b."approvedAt", b."assignedDriverId", b."assignedVehicleId", b."assignedAt", b."returnedAt", b."createdAt", b."updatedAt",
+SELECT b.id, b."userId", b."resourceId", b."startDate", b."endDate", b.purpose, b.status, b."approvedById", b."approvedAt", b."assignedDriverId", b."assignedVehicleId", b."assignedAt", b."returnedAt", b."createdAt", b."updatedAt", b."originalResourceId",
        u.name AS user_name, u."employeeId", dept.name AS department_name,
        r.name AS resource_name, r.type AS resource_type, r.status AS resource_status,
        ab.name AS approver_name,
        drv.id AS driver_id, du.name AS driver_name, drv."phoneNumber" AS driver_phone,
-       v.id AS vehicle_id, v."plateNumber", v.brand, v.model, v.capacity
+       v.id AS vehicle_id, v."plateNumber", v.brand, v.model, v.capacity,
+       origr.name AS original_resource_name, origr.type::text AS original_resource_type
 FROM bookings b
 JOIN users u ON u.id = b."userId"
 JOIN departments dept ON dept.id = u."departmentId"
@@ -400,40 +401,44 @@ LEFT JOIN users ab ON ab.id = b."approvedById"
 LEFT JOIN drivers drv ON drv.id = b."assignedDriverId"
 LEFT JOIN users du ON du.id = drv."userId"
 LEFT JOIN vehicles v ON v.id = b."assignedVehicleId"
+LEFT JOIN resources origr ON origr.id = b."originalResourceId"
 WHERE b.id = $1 LIMIT 1
 `
 
 type GetBookingByIDRow struct {
-	ID                int32          `json:"id"`
-	UserId            int32          `json:"userId"`
-	ResourceId        int32          `json:"resourceId"`
-	StartDate         time.Time      `json:"startDate"`
-	EndDate           time.Time      `json:"endDate"`
-	Purpose           string         `json:"purpose"`
-	Status            BookingStatus  `json:"status"`
-	ApprovedById      sql.NullInt32  `json:"approvedById"`
-	ApprovedAt        sql.NullTime   `json:"approvedAt"`
-	AssignedDriverId  sql.NullInt32  `json:"assignedDriverId"`
-	AssignedVehicleId sql.NullInt32  `json:"assignedVehicleId"`
-	AssignedAt        sql.NullTime   `json:"assignedAt"`
-	ReturnedAt        sql.NullTime   `json:"returnedAt"`
-	CreatedAt         time.Time      `json:"createdAt"`
-	UpdatedAt         time.Time      `json:"updatedAt"`
-	UserName          string         `json:"user_name"`
-	EmployeeId        string         `json:"employeeId"`
-	DepartmentName    string         `json:"department_name"`
-	ResourceName      string         `json:"resource_name"`
-	ResourceType      ResourceType   `json:"resource_type"`
-	ResourceStatus    ResourceStatus `json:"resource_status"`
-	ApproverName      sql.NullString `json:"approver_name"`
-	DriverID          sql.NullInt32  `json:"driver_id"`
-	DriverName        sql.NullString `json:"driver_name"`
-	DriverPhone       sql.NullString `json:"driver_phone"`
-	VehicleID         sql.NullInt32  `json:"vehicle_id"`
-	PlateNumber       sql.NullString `json:"plateNumber"`
-	Brand             sql.NullString `json:"brand"`
-	Model             sql.NullString `json:"model"`
-	Capacity          sql.NullInt16  `json:"capacity"`
+	ID                   int32          `json:"id"`
+	UserId               int32          `json:"userId"`
+	ResourceId           int32          `json:"resourceId"`
+	StartDate            time.Time      `json:"startDate"`
+	EndDate              time.Time      `json:"endDate"`
+	Purpose              string         `json:"purpose"`
+	Status               BookingStatus  `json:"status"`
+	ApprovedById         sql.NullInt32  `json:"approvedById"`
+	ApprovedAt           sql.NullTime   `json:"approvedAt"`
+	AssignedDriverId     sql.NullInt32  `json:"assignedDriverId"`
+	AssignedVehicleId    sql.NullInt32  `json:"assignedVehicleId"`
+	AssignedAt           sql.NullTime   `json:"assignedAt"`
+	ReturnedAt           sql.NullTime   `json:"returnedAt"`
+	CreatedAt            time.Time      `json:"createdAt"`
+	UpdatedAt            time.Time      `json:"updatedAt"`
+	OriginalResourceId   sql.NullInt32  `json:"originalResourceId"`
+	UserName             string         `json:"user_name"`
+	EmployeeId           string         `json:"employeeId"`
+	DepartmentName       string         `json:"department_name"`
+	ResourceName         string         `json:"resource_name"`
+	ResourceType         ResourceType   `json:"resource_type"`
+	ResourceStatus       ResourceStatus `json:"resource_status"`
+	ApproverName         sql.NullString `json:"approver_name"`
+	DriverID             sql.NullInt32  `json:"driver_id"`
+	DriverName           sql.NullString `json:"driver_name"`
+	DriverPhone          sql.NullString `json:"driver_phone"`
+	VehicleID            sql.NullInt32  `json:"vehicle_id"`
+	PlateNumber          sql.NullString `json:"plateNumber"`
+	Brand                sql.NullString `json:"brand"`
+	Model                sql.NullString `json:"model"`
+	Capacity             sql.NullInt16  `json:"capacity"`
+	OriginalResourceName sql.NullString `json:"original_resource_name"`
+	OriginalResourceType sql.NullString `json:"original_resource_type"`
 }
 
 func (q *Queries) GetBookingByID(ctx context.Context, id int32) (GetBookingByIDRow, error) {
@@ -455,6 +460,7 @@ func (q *Queries) GetBookingByID(ctx context.Context, id int32) (GetBookingByIDR
 		&i.ReturnedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.OriginalResourceId,
 		&i.UserName,
 		&i.EmployeeId,
 		&i.DepartmentName,
@@ -470,6 +476,8 @@ func (q *Queries) GetBookingByID(ctx context.Context, id int32) (GetBookingByIDR
 		&i.Brand,
 		&i.Model,
 		&i.Capacity,
+		&i.OriginalResourceName,
+		&i.OriginalResourceType,
 	)
 	return i, err
 }
@@ -545,7 +553,7 @@ func (q *Queries) GetDriverRatings(ctx context.Context, driverid int32) ([]GetDr
 }
 
 const listBookings = `-- name: ListBookings :many
-SELECT b.id, b."userId", b."resourceId", b."startDate", b."endDate", b.purpose, b.status, b."approvedById", b."approvedAt", b."assignedDriverId", b."assignedVehicleId", b."assignedAt", b."returnedAt", b."createdAt", b."updatedAt",
+SELECT b.id, b."userId", b."resourceId", b."startDate", b."endDate", b.purpose, b.status, b."approvedById", b."approvedAt", b."assignedDriverId", b."assignedVehicleId", b."assignedAt", b."returnedAt", b."createdAt", b."updatedAt", b."originalResourceId",
        u.name AS user_name, u."employeeId", dept.name AS department_name,
        r.name AS resource_name, r.type AS resource_type, r.status AS resource_status,
        ab.name AS approver_name,
@@ -583,36 +591,37 @@ type ListBookingsParams struct {
 }
 
 type ListBookingsRow struct {
-	ID                int32          `json:"id"`
-	UserId            int32          `json:"userId"`
-	ResourceId        int32          `json:"resourceId"`
-	StartDate         time.Time      `json:"startDate"`
-	EndDate           time.Time      `json:"endDate"`
-	Purpose           string         `json:"purpose"`
-	Status            BookingStatus  `json:"status"`
-	ApprovedById      sql.NullInt32  `json:"approvedById"`
-	ApprovedAt        sql.NullTime   `json:"approvedAt"`
-	AssignedDriverId  sql.NullInt32  `json:"assignedDriverId"`
-	AssignedVehicleId sql.NullInt32  `json:"assignedVehicleId"`
-	AssignedAt        sql.NullTime   `json:"assignedAt"`
-	ReturnedAt        sql.NullTime   `json:"returnedAt"`
-	CreatedAt         time.Time      `json:"createdAt"`
-	UpdatedAt         time.Time      `json:"updatedAt"`
-	UserName          string         `json:"user_name"`
-	EmployeeId        string         `json:"employeeId"`
-	DepartmentName    string         `json:"department_name"`
-	ResourceName      string         `json:"resource_name"`
-	ResourceType      ResourceType   `json:"resource_type"`
-	ResourceStatus    ResourceStatus `json:"resource_status"`
-	ApproverName      sql.NullString `json:"approver_name"`
-	DriverID          sql.NullInt32  `json:"driver_id"`
-	DriverName        sql.NullString `json:"driver_name"`
-	DriverPhone       sql.NullString `json:"driver_phone"`
-	VehicleID         sql.NullInt32  `json:"vehicle_id"`
-	PlateNumber       sql.NullString `json:"plateNumber"`
-	Brand             sql.NullString `json:"brand"`
-	Model             sql.NullString `json:"model"`
-	Capacity          sql.NullInt16  `json:"capacity"`
+	ID                 int32          `json:"id"`
+	UserId             int32          `json:"userId"`
+	ResourceId         int32          `json:"resourceId"`
+	StartDate          time.Time      `json:"startDate"`
+	EndDate            time.Time      `json:"endDate"`
+	Purpose            string         `json:"purpose"`
+	Status             BookingStatus  `json:"status"`
+	ApprovedById       sql.NullInt32  `json:"approvedById"`
+	ApprovedAt         sql.NullTime   `json:"approvedAt"`
+	AssignedDriverId   sql.NullInt32  `json:"assignedDriverId"`
+	AssignedVehicleId  sql.NullInt32  `json:"assignedVehicleId"`
+	AssignedAt         sql.NullTime   `json:"assignedAt"`
+	ReturnedAt         sql.NullTime   `json:"returnedAt"`
+	CreatedAt          time.Time      `json:"createdAt"`
+	UpdatedAt          time.Time      `json:"updatedAt"`
+	OriginalResourceId sql.NullInt32  `json:"originalResourceId"`
+	UserName           string         `json:"user_name"`
+	EmployeeId         string         `json:"employeeId"`
+	DepartmentName     string         `json:"department_name"`
+	ResourceName       string         `json:"resource_name"`
+	ResourceType       ResourceType   `json:"resource_type"`
+	ResourceStatus     ResourceStatus `json:"resource_status"`
+	ApproverName       sql.NullString `json:"approver_name"`
+	DriverID           sql.NullInt32  `json:"driver_id"`
+	DriverName         sql.NullString `json:"driver_name"`
+	DriverPhone        sql.NullString `json:"driver_phone"`
+	VehicleID          sql.NullInt32  `json:"vehicle_id"`
+	PlateNumber        sql.NullString `json:"plateNumber"`
+	Brand              sql.NullString `json:"brand"`
+	Model              sql.NullString `json:"model"`
+	Capacity           sql.NullInt16  `json:"capacity"`
 }
 
 func (q *Queries) ListBookings(ctx context.Context, arg ListBookingsParams) ([]ListBookingsRow, error) {
@@ -650,6 +659,7 @@ func (q *Queries) ListBookings(ctx context.Context, arg ListBookingsParams) ([]L
 			&i.ReturnedAt,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.OriginalResourceId,
 			&i.UserName,
 			&i.EmployeeId,
 			&i.DepartmentName,

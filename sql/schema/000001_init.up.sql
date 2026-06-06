@@ -9,7 +9,7 @@
 CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 
 -- ─── ENUMS ───────────────────────────────────────────────────────────────────
-CREATE TYPE role_name AS ENUM ('EMPLOYEE', 'ADMIN', 'DRIVER');
+CREATE TYPE role_name AS ENUM ('EMPLOYEE', 'ADMIN', 'DRIVER', 'ROOM_KEEPER');
 CREATE TYPE resource_type AS ENUM ('VEHICLE', 'ROOM');
 CREATE TYPE resource_status AS ENUM ('AVAILABLE', 'MAINTENANCE', 'INACTIVE');
 CREATE TYPE booking_status AS ENUM (
@@ -135,6 +135,18 @@ CREATE TABLE drivers (
 CREATE INDEX idx_drivers_user_id   ON drivers("userId");
 CREATE INDEX idx_drivers_is_active ON drivers("isActive");
 
+-- ─── ROOM KEEPERS ─────────────────────────────────────────────────────────────
+CREATE TABLE room_keepers (
+    id            SERIAL      PRIMARY KEY,
+    "userId"      INTEGER     NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,
+    "phoneNumber" VARCHAR(20) NOT NULL,
+    "isActive"    BOOLEAN     NOT NULL DEFAULT TRUE,
+    "createdAt"   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX idx_room_keepers_user_id   ON room_keepers("userId");
+CREATE INDEX idx_room_keepers_is_active ON room_keepers("isActive");
+
 -- ─── BOOKINGS ─────────────────────────────────────────────────────────────────
 CREATE TABLE bookings (
     id                   SERIAL         PRIMARY KEY,
@@ -148,10 +160,11 @@ CREATE TABLE bookings (
     "approvedAt"         TIMESTAMPTZ,
     "assignedDriverId"   INTEGER        REFERENCES drivers(id),
     "assignedVehicleId"  INTEGER        REFERENCES vehicles(id),
-    "assignedAt"         TIMESTAMPTZ,
-    "returnedAt"         TIMESTAMPTZ,
-    "createdAt"          TIMESTAMPTZ    NOT NULL DEFAULT NOW(),
-    "updatedAt"          TIMESTAMPTZ    NOT NULL DEFAULT NOW(),
+    "assignedAt"           TIMESTAMPTZ,
+    "returnedAt"           TIMESTAMPTZ,
+    "createdAt"            TIMESTAMPTZ    NOT NULL DEFAULT NOW(),
+    "updatedAt"            TIMESTAMPTZ    NOT NULL DEFAULT NOW(),
+    "originalResourceId"   INTEGER        REFERENCES resources(id),
     CONSTRAINT chk_booking_dates CHECK ("endDate" > "startDate")
 );
 
@@ -177,6 +190,24 @@ CREATE TABLE approval_logs (
 
 CREATE INDEX idx_approval_logs_booking_id  ON approval_logs("bookingId");
 CREATE INDEX idx_approval_logs_approver_id ON approval_logs("approverId");
+
+-- ─── BOOKING MERGES ───────────────────────────────────────────────────────────
+-- Links two APPROVED vehicle bookings into a shared trip without changing their
+-- individual status flow. The primary booking is the one whose vehicle/driver is used.
+-- For reporting, only the primary booking counts as a distinct trip.
+CREATE TABLE booking_merges (
+    id                  SERIAL       PRIMARY KEY,
+    "primaryBookingId"  INTEGER      NOT NULL REFERENCES bookings(id),
+    "mergedBookingId"   INTEGER      NOT NULL REFERENCES bookings(id),
+    "mergedById"        INTEGER      NOT NULL REFERENCES users(id),
+    reason              TEXT,
+    "createdAt"         TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+    CONSTRAINT chk_different_bookings CHECK ("primaryBookingId" != "mergedBookingId"),
+    UNIQUE("primaryBookingId", "mergedBookingId")
+);
+
+CREATE INDEX idx_booking_merges_primary ON booking_merges("primaryBookingId");
+CREATE INDEX idx_booking_merges_merged  ON booking_merges("mergedBookingId");
 
 -- ─── DRIVER ASSIGNMENTS ───────────────────────────────────────────────────────
 CREATE TABLE driver_assignments (

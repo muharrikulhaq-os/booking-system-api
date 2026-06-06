@@ -230,9 +230,10 @@ func (ns NullResourceType) Value() (driver.Value, error) {
 type RoleName string
 
 const (
-	RoleNameEMPLOYEE RoleName = "EMPLOYEE"
-	RoleNameADMIN    RoleName = "ADMIN"
-	RoleNameDRIVER   RoleName = "DRIVER"
+	RoleNameEMPLOYEE    RoleName = "EMPLOYEE"
+	RoleNameADMIN       RoleName = "ADMIN"
+	RoleNameDRIVER      RoleName = "DRIVER"
+	RoleNameROOM_KEEPER RoleName = "ROOM_KEEPER"
 )
 
 func (e *RoleName) Scan(src interface{}) error {
@@ -304,21 +305,22 @@ type AuditLog struct {
 }
 
 type Booking struct {
-	ID                int32         `json:"id"`
-	UserId            int32         `json:"userId"`
-	ResourceId        int32         `json:"resourceId"`
-	StartDate         time.Time     `json:"startDate"`
-	EndDate           time.Time     `json:"endDate"`
-	Purpose           string        `json:"purpose"`
-	Status            BookingStatus `json:"status"`
-	ApprovedById      sql.NullInt32 `json:"approvedById"`
-	ApprovedAt        sql.NullTime  `json:"approvedAt"`
-	AssignedDriverId  sql.NullInt32 `json:"assignedDriverId"`
-	AssignedVehicleId sql.NullInt32 `json:"assignedVehicleId"`
-	AssignedAt        sql.NullTime  `json:"assignedAt"`
-	ReturnedAt        sql.NullTime  `json:"returnedAt"`
-	CreatedAt         time.Time     `json:"createdAt"`
-	UpdatedAt         time.Time     `json:"updatedAt"`
+	ID                 int32         `json:"id"`
+	UserId             int32         `json:"userId"`
+	ResourceId         int32         `json:"resourceId"`
+	StartDate          time.Time     `json:"startDate"`
+	EndDate            time.Time     `json:"endDate"`
+	Purpose            string        `json:"purpose"`
+	Status             BookingStatus `json:"status"`
+	ApprovedById       sql.NullInt32 `json:"approvedById"`
+	ApprovedAt         sql.NullTime  `json:"approvedAt"`
+	AssignedDriverId   sql.NullInt32 `json:"assignedDriverId"`
+	AssignedVehicleId  sql.NullInt32 `json:"assignedVehicleId"`
+	AssignedAt         sql.NullTime  `json:"assignedAt"`
+	ReturnedAt         sql.NullTime  `json:"returnedAt"`
+	CreatedAt          time.Time     `json:"createdAt"`
+	UpdatedAt          time.Time     `json:"updatedAt"`
+	OriginalResourceId sql.NullInt32 `json:"originalResourceId"`
 }
 
 type Department struct {
