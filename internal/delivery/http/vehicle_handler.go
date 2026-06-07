@@ -111,7 +111,7 @@ func (h *VehicleHandler) UpdatePhoto(c *fiber.Ctx) error {
 	if err != nil {
 		return fiber.NewError(fiber.StatusBadRequest, "photo file is required")
 	}
-	savedPath, saveErr := util.SaveUploadedFile(fh)
+	savedPath, saveErr := util.SaveUploadedFile(fh, "vehicle")
 	if saveErr != nil {
 		return fiber.NewError(fiber.StatusBadRequest, saveErr.Error())
 	}

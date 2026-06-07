@@ -82,7 +82,7 @@ func (s *AttachmentService) ListByBooking(ctx context.Context, bookingID int32) 
 }
 
 func (s *AttachmentService) UploadForVehicle(ctx context.Context, vehicleID, uploaderID int32, fh *multipart.FileHeader, description string) (map[string]any, error) {
-	filePath, err := util.SaveUploadedFile(fh)
+	filePath, err := util.SaveUploadedFile(fh, "vehicle")
 	if err != nil {
 		return nil, util.NewError(400, err.Error(), util.ErrBadRequest)
 	}
@@ -108,7 +108,7 @@ func (s *AttachmentService) UploadForVehicle(ctx context.Context, vehicleID, upl
 }
 
 func (s *AttachmentService) UploadForRoom(ctx context.Context, roomID, uploaderID int32, fh *multipart.FileHeader, description string) (map[string]any, error) {
-	filePath, err := util.SaveUploadedFile(fh)
+	filePath, err := util.SaveUploadedFile(fh, "room")
 	if err != nil {
 		return nil, util.NewError(400, err.Error(), util.ErrBadRequest)
 	}
@@ -134,7 +134,7 @@ func (s *AttachmentService) UploadForRoom(ctx context.Context, roomID, uploaderI
 }
 
 func (s *AttachmentService) UploadForBooking(ctx context.Context, bookingID, uploaderID int32, fh *multipart.FileHeader, description string) (map[string]any, error) {
-	filePath, err := util.SaveUploadedFile(fh)
+	filePath, err := util.SaveUploadedFile(fh, "booking")
 	if err != nil {
 		return nil, util.NewError(400, err.Error(), util.ErrBadRequest)
 	}
@@ -157,6 +157,34 @@ func (s *AttachmentService) UploadForBooking(ctx context.Context, bookingID, upl
 	return serializeAttachment(row.ID, row.UploadedById, row.UploaderName,
 		row.VehicleId, row.RoomId, row.BookingId,
 		row.FilePath, row.FileName, row.FileType, row.FileSize, row.Description, row.CreatedAt), nil
+}
+
+func (s *AttachmentService) UploadReturnPhoto(ctx context.Context, bookingID, uploaderID int32, fh *multipart.FileHeader) (map[string]any, error) {
+	filePath, err := util.SaveUploadedFile(fh, "booking")
+	if err != nil {
+		return nil, util.NewError(400, err.Error(), util.ErrBadRequest)
+	}
+
+	a, err := s.q.CreateAttachmentForBooking(ctx, repository.CreateAttachmentForBookingParams{
+		UploadedById: uploaderID,
+		BookingId:    sql.NullInt32{Int32: bookingID, Valid: true},
+		FilePath:     filePath,
+		FileName:     filepath.Base(fh.Filename),
+		FileType:     util.GetFileMimeType(fh),
+		FileSize:     sql.NullInt32{Int32: int32(fh.Size), Valid: true},
+		Description:  sql.NullString{String: "return_photo", Valid: true},
+	})
+	if err != nil {
+		util.DeleteUploadedFile(filePath)
+		return nil, err
+	}
+
+	return map[string]any{
+		"id":       a.ID,
+		"filePath": a.FilePath,
+		"fileName": a.FileName,
+		"fileType": a.FileType,
+	}, nil
 }
 
 func (s *AttachmentService) Delete(ctx context.Context, id int32) error {

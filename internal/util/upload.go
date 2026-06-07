@@ -19,7 +19,9 @@ var allowedTypes = map[string]bool{
 	"application/pdf": true,
 }
 
-func SaveUploadedFile(fh *multipart.FileHeader) (filePath string, err error) {
+// SaveUploadedFile saves a file to uploads/{category}/YYYY/MM/.
+// category should be one of: "vehicle", "room", "booking", "profile".
+func SaveUploadedFile(fh *multipart.FileHeader, category string) (filePath string, err error) {
 	if fh.Size > config.C.MaxFileSizeMB*1024*1024 {
 		return "", fmt.Errorf("file size exceeds %dMB limit", config.C.MaxFileSizeMB)
 	}
@@ -34,7 +36,10 @@ func SaveUploadedFile(fh *multipart.FileHeader) (filePath string, err error) {
 		}
 	}
 
-	dir := filepath.Join(config.C.UploadDir, time.Now().Format("2006/01"))
+	if category == "" {
+		category = "misc"
+	}
+	dir := filepath.Join(config.C.UploadDir, category, time.Now().Format("2006/01"))
 	if err = os.MkdirAll(dir, 0755); err != nil {
 		return "", err
 	}

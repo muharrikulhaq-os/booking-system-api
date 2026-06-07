@@ -44,6 +44,8 @@ func (h *BookingHandler) Register(r fiber.Router) {
 	g.Get("/:id/activity", auth, h.Activity)
 	g.Get("/:id/attachments", h.ListAttachments)
 	g.Post("/:id/attachments", h.UploadAttachment)
+	g.Post("/:id/return-report", middleware.RequireRole("DRIVER"), h.SubmitReturnReport)
+	g.Get("/:id/return-report", h.GetReturnReport)
 }
 
 func (h *BookingHandler) List(c *fiber.Ctx) error {
@@ -304,4 +306,63 @@ func (h *BookingHandler) UploadAttachment(c *fiber.Ctx) error {
 		return err
 	}
 	return util.Created(c, "Attachment uploaded", data)
+}
+
+func (h *BookingHandler) SubmitReturnReport(c *fiber.Ctx) error {
+	id, err := parseID(c, "id")
+	if err != nil {
+		return err
+	}
+
+	note := c.FormValue("note")
+	location := c.FormValue("location")
+	if note == "" {
+		return fiber.NewError(fiber.StatusBadRequest, "note is required")
+	}
+	if location == "" {
+		return fiber.NewError(fiber.StatusBadRequest, "location is required")
+	}
+
+	uploaderID := int32(middleware.GetUserID(c))
+	if err = h.svc.SubmitReturnReport(c.Context(), id, note, location, middleware.GetUserID(c)); err != nil {
+		return err
+	}
+
+	// upload photos (field name "photos[]" or "photo", multiple allowed)
+	form, formErr := c.MultipartForm()
+	uploadedPhotos := make([]map[string]any, 0)
+	if formErr == nil {
+		for _, fh := range form.File["photos[]"] {
+			p, pErr := h.attachSvc.UploadReturnPhoto(c.Context(), id, uploaderID, fh)
+			if pErr == nil {
+				uploadedPhotos = append(uploadedPhotos, p)
+			}
+		}
+		// also accept field name "photo" (single)
+		for _, fh := range form.File["photo"] {
+			p, pErr := h.attachSvc.UploadReturnPhoto(c.Context(), id, uploaderID, fh)
+			if pErr == nil {
+				uploadedPhotos = append(uploadedPhotos, p)
+			}
+		}
+	}
+
+	return util.Created(c, "Return report submitted", map[string]any{
+		"bookingId": id,
+		"note":      note,
+		"location":  location,
+		"photos":    uploadedPhotos,
+	})
+}
+
+func (h *BookingHandler) GetReturnReport(c *fiber.Ctx) error {
+	id, err := parseID(c, "id")
+	if err != nil {
+		return err
+	}
+	data, err := h.svc.GetReturnReport(c.Context(), id, middleware.GetUserID(c), middleware.GetUserRole(c))
+	if err != nil {
+		return err
+	}
+	return util.OK(c, "Return report retrieved", data)
 }

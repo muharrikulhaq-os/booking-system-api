@@ -143,6 +143,60 @@ func (q *Queries) CheckBookingAlreadyMerged(ctx context.Context, bookingA, booki
 	return count > 0, err
 }
 
+// ─── Booking Return Reports ──────────────────────────────────────────────────
+
+type BookingReturnReport struct {
+	ID            int32     `json:"id"`
+	BookingID     int32     `json:"bookingId"`
+	SubmittedByID int32     `json:"submittedById"`
+	Note          string    `json:"note"`
+	Location      string    `json:"location"`
+	SubmittedAt   time.Time `json:"submittedAt"`
+}
+
+type BookingReturnReportRow struct {
+	BookingReturnReport
+	SubmitterName string `json:"submitterName"`
+}
+
+// EnsureReturnReportTable creates the booking_return_reports table if it doesn't exist.
+func EnsureReturnReportTable(ctx context.Context, db DBTX) error {
+	_, err := db.ExecContext(ctx, `
+		CREATE TABLE IF NOT EXISTS booking_return_reports (
+			id               SERIAL       PRIMARY KEY,
+			"bookingId"      INTEGER      NOT NULL UNIQUE REFERENCES bookings(id) ON DELETE CASCADE,
+			"submittedById"  INTEGER      NOT NULL REFERENCES users(id),
+			note             TEXT         NOT NULL,
+			location         VARCHAR(500) NOT NULL,
+			"submittedAt"    TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+		)`)
+	return err
+}
+
+func (q *Queries) CreateReturnReport(ctx context.Context, bookingID, submittedByID int32, note, location string) (BookingReturnReport, error) {
+	query := `
+		INSERT INTO booking_return_reports ("bookingId", "submittedById", note, location)
+		VALUES ($1, $2, $3, $4)
+		RETURNING id, "bookingId", "submittedById", note, location, "submittedAt"`
+	var r BookingReturnReport
+	err := q.db.QueryRowContext(ctx, query, bookingID, submittedByID, note, location).
+		Scan(&r.ID, &r.BookingID, &r.SubmittedByID, &r.Note, &r.Location, &r.SubmittedAt)
+	return r, err
+}
+
+func (q *Queries) GetReturnReport(ctx context.Context, bookingID int32) (BookingReturnReportRow, error) {
+	query := `
+		SELECT r.id, r."bookingId", r."submittedById", r.note, r.location, r."submittedAt",
+		       u.name AS submitter_name
+		FROM booking_return_reports r
+		JOIN users u ON u.id = r."submittedById"
+		WHERE r."bookingId" = $1`
+	var r BookingReturnReportRow
+	err := q.db.QueryRowContext(ctx, query, bookingID).
+		Scan(&r.ID, &r.BookingID, &r.SubmittedByID, &r.Note, &r.Location, &r.SubmittedAt, &r.SubmitterName)
+	return r, err
+}
+
 // ─── Room Keepers ────────────────────────────────────────────────────────────
 
 type RoomKeeper struct {

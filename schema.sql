@@ -198,7 +198,8 @@ CREATE TABLE vehicles (
     year              SMALLINT     NOT NULL CHECK (year >= 1900 AND year <= 2100),
     "currentOdometer" INTEGER      NOT NULL DEFAULT 0 CHECK ("currentOdometer" >= 0),
     "categoryId"      INTEGER      NOT NULL REFERENCES vehicle_categories(id),
-    capacity          SMALLINT     NOT NULL DEFAULT 4 CHECK (capacity > 0)
+    capacity          SMALLINT     NOT NULL DEFAULT 4 CHECK (capacity > 0),
+    "photoUrl"        VARCHAR(500) NULL
 );
 
 CREATE INDEX idx_vehicles_plate_number ON vehicles("plateNumber");
@@ -216,7 +217,8 @@ CREATE TABLE rooms (
     id           SERIAL       PRIMARY KEY,
     "resourceId" INTEGER      NOT NULL UNIQUE REFERENCES resources(id) ON DELETE CASCADE,
     location     VARCHAR(255) NOT NULL,
-    capacity     SMALLINT     NOT NULL CHECK (capacity > 0)
+    capacity     SMALLINT     NOT NULL CHECK (capacity > 0),
+    "photoUrl"   VARCHAR(500) NULL
 );
 
 COMMENT ON TABLE rooms IS 'Detail ruang rapat — relasi 1:1 ke resources';
@@ -305,6 +307,21 @@ COMMENT ON COLUMN bookings."assignedVehicleId" IS '[REQ 2] Kendaraan spesifik ya
 COMMENT ON COLUMN bookings."assignedAt"        IS 'Waktu admin melakukan assignment';
 COMMENT ON COLUMN bookings."returnedAt"        IS 'Waktu aktual kendaraan dikembalikan';
 
+
+-- ─── BOOKING RETURN REPORTS ──────────────────────────────────────────────────
+
+CREATE TABLE booking_return_reports (
+    id               SERIAL       PRIMARY KEY,
+    "bookingId"      INTEGER      NOT NULL UNIQUE REFERENCES bookings(id) ON DELETE CASCADE,
+    "submittedById"  INTEGER      NOT NULL REFERENCES users(id),
+    note             TEXT         NOT NULL,
+    location         VARCHAR(500) NOT NULL,
+    "submittedAt"    TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX idx_return_reports_booking ON booking_return_reports("bookingId");
+
+COMMENT ON TABLE booking_return_reports IS 'Laporan akhir perjalanan dari driver — note, lokasi, foto dikirim sebelum admin complete booking';
 
 -- ─── APPROVAL LOGS ────────────────────────────────────────────────────────────
 
@@ -568,7 +585,7 @@ CREATE TABLE attachments (
     "vehicleId"    INTEGER      REFERENCES vehicles(id) ON DELETE CASCADE,
     "roomId"       INTEGER      REFERENCES rooms(id)    ON DELETE CASCADE,
     "bookingId"    INTEGER      REFERENCES bookings(id) ON DELETE CASCADE,
-    "fileUrl"      VARCHAR(500) NOT NULL,
+    "filePath"     VARCHAR(500) NOT NULL,
     "fileName"     VARCHAR(255) NOT NULL,
     "fileType"     VARCHAR(100) NOT NULL,
     "fileSize"     INTEGER      NULL,

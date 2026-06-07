@@ -868,6 +868,90 @@ func (s *BookingService) GetMergeInfo(ctx context.Context, id int32, callerID in
 	return out, nil
 }
 
+func (s *BookingService) SubmitReturnReport(
+	ctx context.Context,
+	bookingID int32,
+	note, location string,
+	userID int,
+) error {
+	b, err := s.q.GetBookingByID(ctx, bookingID)
+	if err != nil {
+		return util.ErrNotFound
+	}
+	if b.ResourceType != repository.ResourceTypeVEHICLE {
+		return util.NewError(400, "return report only applies to vehicle bookings", util.ErrBadRequest)
+	}
+	if b.Status != repository.BookingStatusONGOING && b.Status != repository.BookingStatusOVERDUE {
+		return util.NewError(409, "booking must be ONGOING or OVERDUE to submit return report", util.ErrForbidden)
+	}
+
+	d, err := s.q.GetDriverByUserID(ctx, int32(userID))
+	if err != nil || !b.AssignedDriverId.Valid || b.AssignedDriverId.Int32 != d.ID {
+		return util.ErrForbidden
+	}
+
+	if _, err = s.q.GetReturnReport(ctx, bookingID); err == nil {
+		return util.NewError(409, "return report already submitted for this booking", util.ErrConflict)
+	}
+
+	if _, err = s.q.CreateReturnReport(ctx, bookingID, int32(userID), note, location); err != nil {
+		return err
+	}
+
+	_, _ = s.q.CreateAuditLog(ctx, repository.CreateAuditLogParams{
+		UserId:      sql.NullInt32{Int32: int32(userID), Valid: true},
+		Action:      "SUBMIT_RETURN_REPORT",
+		EntityType:  "Booking",
+		EntityId:    sql.NullInt32{Int32: bookingID, Valid: true},
+		Description: sql.NullString{String: "Driver submitted return report", Valid: true},
+	})
+	return nil
+}
+
+func (s *BookingService) GetReturnReport(ctx context.Context, bookingID int32, callerID int, callerRole string) (map[string]any, error) {
+	b, err := s.q.GetBookingByID(ctx, bookingID)
+	if err != nil {
+		return nil, util.ErrNotFound
+	}
+
+	if callerRole == "DRIVER" {
+		d, dErr := s.q.GetDriverByUserID(ctx, int32(callerID))
+		if dErr != nil || !b.AssignedDriverId.Valid || b.AssignedDriverId.Int32 != d.ID {
+			return nil, util.ErrForbidden
+		}
+	} else if callerRole != "ADMIN" {
+		return nil, util.ErrForbidden
+	}
+
+	report, err := s.q.GetReturnReport(ctx, bookingID)
+	if err != nil {
+		return nil, util.ErrNotFound
+	}
+
+	attachments, _ := s.q.ListAttachmentsByBooking(ctx, sql.NullInt32{Int32: bookingID, Valid: true})
+	photos := make([]map[string]any, 0)
+	for _, a := range attachments {
+		if a.Description.Valid && a.Description.String == "return_photo" {
+			photos = append(photos, map[string]any{
+				"id":       a.ID,
+				"filePath": a.FilePath,
+				"fileName": a.FileName,
+				"fileType": a.FileType,
+			})
+		}
+	}
+
+	return map[string]any{
+		"id":            report.ID,
+		"bookingId":     report.BookingID,
+		"submittedBy":   map[string]any{"id": report.SubmittedByID, "name": report.SubmitterName},
+		"note":          report.Note,
+		"location":      report.Location,
+		"submittedAt":   report.SubmittedAt,
+		"photos":        photos,
+	}, nil
+}
+
 func itoa(n int32) string {
 	return strconv.FormatInt(int64(n), 10)
 }

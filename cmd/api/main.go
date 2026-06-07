@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"log"
 
 	"booking-system-api/internal/config"
@@ -20,6 +21,10 @@ func main() {
 	defer repository.DB.Close()
 
 	db := repository.DB
+
+	if err := repository.EnsureReturnReportTable(context.Background(), db); err != nil {
+		log.Fatalf("failed to ensure return report table: %v", err)
+	}
 
 	app := fiber.New(fiber.Config{
 		ErrorHandler: middleware.ErrorHandler,

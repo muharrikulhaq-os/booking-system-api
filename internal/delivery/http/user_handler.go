@@ -139,7 +139,7 @@ func (h *UserHandler) UploadMyPhoto(c *fiber.Ctx) error {
 	if err != nil {
 		return fiber.NewError(fiber.StatusBadRequest, "photo file is required")
 	}
-	savedPath, err := util.SaveUploadedFile(fh)
+	savedPath, err := util.SaveUploadedFile(fh, "profile")
 	if err != nil {
 		return fiber.NewError(fiber.StatusBadRequest, err.Error())
 	}
@@ -169,7 +169,7 @@ func (h *UserHandler) UploadUserPhoto(c *fiber.Ctx) error {
 	if err != nil {
 		return fiber.NewError(fiber.StatusBadRequest, "photo file is required")
 	}
-	savedPath, saveErr := util.SaveUploadedFile(fh)
+	savedPath, saveErr := util.SaveUploadedFile(fh, "profile")
 	if saveErr != nil {
 		return fiber.NewError(fiber.StatusBadRequest, saveErr.Error())
 	}

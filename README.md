@@ -63,7 +63,7 @@
 |------|-----------|
 | `ADMIN` | Akses penuh ke semua fitur manajemen |
 | `EMPLOYEE` | Pengguna internal, bisa membuat booking |
-| `DRIVER` | Pengemudi, bisa mulai & input BBM untuk booking kendaraan |
+| `DRIVER` | Pengemudi, bisa mulai perjalanan, input BBM, dan submit return report booking kendaraan |
 | `ROOM_KEEPER` | Pengawas ruangan, bisa start & complete booking ruangan |
 
 ---
@@ -1049,6 +1049,17 @@ PENDING → APPROVED → ONGOING → COMPLETED
   CANCELLED (dari PENDING)
 ```
 
+### Alur Selesai Booking Kendaraan (Vehicle Return Flow)
+```
+[Driver] ONGOING → POST /return-report (note + foto + lokasi)
+                        ↓
+[Admin]  GET /return-report → review laporan driver
+                        ↓
+[Admin]  PATCH /complete → COMPLETED
+```
+
+> Driver wajib submit return report terlebih dahulu agar admin dapat melihat kondisi kendaraan sebelum menyelesaikan booking.
+
 ---
 
 ### `GET /api/v1/bookings`
@@ -1301,7 +1312,86 @@ Selesaikan booking (status: `COMPLETED`).
 - `ADMIN` — dapat menyelesaikan booking kendaraan atau ruangan
 - `ROOM_KEEPER` — hanya booking ruangan
 
+> Untuk booking kendaraan, disarankan admin melihat return report driver terlebih dahulu via `GET /bookings/:id/return-report` sebelum melakukan complete.
+
 **Response `200`:** *(data booking dengan status `COMPLETED`)*
+
+---
+
+### `POST /api/v1/bookings/:id/return-report`
+Driver mengirimkan laporan akhir perjalanan (note, lokasi, foto kondisi kendaraan). Admin kemudian mereview laporan ini sebelum menyelesaikan booking.
+
+**Akses:** `DRIVER` (hanya driver yang di-assign ke booking ini)
+
+**Syarat:**
+- Booking bertipe `VEHICLE`
+- Status booking `ONGOING` atau `OVERDUE`
+- Belum pernah submit return report untuk booking ini
+
+**Content-Type:** `multipart/form-data`
+
+| Field | Type | Required | Keterangan |
+|-------|------|----------|-----------|
+| `note` | string | ✅ | Catatan driver tentang perjalanan/kondisi kendaraan |
+| `location` | string | ✅ | Lokasi saat ini (string bebas, contoh: "Kantor Pusat Jl. Sudirman") |
+| `photos[]` | file | ❌ | Foto kondisi kendaraan (bisa multiple, jpg/png) |
+
+**Response `201`:**
+```json
+{
+  "success": true,
+  "message": "Return report submitted",
+  "data": {
+    "bookingId": 6,
+    "note": "Kendaraan dikembalikan dalam kondisi baik.",
+    "location": "Kantor Pusat, Jl. Sudirman No. 1 Jakarta",
+    "photos": [
+      {
+        "id": 12,
+        "filePath": "booking/2026/06/abc123.jpg",
+        "fileName": "kondisi-depan.jpg",
+        "fileType": "image/jpeg"
+      }
+    ]
+  }
+}
+```
+
+---
+
+### `GET /api/v1/bookings/:id/return-report`
+Lihat laporan akhir perjalanan yang sudah disubmit driver.
+
+**Akses:** `ADMIN` atau `DRIVER` yang di-assign ke booking ini
+
+**Response `200`:**
+```json
+{
+  "success": true,
+  "message": "Return report retrieved",
+  "data": {
+    "id": 1,
+    "bookingId": 6,
+    "submittedBy": {
+      "id": 6,
+      "name": "Pak Supir Satu"
+    },
+    "note": "Kendaraan dikembalikan dalam kondisi baik. Tidak ada kerusakan.",
+    "location": "Kantor Pusat, Jl. Sudirman No. 1 Jakarta",
+    "submittedAt": "2026-06-07T14:30:00Z",
+    "photos": [
+      {
+        "id": 12,
+        "filePath": "booking/2026/06/abc123.jpg",
+        "fileName": "kondisi-depan.jpg",
+        "fileType": "image/jpeg"
+      }
+    ]
+  }
+}
+```
+
+**Error `404`:** Jika driver belum submit return report.
 
 ---
 
@@ -1513,7 +1603,7 @@ Riwayat seluruh aktivitas pada suatu booking — termasuk pembuatan, approve/rej
 
 | Field | Type | Keterangan |
 |-------|------|-----------|
-| `action` | string | `CREATE` \| `APPROVE` \| `REJECT` \| `CANCEL` \| `ASSIGN` \| `START` \| `COMPLETE` \| `RATE_DRIVER` \| `SUBSTITUTE_RESOURCE` \| `MERGE` |
+| `action` | string | `CREATE` \| `APPROVE` \| `REJECT` \| `CANCEL` \| `ASSIGN` \| `START` \| `COMPLETE` \| `RATE_DRIVER` \| `SUBSTITUTE_RESOURCE` \| `MERGE` \| `SUBMIT_RETURN_REPORT` |
 | `description` | string\|null | Catatan/note yang dimasukkan saat aksi dilakukan |
 | `actor` | string\|null | Nama user yang melakukan aksi (null jika aksi sistem) |
 | `createdAt` | string | Waktu aksi dilakukan (RFC3339) |
@@ -2419,13 +2509,24 @@ Riwayat aktivitas sistem (Audit Trail).
 ### `GET /files/*`
 Serve file statis yang diupload (foto profil, foto kendaraan/ruangan, attachment).
 
-**Akses:** Public
+**Akses:** Auth required (Bearer Token)
 
-**Contoh URL:**
-- `/files/photos/profile-1.jpg` — Foto profil user
-- `/files/vehicles/avanza.jpg` — Foto katalog kendaraan
-- `/files/rooms/ruang-a.jpg` — Foto katalog ruangan
-- `/files/attachments/stnk.pdf` — Dokumen lampiran
+**Struktur Folder Upload:**
+
+File disimpan berdasarkan kategori dan bulan upload:
+
+| Kategori | Path | Digunakan untuk |
+|----------|------|----------------|
+| `profile` | `uploads/profile/YYYY/MM/` | Foto profil user |
+| `vehicle` | `uploads/vehicle/YYYY/MM/` | Foto katalog kendaraan & attachment kendaraan |
+| `room` | `uploads/room/YYYY/MM/` | Foto katalog ruangan & attachment ruangan |
+| `booking` | `uploads/booking/YYYY/MM/` | Attachment booking & foto return report driver |
+
+**Contoh URL akses file:**
+- `/files/profile/2026/06/abc123.jpg` — Foto profil user
+- `/files/vehicle/2026/06/def456.jpg` — Foto katalog kendaraan
+- `/files/room/2026/06/ghi789.jpg` — Foto katalog ruangan
+- `/files/booking/2026/06/jkl012.jpg` — Attachment/foto return report booking
 
 ---
 

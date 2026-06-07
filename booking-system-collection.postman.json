@@ -2055,6 +2055,69 @@
               ]
             }
           }
+        },
+        {
+          "name": "Submit Return Report (Driver)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "note",
+                  "value": "Kendaraan dikembalikan dalam kondisi baik. Perjalanan selesai tanpa kendala.",
+                  "type": "text"
+                },
+                {
+                  "key": "location",
+                  "value": "Kantor Pusat, Jl. Sudirman No. 1 Jakarta",
+                  "type": "text"
+                },
+                {
+                  "key": "photos[]",
+                  "type": "file",
+                  "src": "",
+                  "description": "Foto kondisi kendaraan (boleh multiple)"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/bookings/6/return-report",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "bookings",
+                "6",
+                "return-report"
+              ]
+            },
+            "description": "Driver submit laporan akhir perjalanan: note, lokasi, dan foto kondisi kendaraan. Admin kemudian melihat laporan ini sebelum melakukan complete booking."
+          }
+        },
+        {
+          "name": "Get Return Report",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/bookings/6/return-report",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "bookings",
+                "6",
+                "return-report"
+              ]
+            },
+            "description": "Admin atau driver melihat laporan akhir perjalanan yang sudah di-submit driver. Admin membaca laporan ini sebelum menyelesaikan booking."
+          }
         }
       ]
     },

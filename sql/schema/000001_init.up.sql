@@ -348,8 +348,25 @@ CREATE INDEX idx_guest_bookings_email       ON guest_bookings("guestEmail");
 CREATE INDEX idx_guest_bookings_status      ON guest_bookings(status);
 CREATE INDEX idx_guest_bookings_resource_id ON guest_bookings("resourceId");
 
+-- ─── BOOKING RETURN REPORTS ───────────────────────────────────────────────────
+-- Driver submits end-of-trip note, location, and photos (stored as booking
+-- attachments with description='return_photo'). Admin reviews before completing.
+CREATE TABLE booking_return_reports (
+    id               SERIAL       PRIMARY KEY,
+    "bookingId"      INTEGER      NOT NULL UNIQUE REFERENCES bookings(id) ON DELETE CASCADE,
+    "submittedById"  INTEGER      NOT NULL REFERENCES users(id),
+    note             TEXT         NOT NULL,
+    location         VARCHAR(500) NOT NULL,
+    "submittedAt"    TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX idx_return_reports_booking ON booking_return_reports("bookingId");
+
+COMMENT ON TABLE booking_return_reports IS 'Laporan akhir perjalanan dari driver — note, lokasi, foto dikirim sebelum admin complete booking';
+
+
 -- ─── ATTACHMENTS ──────────────────────────────────────────────────────────────
--- filePath: relative path in uploads/ directory (e.g. "2024/01/uuid_filename.jpg")
+-- filePath: relative path in uploads/ directory (e.g. "vehicle/2024/01/uuid.jpg")
 CREATE TABLE attachments (
     id             SERIAL       PRIMARY KEY,
     "uploadedById" INTEGER      NOT NULL REFERENCES users(id),
@@ -466,7 +483,11 @@ LEFT JOIN fuel_expenses fe ON fe."vehicleId" = v.id
 GROUP BY v.id, v."plateNumber", r.name, vc.name;
 
 -- ─── SEED DATA ────────────────────────────────────────────────────────────────
-INSERT INTO roles (name) VALUES ('EMPLOYEE'), ('ADMIN'), ('DRIVER');
+INSERT INTO roles (name) VALUES
+    ('EMPLOYEE'),     -- id 1
+    ('ADMIN'),        -- id 2
+    ('DRIVER'),       -- id 3
+    ('ROOM_KEEPER');  -- id 4
 
 INSERT INTO departments (name) VALUES
     ('Information Technology'), ('Human Resources'),
@@ -522,5 +543,130 @@ INSERT INTO driver_assignments ("driverId", "vehicleId", "assignedAt") VALUES
     (2, 2, NOW() - INTERVAL '15 days');
 
 INSERT INTO master_settings (key, value, unit, description) VALUES
-    ('price_per_liter_bbm',   10000.0000, 'IDR/liter', 'Harga bensin Pertalite per liter'),
-    ('price_per_kwh_listrik',  2466.0000, 'IDR/kWh',   'Tarif listrik PLN per kWh');
+    ('price_per_liter_bbm',   10000.0000, 'IDR/liter', 'Harga bensin Pertalite per liter (default driver bisa override)'),
+    ('price_per_kwh_listrik',  2466.0000, 'IDR/kWh',   'Tarif listrik PLN per kWh — tarif R-2 non-subsidi');
+
+-- ─── BOOKINGS ─────────────────────────────────────────────────────────────────
+INSERT INTO bookings (
+    "userId", "resourceId", "startDate", "endDate", purpose, status,
+    "approvedById", "approvedAt",
+    "assignedDriverId", "assignedVehicleId", "assignedAt",
+    "returnedAt"
+) VALUES
+    -- [1] COMPLETED — John Doe, Avanza, Pak Supir Satu
+    (2, 1,
+     NOW() - INTERVAL '10 days', NOW() - INTERVAL '9 days',
+     'Kunjungan klien ke site proyek', 'COMPLETED',
+     1, NOW() - INTERVAL '11 days',
+     1, 1, NOW() - INTERVAL '11 days',
+     NOW() - INTERVAL '9 days'),
+
+    -- [2] APPROVED — Jane Smith, Meeting Room B (ruangan)
+    (3, 9,
+     NOW() + INTERVAL '2 days', NOW() + INTERVAL '2 days' + INTERVAL '3 hours',
+     'Rapat koordinasi tim Finance Q1', 'APPROVED',
+     1, NOW() - INTERVAL '1 day',
+     NULL, NULL, NULL, NULL),
+
+    -- [3] PENDING — John Doe, Fortuner
+    (2, 3,
+     NOW() + INTERVAL '5 days', NOW() + INTERVAL '6 days',
+     'Perjalanan dinas ke Bandung', 'PENDING',
+     NULL, NULL, NULL, NULL, NULL, NULL),
+
+    -- [4] PENDING — Dewi, Board Room
+    (4, 10,
+     NOW() + INTERVAL '3 days', NOW() + INTERVAL '3 days' + INTERVAL '4 hours',
+     'Presentasi Marketing Campaign Q2', 'PENDING',
+     NULL, NULL, NULL, NULL, NULL, NULL),
+
+    -- [5] REJECTED — Reza, Avanza
+    (5, 1,
+     NOW() - INTERVAL '5 days', NOW() - INTERVAL '4 days',
+     'Acara keluarga (bukan keperluan kantor)', 'REJECTED',
+     1, NOW() - INTERVAL '6 days',
+     NULL, NULL, NULL, NULL),
+
+    -- [6] ONGOING — John Doe, Xenia, Pak Supir Dua
+    (2, 5,
+     NOW() - INTERVAL '1 hour', NOW() + INTERVAL '6 hours',
+     'Antar dokumen ke kantor pusat', 'ONGOING',
+     1, NOW() - INTERVAL '2 days',
+     2, 5, NOW() - INTERVAL '2 days',
+     NULL),
+
+    -- [7] OVERDUE — Reza, CR-V
+    (5, 2,
+     NOW() - INTERVAL '3 days', NOW() - INTERVAL '1 day',
+     'Perjalanan survey lokasi', 'OVERDUE',
+     1, NOW() - INTERVAL '4 days',
+     NULL, NULL, NULL, NULL),
+
+    -- [8] CANCELLED — Jane Smith, Meeting Room A
+    (3, 8,
+     NOW() + INTERVAL '1 day', NOW() + INTERVAL '1 day' + INTERVAL '2 hours',
+     'Meeting yang dibatalkan', 'CANCELLED',
+     NULL, NULL, NULL, NULL, NULL, NULL),
+
+    -- [9] APPROVED + assigned — Dewi, Ioniq 5 (EV), Pak Supir Satu
+    (4, 7,
+     NOW() + INTERVAL '1 day', NOW() + INTERVAL '2 days',
+     'Kunjungan ke pameran EV Jakarta', 'APPROVED',
+     1, NOW() - INTERVAL '12 hours',
+     1, 7, NOW() - INTERVAL '12 hours',
+     NULL);
+
+-- ─── APPROVAL LOGS ────────────────────────────────────────────────────────────
+INSERT INTO approval_logs ("bookingId", "approverId", action, note) VALUES
+    (1, 1, 'APPROVED', 'Disetujui — keperluan klien prioritas'),
+    (2, 1, 'APPROVED', 'OK, silakan'),
+    (5, 1, 'REJECTED', 'Booking untuk keperluan pribadi tidak diizinkan'),
+    (7, 1, 'APPROVED', 'Disetujui untuk survey lokasi proyek'),
+    (9, 1, 'APPROVED', 'Disetujui — kendaraan listrik tersedia');
+
+-- ─── FUEL EXPENSES ────────────────────────────────────────────────────────────
+INSERT INTO fuel_expenses (
+    "driverId", "vehicleId", "bookingId", "fuelType",
+    liter, "pricePerLiter", "odometerBefore", "odometerAfter",
+    "totalAmount", note
+) VALUES
+    (1, 1, 1, 'BBM', 40.50, 10000.00, 14600, 15000, 405000.00, 'SPBU Pertamina Jl. Sudirman'),
+    (1, 1, 6, 'BBM', 35.00, 10000.00, 15000, 15320, 350000.00, 'SPBU Shell Jl. Gatot Subroto'),
+    (2, 2, 7, 'BBM', 50.00, 10200.00, 28000, 28500, 510000.00, 'SPBU Pertamina Bekasi');
+
+INSERT INTO fuel_expenses (
+    "driverId", "vehicleId", "bookingId", "fuelType",
+    kwh, "pricePerKwh", "batteryBefore", "batteryAfter",
+    "totalAmount", note
+) VALUES
+    (1, 7, 9, 'LISTRIK', 45.00, 2466.00, 20.00, 95.00, 110970.00, 'SPKLU PLN Kemayoran — charge 75%');
+
+-- ─── DRIVER RATINGS ───────────────────────────────────────────────────────────
+INSERT INTO driver_ratings ("bookingId", "driverId", "ratedById", rating, review) VALUES
+    (1, 1, 2, 5, 'Driver sangat profesional, tepat waktu dan ramah. Sangat direkomendasikan!');
+
+-- ─── MAINTENANCE RECORDS ──────────────────────────────────────────────────────
+INSERT INTO maintenance_records ("resourceId", description, "startDate", "endDate", cost, "createdById") VALUES
+    (4,  'Ganti oli mesin, filter oli, dan filter udara — servis berkala 70.000 km',
+     NOW() - INTERVAL '2 days', NULL, 850000.00, 1),
+    (1,  'Ganti ban depan 2 buah — ban aus',
+     NOW() - INTERVAL '20 days', NOW() - INTERVAL '20 days' + INTERVAL '4 hours', 1200000.00, 1),
+    (10, 'Perbaikan AC Board Room — kompresor bermasalah',
+     NOW() - INTERVAL '7 days', NOW() - INTERVAL '5 days', 2500000.00, 1);
+
+-- ─── AUDIT LOGS ───────────────────────────────────────────────────────────────
+INSERT INTO audit_logs ("userId", action, "entityType", "entityId", description) VALUES
+    (1, 'CREATE',      'User',              2, 'Admin membuat user John Doe (EMP001)'),
+    (1, 'CREATE',      'Vehicle',           1, 'Admin mendaftarkan Toyota Avanza B 1234 XY — kapasitas 7'),
+    (1, 'CREATE',      'Vehicle',           7, 'Admin mendaftarkan Hyundai Ioniq 5 B 5555 EV — kapasitas 5'),
+    (1, 'CREATE',      'Room',              1, 'Admin mendaftarkan Meeting Room A Lt.2'),
+    (1, 'APPROVE',     'Booking',           1, 'Admin menyetujui booking #1 — John Doe (Avanza)'),
+    (1, 'ASSIGN',      'Booking',           1, 'Admin assign Pak Supir Satu + Avanza ke booking #1'),
+    (1, 'REJECT',      'Booking',           5, 'Admin menolak booking #5 — keperluan pribadi'),
+    (2, 'CREATE',      'Booking',           3, 'John Doe membuat booking #3 — Fortuner ke Bandung'),
+    (1, 'CREATE',      'MaintenanceRecord', 1, 'Admin mencatat servis L300 (ganti oli)'),
+    (1, 'UPDATE',      'MasterSetting',     1, 'Admin set harga BBM default Rp 10.000/liter'),
+    (1, 'UPDATE',      'MasterSetting',     2, 'Admin set harga listrik default Rp 2.466/kWh'),
+    (1, 'APPROVE',     'Booking',           9, 'Admin menyetujui booking #9 — Ioniq 5 pameran EV'),
+    (1, 'ASSIGN',      'Booking',           9, 'Admin assign Pak Supir Satu + Ioniq 5 ke booking #9'),
+    (2, 'RATE_DRIVER', 'DriverRating',      1, 'John Doe rating 5/5 untuk Pak Supir Satu (booking #1)');
