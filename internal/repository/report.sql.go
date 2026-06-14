@@ -155,12 +155,12 @@ ORDER BY total_bookings DESC
 `
 
 type ReportDriverActivityRow struct {
-	DriverID          int32  `json:"driver_id"`
-	DriverName        string `json:"driver_name"`
-	EmployeeId        string `json:"employeeId"`
-	TotalBookings     int64  `json:"total_bookings"`
-	CompletedBookings int64  `json:"completed_bookings"`
-	TotalFuelExpenses any    `json:"total_fuel_expenses"`
+	DriverID          int32       `json:"driver_id"`
+	DriverName        string      `json:"driver_name"`
+	EmployeeId        string      `json:"employeeId"`
+	TotalBookings     int64       `json:"total_bookings"`
+	CompletedBookings int64       `json:"completed_bookings"`
+	TotalFuelExpenses interface{} `json:"total_fuel_expenses"`
 }
 
 func (q *Queries) ReportDriverActivity(ctx context.Context) ([]ReportDriverActivityRow, error) {
@@ -286,7 +286,7 @@ type ReportMaintenanceCostRow struct {
 	ResourceName string       `json:"resource_name"`
 	ResourceType ResourceType `json:"resource_type"`
 	TotalRecords int64        `json:"total_records"`
-	TotalCost    any          `json:"total_cost"`
+	TotalCost    interface{}  `json:"total_cost"`
 }
 
 func (q *Queries) ReportMaintenanceCost(ctx context.Context) ([]ReportMaintenanceCostRow, error) {
@@ -319,7 +319,7 @@ func (q *Queries) ReportMaintenanceCost(ctx context.Context) ([]ReportMaintenanc
 }
 
 const reportOverdueBookings = `-- name: ReportOverdueBookings :many
-SELECT b.id, b."userId", b."resourceId", b."startDate", b."endDate", b.purpose, b.status, b."approvedById", b."approvedAt", b."assignedDriverId", b."assignedVehicleId", b."assignedAt", b."returnedAt", b."createdAt", b."updatedAt",
+SELECT b.id, b."userId", b."resourceId", b."startDate", b."endDate", b.purpose, b.status, b."approvedById", b."approvedAt", b."assignedDriverId", b."assignedVehicleId", b."assignedAt", b."returnedAt", b."createdAt", b."updatedAt", b."originalResourceId",
        u.name AS user_name, u."employeeId",
        r.name AS resource_name, r.type AS resource_type
 FROM bookings b
@@ -330,25 +330,26 @@ ORDER BY b."endDate" ASC
 `
 
 type ReportOverdueBookingsRow struct {
-	ID                int32         `json:"id"`
-	UserId            int32         `json:"userId"`
-	ResourceId        int32         `json:"resourceId"`
-	StartDate         time.Time     `json:"startDate"`
-	EndDate           time.Time     `json:"endDate"`
-	Purpose           string        `json:"purpose"`
-	Status            BookingStatus `json:"status"`
-	ApprovedById      sql.NullInt32 `json:"approvedById"`
-	ApprovedAt        sql.NullTime  `json:"approvedAt"`
-	AssignedDriverId  sql.NullInt32 `json:"assignedDriverId"`
-	AssignedVehicleId sql.NullInt32 `json:"assignedVehicleId"`
-	AssignedAt        sql.NullTime  `json:"assignedAt"`
-	ReturnedAt        sql.NullTime  `json:"returnedAt"`
-	CreatedAt         time.Time     `json:"createdAt"`
-	UpdatedAt         time.Time     `json:"updatedAt"`
-	UserName          string        `json:"user_name"`
-	EmployeeId        string        `json:"employeeId"`
-	ResourceName      string        `json:"resource_name"`
-	ResourceType      ResourceType  `json:"resource_type"`
+	ID                 int32         `json:"id"`
+	UserId             int32         `json:"userId"`
+	ResourceId         int32         `json:"resourceId"`
+	StartDate          time.Time     `json:"startDate"`
+	EndDate            time.Time     `json:"endDate"`
+	Purpose            string        `json:"purpose"`
+	Status             BookingStatus `json:"status"`
+	ApprovedById       sql.NullInt32 `json:"approvedById"`
+	ApprovedAt         sql.NullTime  `json:"approvedAt"`
+	AssignedDriverId   sql.NullInt32 `json:"assignedDriverId"`
+	AssignedVehicleId  sql.NullInt32 `json:"assignedVehicleId"`
+	AssignedAt         sql.NullTime  `json:"assignedAt"`
+	ReturnedAt         sql.NullTime  `json:"returnedAt"`
+	CreatedAt          time.Time     `json:"createdAt"`
+	UpdatedAt          time.Time     `json:"updatedAt"`
+	OriginalResourceId sql.NullInt32 `json:"originalResourceId"`
+	UserName           string        `json:"user_name"`
+	EmployeeId         string        `json:"employeeId"`
+	ResourceName       string        `json:"resource_name"`
+	ResourceType       ResourceType  `json:"resource_type"`
 }
 
 func (q *Queries) ReportOverdueBookings(ctx context.Context) ([]ReportOverdueBookingsRow, error) {
@@ -376,6 +377,7 @@ func (q *Queries) ReportOverdueBookings(ctx context.Context) ([]ReportOverdueBoo
 			&i.ReturnedAt,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.OriginalResourceId,
 			&i.UserName,
 			&i.EmployeeId,
 			&i.ResourceName,

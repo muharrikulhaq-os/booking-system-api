@@ -20,11 +20,13 @@ WHERE (sqlc.narg(user_id)::int IS NULL OR b."userId" = sqlc.narg(user_id)::int)
   AND (sqlc.narg(driver_id)::int IS NULL OR b."assignedDriverId" = sqlc.narg(driver_id)::int)
   AND (sqlc.narg(start_from)::timestamptz IS NULL OR b."startDate" >= sqlc.narg(start_from)::timestamptz)
   AND (sqlc.narg(end_to)::timestamptz IS NULL OR b."endDate" <= sqlc.narg(end_to)::timestamptz)
+  AND (sqlc.narg(search)::text IS NULL OR r.name ILIKE '%' || sqlc.narg(search)::text || '%' OR u.name ILIKE '%' || sqlc.narg(search)::text || '%')
 ORDER BY b."createdAt" DESC
 LIMIT $1 OFFSET $2;
 
 -- name: CountBookings :one
 SELECT COUNT(*) FROM bookings b
+JOIN users u ON u.id = b."userId"
 JOIN resources r ON r.id = b."resourceId"
 WHERE (sqlc.narg(user_id)::int IS NULL OR b."userId" = sqlc.narg(user_id)::int)
   AND (sqlc.narg(status)::booking_status IS NULL OR b.status = sqlc.narg(status)::booking_status)
@@ -32,7 +34,8 @@ WHERE (sqlc.narg(user_id)::int IS NULL OR b."userId" = sqlc.narg(user_id)::int)
   AND (sqlc.narg(resource_type)::resource_type IS NULL OR r.type = sqlc.narg(resource_type)::resource_type)
   AND (sqlc.narg(driver_id)::int IS NULL OR b."assignedDriverId" = sqlc.narg(driver_id)::int)
   AND (sqlc.narg(start_from)::timestamptz IS NULL OR b."startDate" >= sqlc.narg(start_from)::timestamptz)
-  AND (sqlc.narg(end_to)::timestamptz IS NULL OR b."endDate" <= sqlc.narg(end_to)::timestamptz);
+  AND (sqlc.narg(end_to)::timestamptz IS NULL OR b."endDate" <= sqlc.narg(end_to)::timestamptz)
+  AND (sqlc.narg(search)::text IS NULL OR r.name ILIKE '%' || sqlc.narg(search)::text || '%' OR u.name ILIKE '%' || sqlc.narg(search)::text || '%');
 
 -- name: GetBookingByID :one
 SELECT b.*,
@@ -125,7 +128,23 @@ JOIN users u ON u.id = dr."ratedById"
 WHERE dr."driverId" = $1
 ORDER BY dr."createdAt" DESC;
 
+-- name: UpdateBookingResource :one
+UPDATE bookings SET "resourceId" = $2, "updatedAt" = NOW() WHERE id = $1 RETURNING *;
+
 -- name: MarkOverdueBookings :many
+-- Booking ONGOING tapi lewat endDate → OVERDUE (sudah mulai tapi belum selesai tepat waktu)
 UPDATE bookings SET status = 'OVERDUE', "updatedAt" = NOW()
+WHERE status = 'ONGOING' AND "endDate" < NOW()
+RETURNING *;
+
+-- name: MarkExpiredBookings :many
+-- Booking APPROVED tapi tidak pernah dimulai (tidak jadi ONGOING) selama masa bookingnya → EXPIRED
+UPDATE bookings SET status = 'EXPIRED', "updatedAt" = NOW()
 WHERE status = 'APPROVED' AND "endDate" < NOW()
+RETURNING *;
+
+-- name: MarkIgnoredBookings :many
+-- Booking PENDING tapi admin tidak merespons sampai masa bookingnya habis → IGNORED
+UPDATE bookings SET status = 'IGNORED', "updatedAt" = NOW()
+WHERE status = 'PENDING' AND "endDate" < NOW()
 RETURNING *;

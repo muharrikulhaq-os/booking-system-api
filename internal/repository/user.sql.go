@@ -19,19 +19,37 @@ WHERE ($1::text IS NULL
        OR u."employeeId" ILIKE '%' || $1::text || '%')
   AND ($2::int IS NULL OR u."roleId" = $2::int)
   AND ($3::boolean IS NULL OR u."isActive" = $3::boolean)
+  AND ($4::int IS NULL OR u."departmentId" = $4::int)
 `
 
 type CountUsersParams struct {
-	Search   sql.NullString `json:"search"`
-	RoleID   sql.NullInt32  `json:"role_id"`
-	IsActive sql.NullBool   `json:"is_active"`
+	Search       sql.NullString `json:"search"`
+	RoleID       sql.NullInt32  `json:"role_id"`
+	IsActive     sql.NullBool   `json:"is_active"`
+	DepartmentID sql.NullInt32  `json:"department_id"`
 }
 
 func (q *Queries) CountUsers(ctx context.Context, arg CountUsersParams) (int64, error) {
-	row := q.db.QueryRowContext(ctx, countUsers, arg.Search, arg.RoleID, arg.IsActive)
+	row := q.db.QueryRowContext(ctx, countUsers,
+		arg.Search,
+		arg.RoleID,
+		arg.IsActive,
+		arg.DepartmentID,
+	)
 	var count int64
 	err := row.Scan(&count)
 	return count, err
+}
+
+const createDepartment = `-- name: CreateDepartment :one
+INSERT INTO departments (name) VALUES ($1) RETURNING id, name, "createdAt"
+`
+
+func (q *Queries) CreateDepartment(ctx context.Context, name string) (Department, error) {
+	row := q.db.QueryRowContext(ctx, createDepartment, name)
+	var i Department
+	err := row.Scan(&i.ID, &i.Name, &i.CreatedAt)
+	return i, err
 }
 
 const createUser = `-- name: CreateUser :one
@@ -77,6 +95,15 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, e
 	return i, err
 }
 
+const deleteDepartment = `-- name: DeleteDepartment :exec
+DELETE FROM departments WHERE id = $1
+`
+
+func (q *Queries) DeleteDepartment(ctx context.Context, id int32) error {
+	_, err := q.db.ExecContext(ctx, deleteDepartment, id)
+	return err
+}
+
 const deleteProfilePhoto = `-- name: DeleteProfilePhoto :one
 UPDATE users SET "profilePhoto" = NULL, "updatedAt" = NOW()
 WHERE id = $1 RETURNING id, "employeeId", name, email, password, "profilePhoto", "isActive", "roleId", "departmentId", "createdAt", "updatedAt"
@@ -108,6 +135,17 @@ DELETE FROM users WHERE id = $1
 func (q *Queries) DeleteUser(ctx context.Context, id int32) error {
 	_, err := q.db.ExecContext(ctx, deleteUser, id)
 	return err
+}
+
+const getDepartmentByID = `-- name: GetDepartmentByID :one
+SELECT id, name, "createdAt" FROM departments WHERE id = $1 LIMIT 1
+`
+
+func (q *Queries) GetDepartmentByID(ctx context.Context, id int32) (Department, error) {
+	row := q.db.QueryRowContext(ctx, getDepartmentByID, id)
+	var i Department
+	err := row.Scan(&i.ID, &i.Name, &i.CreatedAt)
+	return i, err
 }
 
 const getUserByEmployeeID = `-- name: GetUserByEmployeeID :one
@@ -198,16 +236,18 @@ WHERE ($3::text IS NULL
        OR u."employeeId" ILIKE '%' || $3::text || '%')
   AND ($4::int IS NULL OR u."roleId" = $4::int)
   AND ($5::boolean IS NULL OR u."isActive" = $5::boolean)
+  AND ($6::int IS NULL OR u."departmentId" = $6::int)
 ORDER BY u."createdAt" DESC
 LIMIT $1 OFFSET $2
 `
 
 type ListUsersParams struct {
-	Limit    int32          `json:"limit"`
-	Offset   int32          `json:"offset"`
-	Search   sql.NullString `json:"search"`
-	RoleID   sql.NullInt32  `json:"role_id"`
-	IsActive sql.NullBool   `json:"is_active"`
+	Limit        int32          `json:"limit"`
+	Offset       int32          `json:"offset"`
+	Search       sql.NullString `json:"search"`
+	RoleID       sql.NullInt32  `json:"role_id"`
+	IsActive     sql.NullBool   `json:"is_active"`
+	DepartmentID sql.NullInt32  `json:"department_id"`
 }
 
 type ListUsersRow struct {
@@ -233,6 +273,7 @@ func (q *Queries) ListUsers(ctx context.Context, arg ListUsersParams) ([]ListUse
 		arg.Search,
 		arg.RoleID,
 		arg.IsActive,
+		arg.DepartmentID,
 	)
 	if err != nil {
 		return nil, err
@@ -290,6 +331,22 @@ func (q *Queries) ToggleUserActive(ctx context.Context, id int32) (User, error) 
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
+	return i, err
+}
+
+const updateDepartment = `-- name: UpdateDepartment :one
+UPDATE departments SET name = $2 WHERE id = $1 RETURNING id, name, "createdAt"
+`
+
+type UpdateDepartmentParams struct {
+	ID   int32  `json:"id"`
+	Name string `json:"name"`
+}
+
+func (q *Queries) UpdateDepartment(ctx context.Context, arg UpdateDepartmentParams) (Department, error) {
+	row := q.db.QueryRowContext(ctx, updateDepartment, arg.ID, arg.Name)
+	var i Department
+	err := row.Scan(&i.ID, &i.Name, &i.CreatedAt)
 	return i, err
 }
 

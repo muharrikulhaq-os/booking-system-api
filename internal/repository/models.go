@@ -63,6 +63,8 @@ const (
 	BookingStatusCOMPLETED BookingStatus = "COMPLETED"
 	BookingStatusCANCELLED BookingStatus = "CANCELLED"
 	BookingStatusOVERDUE   BookingStatus = "OVERDUE"
+	BookingStatusEXPIRED   BookingStatus = "EXPIRED"
+	BookingStatusIGNORED   BookingStatus = "IGNORED"
 )
 
 func (e *BookingStatus) Scan(src interface{}) error {
@@ -230,10 +232,10 @@ func (ns NullResourceType) Value() (driver.Value, error) {
 type RoleName string
 
 const (
-	RoleNameEMPLOYEE    RoleName = "EMPLOYEE"
-	RoleNameADMIN       RoleName = "ADMIN"
-	RoleNameDRIVER      RoleName = "DRIVER"
-	RoleNameROOM_KEEPER RoleName = "ROOM_KEEPER"
+	RoleNameEMPLOYEE   RoleName = "EMPLOYEE"
+	RoleNameADMIN      RoleName = "ADMIN"
+	RoleNameDRIVER     RoleName = "DRIVER"
+	RoleNameROOMKEEPER RoleName = "ROOM_KEEPER"
 )
 
 func (e *RoleName) Scan(src interface{}) error {
@@ -321,6 +323,25 @@ type Booking struct {
 	CreatedAt          time.Time     `json:"createdAt"`
 	UpdatedAt          time.Time     `json:"updatedAt"`
 	OriginalResourceId sql.NullInt32 `json:"originalResourceId"`
+}
+
+type BookingMerge struct {
+	ID               int32          `json:"id"`
+	PrimaryBookingId int32          `json:"primaryBookingId"`
+	MergedBookingId  int32          `json:"mergedBookingId"`
+	MergedById       int32          `json:"mergedById"`
+	Reason           sql.NullString `json:"reason"`
+	CreatedAt        time.Time      `json:"createdAt"`
+}
+
+// Laporan akhir perjalanan dari driver — note, lokasi, foto dikirim sebelum admin complete booking
+type BookingReturnReport struct {
+	ID            int32     `json:"id"`
+	BookingId     int32     `json:"bookingId"`
+	SubmittedById int32     `json:"submittedById"`
+	Note          string    `json:"note"`
+	Location      string    `json:"location"`
+	SubmittedAt   time.Time `json:"submittedAt"`
 }
 
 type Department struct {
@@ -451,6 +472,14 @@ type Room struct {
 	Location   string         `json:"location"`
 	Capacity   int16          `json:"capacity"`
 	PhotoUrl   sql.NullString `json:"photoUrl"`
+}
+
+type RoomKeeper struct {
+	ID          int32     `json:"id"`
+	UserId      int32     `json:"userId"`
+	PhoneNumber string    `json:"phoneNumber"`
+	IsActive    bool      `json:"isActive"`
+	CreatedAt   time.Time `json:"createdAt"`
 }
 
 type User struct {

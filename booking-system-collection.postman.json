@@ -416,6 +416,12 @@
                   "key": "roleId",
                   "value": "",
                   "disabled": true
+                },
+                {
+                  "key": "departmentId",
+                  "value": "",
+                  "disabled": true,
+                  "description": "Filter by department ID"
                 }
               ]
             }
@@ -475,6 +481,50 @@
                 "users",
                 "departments"
               ]
+            }
+          }
+        },
+        {
+          "name": "Create Department (Admin)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Legal\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/users/departments",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "users", "departments"]
+            }
+          }
+        },
+        {
+          "name": "Update Department (Admin)",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Legal & Compliance\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/users/departments/1",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "users", "departments", "1"]
+            }
+          }
+        },
+        {
+          "name": "Delete Department (Admin)",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/users/departments/1",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "users", "departments", "1"]
             }
           }
         },
@@ -1560,7 +1610,7 @@
                   "key": "status",
                   "value": "",
                   "disabled": true,
-                  "description": "PENDING | APPROVED | REJECTED | CANCELLED | IN_PROGRESS | COMPLETED"
+                  "description": "PENDING | APPROVED | ONGOING | COMPLETED | REJECTED | CANCELLED | OVERDUE | EXPIRED | IGNORED"
                 },
                 {
                   "key": "userId",
@@ -1594,6 +1644,12 @@
                   "value": "",
                   "disabled": true,
                   "description": "RFC3339 e.g. 2026-06-30T23:59:59Z"
+                },
+                {
+                  "key": "search",
+                  "value": "",
+                  "disabled": true,
+                  "description": "Search by resource name or employee name"
                 }
               ]
             }
@@ -2929,6 +2985,179 @@
               ]
             }
           }
+        },
+        {
+          "name": "Overview",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/reports/overview?period=monthly",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "reports", "overview"],
+              "query": [{ "key": "period", "value": "monthly", "description": "monthly | quarterly | yearly" }]
+            }
+          }
+        },
+        {
+          "name": "Booking Trend",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/reports/bookings/trend?groupBy=monthly&periods=12",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "reports", "bookings", "trend"],
+              "query": [
+                { "key": "groupBy", "value": "monthly", "description": "daily | weekly | monthly" },
+                { "key": "periods", "value": "12" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Bookings by Department",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/reports/bookings/by-department?startDate=&endDate=",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "reports", "bookings", "by-department"],
+              "query": [
+                { "key": "startDate", "value": "", "disabled": true, "description": "RFC3339" },
+                { "key": "endDate", "value": "", "disabled": true, "description": "RFC3339" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Bookings by Resource",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/reports/bookings/by-resource?startDate=&endDate=",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "reports", "bookings", "by-resource"],
+              "query": [
+                { "key": "startDate", "value": "", "disabled": true, "description": "RFC3339" },
+                { "key": "endDate", "value": "", "disabled": true, "description": "RFC3339" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Approval Performance",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/reports/bookings/approval-performance?startDate=&endDate=",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "reports", "bookings", "approval-performance"],
+              "query": [
+                { "key": "startDate", "value": "", "disabled": true, "description": "RFC3339" },
+                { "key": "endDate", "value": "", "disabled": true, "description": "RFC3339" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Cost Summary",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/reports/cost-summary?startDate=&endDate=",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "reports", "cost-summary"],
+              "query": [
+                { "key": "startDate", "value": "", "disabled": true, "description": "RFC3339" },
+                { "key": "endDate", "value": "", "disabled": true, "description": "RFC3339" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Cost by Vehicle",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/reports/cost/by-vehicle?startDate=&endDate=",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "reports", "cost", "by-vehicle"],
+              "query": [
+                { "key": "startDate", "value": "", "disabled": true, "description": "RFC3339" },
+                { "key": "endDate", "value": "", "disabled": true, "description": "RFC3339" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Cost by Department",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/reports/cost/by-department?startDate=&endDate=",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "reports", "cost", "by-department"],
+              "query": [
+                { "key": "startDate", "value": "", "disabled": true, "description": "RFC3339" },
+                { "key": "endDate", "value": "", "disabled": true, "description": "RFC3339" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Cost Trend",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/reports/cost/trend?groupBy=monthly&periods=12",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "reports", "cost", "trend"],
+              "query": [
+                { "key": "groupBy", "value": "monthly", "description": "daily | weekly | monthly" },
+                { "key": "periods", "value": "12" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Driver Performance",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/reports/driver-performance?startDate=&endDate=",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "reports", "driver-performance"],
+              "query": [
+                { "key": "startDate", "value": "", "disabled": true, "description": "RFC3339" },
+                { "key": "endDate", "value": "", "disabled": true, "description": "RFC3339" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Department Summary",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/reports/department-summary?startDate=&endDate=",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "reports", "department-summary"],
+              "query": [
+                { "key": "startDate", "value": "", "disabled": true, "description": "RFC3339" },
+                { "key": "endDate", "value": "", "disabled": true, "description": "RFC3339" }
+              ]
+            }
+          }
         }
       ]
     },
@@ -2936,20 +3165,28 @@
       "name": "Files",
       "item": [
         {
-          "name": "Serve File",
+          "name": "Serve File (Auth required)",
           "request": {
             "method": "GET",
             "header": [],
             "url": {
               "raw": "{{base_url}}/files/<relative-path-to-file>",
-              "host": [
-                "{{base_url}}"
-              ],
-              "path": [
-                "files",
-                "<relative-path-to-file>"
-              ],
+              "host": ["{{base_url}}"],
+              "path": ["files", "<relative-path-to-file>"],
               "description": "Replace <relative-path-to-file> with the actual path returned in photoUrl or attachment url fields."
+            }
+          }
+        },
+        {
+          "name": "Serve Upload (Public - no auth)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/uploads/profile/2026/06/example.jpg",
+              "host": ["{{base_url}}"],
+              "path": ["uploads", "profile", "2026", "06", "example.jpg"],
+              "description": "Public route — no Bearer token needed. Images served inline (Content-Disposition: inline). Use directly in <img src=> tags."
             }
           }
         }

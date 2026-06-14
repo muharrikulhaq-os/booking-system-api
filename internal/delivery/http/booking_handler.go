@@ -69,6 +69,7 @@ func (h *BookingHandler) List(c *fiber.Ctx) error {
 		queryInt32(c, "resourceId"), queryString(c, "resourceType"),
 		queryInt32(c, "driverId"), startFrom, endTo,
 		middleware.GetUserID(c), middleware.GetUserRole(c),
+		queryString(c, "search"),
 	)
 	if err != nil {
 		return err

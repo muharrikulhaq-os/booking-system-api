@@ -385,6 +385,7 @@ func (h *ReportHandler) Register(r fiber.Router) {
 	admin := middleware.RequireRole("ADMIN")
 
 	g := r.Group("/reports", auth, admin)
+	// Existing endpoints
 	g.Get("/bookings", h.BookingSummary)
 	g.Get("/resource-usage", h.ResourceUsage)
 	g.Get("/fuel-expenses", h.FuelExpenses)
@@ -393,6 +394,18 @@ func (h *ReportHandler) Register(r fiber.Router) {
 	g.Get("/driver-activity", h.DriverActivity)
 	g.Get("/overdue-bookings", h.OverdueBookings)
 	g.Get("/audit-logs", h.AuditLogs)
+	// New endpoints
+	g.Get("/overview", h.Overview)
+	g.Get("/bookings/trend", h.BookingTrend)
+	g.Get("/bookings/by-department", h.BookingsByDepartment)
+	g.Get("/bookings/by-resource", h.BookingsByResource)
+	g.Get("/bookings/approval-performance", h.ApprovalPerformance)
+	g.Get("/cost-summary", h.CostSummary)
+	g.Get("/cost/by-vehicle", h.CostByVehicle)
+	g.Get("/cost/by-department", h.CostByDepartment)
+	g.Get("/cost/trend", h.CostTrend)
+	g.Get("/driver-performance", h.DriverPerformance)
+	g.Get("/department-summary", h.DepartmentSummary)
 }
 
 func (h *ReportHandler) BookingSummary(c *fiber.Ctx) error {
@@ -470,4 +483,110 @@ func (h *ReportHandler) AuditLogs(c *fiber.Ctx) error {
 		return err
 	}
 	return util.Paginated(c, "Audit logs retrieved", data, total, page, limit)
+}
+
+// parseDate parses an RFC3339 date from a query param; returns nil if absent or invalid.
+func parseDate(c *fiber.Ctx, key string) *time.Time {
+	s := c.Query(key)
+	if s == "" {
+		return nil
+	}
+	t, err := time.Parse(time.RFC3339, s)
+	if err != nil {
+		return nil
+	}
+	return &t
+}
+
+func (h *ReportHandler) Overview(c *fiber.Ctx) error {
+	period := c.Query("period", "monthly")
+	data, err := h.svc.Overview(c.Context(), period)
+	if err != nil {
+		return err
+	}
+	return util.OK(c, "Overview report", data)
+}
+
+func (h *ReportHandler) BookingTrend(c *fiber.Ctx) error {
+	groupBy := c.Query("groupBy", "monthly")
+	periods := queryInt(c, "periods", 12)
+	data, err := h.svc.BookingTrend(c.Context(), groupBy, periods)
+	if err != nil {
+		return err
+	}
+	return util.OK(c, "Booking trend", data)
+}
+
+func (h *ReportHandler) BookingsByDepartment(c *fiber.Ctx) error {
+	data, err := h.svc.BookingsByDepartment(c.Context(), parseDate(c, "startDate"), parseDate(c, "endDate"))
+	if err != nil {
+		return err
+	}
+	return util.OK(c, "Bookings by department", data)
+}
+
+func (h *ReportHandler) BookingsByResource(c *fiber.Ctx) error {
+	data, err := h.svc.BookingsByResource(c.Context(), parseDate(c, "startDate"), parseDate(c, "endDate"))
+	if err != nil {
+		return err
+	}
+	return util.OK(c, "Bookings by resource", data)
+}
+
+func (h *ReportHandler) ApprovalPerformance(c *fiber.Ctx) error {
+	data, err := h.svc.ApprovalPerformance(c.Context(), parseDate(c, "startDate"), parseDate(c, "endDate"))
+	if err != nil {
+		return err
+	}
+	return util.OK(c, "Approval performance", data)
+}
+
+func (h *ReportHandler) CostSummary(c *fiber.Ctx) error {
+	data, err := h.svc.CostSummary(c.Context(), parseDate(c, "startDate"), parseDate(c, "endDate"))
+	if err != nil {
+		return err
+	}
+	return util.OK(c, "Cost summary", data)
+}
+
+func (h *ReportHandler) CostByVehicle(c *fiber.Ctx) error {
+	data, err := h.svc.CostByVehicle(c.Context(), parseDate(c, "startDate"), parseDate(c, "endDate"))
+	if err != nil {
+		return err
+	}
+	return util.OK(c, "Cost by vehicle", data)
+}
+
+func (h *ReportHandler) CostByDepartment(c *fiber.Ctx) error {
+	data, err := h.svc.CostByDepartment(c.Context(), parseDate(c, "startDate"), parseDate(c, "endDate"))
+	if err != nil {
+		return err
+	}
+	return util.OK(c, "Cost by department", data)
+}
+
+func (h *ReportHandler) CostTrend(c *fiber.Ctx) error {
+	groupBy := c.Query("groupBy", "monthly")
+	periods := queryInt(c, "periods", 6)
+	data, err := h.svc.CostTrend(c.Context(), groupBy, periods)
+	if err != nil {
+		return err
+	}
+	return util.OK(c, "Cost trend", data)
+}
+
+func (h *ReportHandler) DriverPerformance(c *fiber.Ctx) error {
+	data, err := h.svc.DriverPerformance(c.Context(), parseDate(c, "startDate"), parseDate(c, "endDate"))
+	if err != nil {
+		return err
+	}
+	return util.OK(c, "Driver performance", data)
+}
+
+func (h *ReportHandler) DepartmentSummary(c *fiber.Ctx) error {
+	data, err := h.svc.DepartmentSummary(c.Context(), parseDate(c, "startDate"), parseDate(c, "endDate"))
+	if err != nil {
+		return err
+	}
+	return util.OK(c, "Department summary", data)
 }

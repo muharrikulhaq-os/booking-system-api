@@ -32,15 +32,6 @@ func (q *Queries) AssignVehicleAndUpdateResource(
 
 // ─── Booking Merges ──────────────────────────────────────────────────────────
 
-type BookingMerge struct {
-	ID               int32          `json:"id"`
-	PrimaryBookingID int32          `json:"primaryBookingId"`
-	MergedBookingID  int32          `json:"mergedBookingId"`
-	MergedByID       int32          `json:"mergedById"`
-	Reason           sql.NullString `json:"reason"`
-	CreatedAt        time.Time      `json:"createdAt"`
-}
-
 func (q *Queries) CreateBookingMerge(
 	ctx context.Context,
 	primaryBookingID, mergedBookingID, mergedByID int32,
@@ -54,7 +45,7 @@ func (q *Queries) CreateBookingMerge(
 	err := q.db.QueryRowContext(ctx, query,
 		primaryBookingID, mergedBookingID, mergedByID,
 		sql.NullString{String: reason, Valid: reason != ""},
-	).Scan(&m.ID, &m.PrimaryBookingID, &m.MergedBookingID, &m.MergedByID, &m.Reason, &m.CreatedAt)
+	).Scan(&m.ID, &m.PrimaryBookingId, &m.MergedBookingId, &m.MergedById, &m.Reason, &m.CreatedAt)
 	return m, err
 }
 
@@ -125,6 +116,23 @@ func (q *Queries) GetBookingMerges(ctx context.Context, bookingID int32) ([]Book
 	return items, rows.Err()
 }
 
+// InheritMergeDriverVehicle copies the driver and vehicle assignment from the primary booking
+// to the merged booking so both bookings share the same trip logistics.
+func (q *Queries) InheritMergeDriverVehicle(
+	ctx context.Context,
+	mergedBookingID, driverID, vehicleID int32,
+	driverValid, vehicleValid bool,
+) error {
+	query := `
+		UPDATE bookings
+		SET "assignedDriverId"  = CASE WHEN $2 THEN $3::int ELSE "assignedDriverId" END,
+		    "assignedVehicleId" = CASE WHEN $4 THEN $5::int ELSE "assignedVehicleId" END,
+		    "updatedAt" = NOW()
+		WHERE id = $1`
+	_, err := q.db.ExecContext(ctx, query, mergedBookingID, driverValid, driverID, vehicleValid, vehicleID)
+	return err
+}
+
 // UpdateBookingDates updates the startDate and endDate of a booking (used when merging).
 func (q *Queries) UpdateBookingDates(ctx context.Context, bookingID int32, startDate, endDate time.Time) error {
 	query := `UPDATE bookings SET "startDate" = $2, "endDate" = $3, "updatedAt" = NOW() WHERE id = $1`
@@ -144,15 +152,6 @@ func (q *Queries) CheckBookingAlreadyMerged(ctx context.Context, bookingA, booki
 }
 
 // ─── Booking Return Reports ──────────────────────────────────────────────────
-
-type BookingReturnReport struct {
-	ID            int32     `json:"id"`
-	BookingID     int32     `json:"bookingId"`
-	SubmittedByID int32     `json:"submittedById"`
-	Note          string    `json:"note"`
-	Location      string    `json:"location"`
-	SubmittedAt   time.Time `json:"submittedAt"`
-}
 
 type BookingReturnReportRow struct {
 	BookingReturnReport
@@ -180,7 +179,7 @@ func (q *Queries) CreateReturnReport(ctx context.Context, bookingID, submittedBy
 		RETURNING id, "bookingId", "submittedById", note, location, "submittedAt"`
 	var r BookingReturnReport
 	err := q.db.QueryRowContext(ctx, query, bookingID, submittedByID, note, location).
-		Scan(&r.ID, &r.BookingID, &r.SubmittedByID, &r.Note, &r.Location, &r.SubmittedAt)
+		Scan(&r.ID, &r.BookingId, &r.SubmittedById, &r.Note, &r.Location, &r.SubmittedAt)
 	return r, err
 }
 
@@ -193,25 +192,17 @@ func (q *Queries) GetReturnReport(ctx context.Context, bookingID int32) (Booking
 		WHERE r."bookingId" = $1`
 	var r BookingReturnReportRow
 	err := q.db.QueryRowContext(ctx, query, bookingID).
-		Scan(&r.ID, &r.BookingID, &r.SubmittedByID, &r.Note, &r.Location, &r.SubmittedAt, &r.SubmitterName)
+		Scan(&r.ID, &r.BookingId, &r.SubmittedById, &r.Note, &r.Location, &r.SubmittedAt, &r.SubmitterName)
 	return r, err
 }
 
 // ─── Room Keepers ────────────────────────────────────────────────────────────
 
-type RoomKeeper struct {
-	ID          int32     `json:"id"`
-	UserID      int32     `json:"userId"`
-	PhoneNumber string    `json:"phoneNumber"`
-	IsActive    bool      `json:"isActive"`
-	CreatedAt   time.Time `json:"createdAt"`
-}
-
 func (q *Queries) GetRoomKeeperByUserID(ctx context.Context, userID int32) (RoomKeeper, error) {
 	query := `SELECT id, "userId", "phoneNumber", "isActive", "createdAt" FROM room_keepers WHERE "userId" = $1 LIMIT 1`
 	var rk RoomKeeper
 	err := q.db.QueryRowContext(ctx, query, userID).Scan(
-		&rk.ID, &rk.UserID, &rk.PhoneNumber, &rk.IsActive, &rk.CreatedAt,
+		&rk.ID, &rk.UserId, &rk.PhoneNumber, &rk.IsActive, &rk.CreatedAt,
 	)
 	return rk, err
 }

@@ -1,10 +1,12 @@
 package http
 
 import (
+	"path/filepath"
+	"strings"
+
 	"booking-system-api/internal/middleware"
 	"booking-system-api/internal/service"
 	"booking-system-api/internal/util"
-	"path/filepath"
 
 	"github.com/gofiber/fiber/v2"
 )
@@ -27,6 +29,9 @@ func (h *UserHandler) Register(r fiber.Router) {
 	g.Get("/me", h.GetMe)
 	g.Get("/roles", h.ListRoles)
 	g.Get("/departments", h.ListDepartments)
+	g.Post("/departments", admin, h.CreateDepartment)
+	g.Put("/departments/:id", admin, h.UpdateDepartment)
+	g.Delete("/departments/:id", admin, h.DeleteDepartment)
 	g.Get("/:id", admin, h.GetByID)
 	g.Post("", admin, h.Create)
 	g.Put("/:id", admin, h.Update)
@@ -40,7 +45,7 @@ func (h *UserHandler) Register(r fiber.Router) {
 func (h *UserHandler) List(c *fiber.Ctx) error {
 	page := queryInt(c, "page", 1)
 	limit := queryInt(c, "limit", 20)
-	data, total, err := h.svc.List(c.Context(), page, limit, queryString(c, "search"), queryInt32(c, "roleId"), nil)
+	data, total, err := h.svc.List(c.Context(), page, limit, queryString(c, "search"), queryInt32(c, "roleId"), nil, queryInt32(c, "departmentId"))
 	if err != nil {
 		return err
 	}
@@ -134,6 +139,49 @@ func (h *UserHandler) ListDepartments(c *fiber.Ctx) error {
 	return util.OK(c, "Departments retrieved", data)
 }
 
+func (h *UserHandler) CreateDepartment(c *fiber.Ctx) error {
+	var body struct {
+		Name string `json:"name" validate:"required"`
+	}
+	if err := bindAndValidate(c, &body); err != nil {
+		return err
+	}
+	data, err := h.svc.CreateDepartment(c.Context(), body.Name)
+	if err != nil {
+		return err
+	}
+	return util.Created(c, "Department created", data)
+}
+
+func (h *UserHandler) UpdateDepartment(c *fiber.Ctx) error {
+	id, err := parseID(c, "id")
+	if err != nil {
+		return err
+	}
+	var body struct {
+		Name string `json:"name" validate:"required"`
+	}
+	if err := bindAndValidate(c, &body); err != nil {
+		return err
+	}
+	data, err := h.svc.UpdateDepartment(c.Context(), id, body.Name)
+	if err != nil {
+		return err
+	}
+	return util.OK(c, "Department updated", data)
+}
+
+func (h *UserHandler) DeleteDepartment(c *fiber.Ctx) error {
+	id, err := parseID(c, "id")
+	if err != nil {
+		return err
+	}
+	if err := h.svc.DeleteDepartment(c.Context(), id); err != nil {
+		return err
+	}
+	return util.OK(c, "Department deleted", nil)
+}
+
 func (h *UserHandler) UploadMyPhoto(c *fiber.Ctx) error {
 	fh, err := c.FormFile("photo")
 	if err != nil {
@@ -181,15 +229,23 @@ func (h *UserHandler) UploadUserPhoto(c *fiber.Ctx) error {
 	return util.OK(c, "Profile photo updated", data)
 }
 
-// ServeFile serves uploaded files with basic path traversal protection
+// ServeFile serves uploaded files with basic path traversal protection.
+// Images are served inline (displayed in browser); PDFs and other types trigger download.
 func ServeFile(uploadDir string) fiber.Handler {
+	imageTypes := map[string]bool{
+		".jpg": true, ".jpeg": true, ".png": true, ".gif": true, ".webp": true,
+	}
 	return func(c *fiber.Ctx) error {
 		rel := c.Params("*")
-		// sanitize
 		clean := filepath.Clean(rel)
 		if len(clean) == 0 || clean[0] == '.' {
 			return fiber.NewError(fiber.StatusForbidden, "invalid path")
 		}
-		return c.SendFile(filepath.Join(uploadDir, clean))
+		abs := filepath.Join(uploadDir, clean)
+		ext := strings.ToLower(filepath.Ext(abs))
+		if imageTypes[ext] {
+			c.Set("Content-Disposition", "inline")
+		}
+		return c.SendFile(abs)
 	}
 }

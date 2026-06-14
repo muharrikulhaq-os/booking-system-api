@@ -9,6 +9,7 @@ WHERE (sqlc.narg(search)::text IS NULL
        OR u."employeeId" ILIKE '%' || sqlc.narg(search)::text || '%')
   AND (sqlc.narg(role_id)::int IS NULL OR u."roleId" = sqlc.narg(role_id)::int)
   AND (sqlc.narg(is_active)::boolean IS NULL OR u."isActive" = sqlc.narg(is_active)::boolean)
+  AND (sqlc.narg(department_id)::int IS NULL OR u."departmentId" = sqlc.narg(department_id)::int)
 ORDER BY u."createdAt" DESC
 LIMIT $1 OFFSET $2;
 
@@ -19,7 +20,8 @@ WHERE (sqlc.narg(search)::text IS NULL
        OR u.email ILIKE '%' || sqlc.narg(search)::text || '%'
        OR u."employeeId" ILIKE '%' || sqlc.narg(search)::text || '%')
   AND (sqlc.narg(role_id)::int IS NULL OR u."roleId" = sqlc.narg(role_id)::int)
-  AND (sqlc.narg(is_active)::boolean IS NULL OR u."isActive" = sqlc.narg(is_active)::boolean);
+  AND (sqlc.narg(is_active)::boolean IS NULL OR u."isActive" = sqlc.narg(is_active)::boolean)
+  AND (sqlc.narg(department_id)::int IS NULL OR u."departmentId" = sqlc.narg(department_id)::int);
 
 -- name: CreateUser :one
 INSERT INTO users ("employeeId", name, email, password, "isActive", "roleId", "departmentId")
@@ -55,3 +57,15 @@ SELECT * FROM roles ORDER BY id;
 
 -- name: ListDepartments :many
 SELECT * FROM departments ORDER BY name;
+
+-- name: CreateDepartment :one
+INSERT INTO departments (name) VALUES ($1) RETURNING *;
+
+-- name: UpdateDepartment :one
+UPDATE departments SET name = $2 WHERE id = $1 RETURNING *;
+
+-- name: DeleteDepartment :exec
+DELETE FROM departments WHERE id = $1;
+
+-- name: GetDepartmentByID :one
+SELECT * FROM departments WHERE id = $1 LIMIT 1;

@@ -358,8 +358,9 @@ Daftar semua pengguna sistem.
 |-----------|------|-----------|
 | `page` | integer | Halaman (default: 1) |
 | `limit` | integer | Jumlah per halaman (default: 20) |
-| `search` | string | Cari berdasarkan nama atau email |
+| `search` | string | Cari berdasarkan nama, email, atau employeeId |
 | `roleId` | integer | Filter berdasarkan role |
+| `departmentId` | integer | Filter berdasarkan departemen |
 
 **Response `200`:**
 ```json
@@ -435,6 +436,60 @@ Daftar semua departemen (untuk dropdown).
     { "id": 3, "name": "Operations" }
   ]
 }
+```
+
+---
+
+### `POST /api/v1/users/departments`
+Buat departemen baru.
+
+**Akses:** Admin
+
+**Request Body:**
+```json
+{ "name": "Legal" }
+```
+
+**Response `201`:**
+```json
+{
+  "success": true,
+  "message": "Department created",
+  "data": { "id": 4, "name": "Legal" }
+}
+```
+
+---
+
+### `PUT /api/v1/users/departments/:id`
+Update nama departemen.
+
+**Akses:** Admin
+
+**Request Body:**
+```json
+{ "name": "Legal & Compliance" }
+```
+
+**Response `200`:**
+```json
+{
+  "success": true,
+  "message": "Department updated",
+  "data": { "id": 4, "name": "Legal & Compliance" }
+}
+```
+
+---
+
+### `DELETE /api/v1/users/departments/:id`
+Hapus departemen.
+
+**Akses:** Admin
+
+**Response `200`:**
+```json
+{ "success": true, "message": "Department deleted", "data": null }
 ```
 
 ---
@@ -1043,11 +1098,25 @@ Upload dokumen lampiran ruangan.
 ### Status Booking
 ```
 PENDING → APPROVED → ONGOING → COMPLETED
-                ↓
-            REJECTED
+    ↓           ↓         ↓
+ IGNORED     EXPIRED   OVERDUE
     ↑
-  CANCELLED (dari PENDING)
+ REJECTED
+    ↑
+ CANCELLED (dari PENDING)
 ```
+
+| Status | Keterangan |
+|--------|-----------|
+| `PENDING` | Menunggu persetujuan admin |
+| `APPROVED` | Disetujui admin, menunggu dimulai |
+| `ONGOING` | Sedang berlangsung |
+| `COMPLETED` | Selesai |
+| `REJECTED` | Ditolak admin |
+| `CANCELLED` | Dibatalkan oleh pemohon |
+| `OVERDUE` | ONGOING tetapi melewati `endDate` (belum selesai tepat waktu) |
+| `EXPIRED` | APPROVED tetapi tidak pernah dimulai dan `endDate` sudah lewat |
+| `IGNORED` | PENDING tetapi admin tidak merespons sampai `endDate` lewat |
 
 ### Alur Selesai Booking Kendaraan (Vehicle Return Flow)
 ```
@@ -1073,12 +1142,13 @@ Daftar booking. User hanya melihat miliknya, Admin melihat semua.
 | `page` | integer | Halaman (default: 1) |
 | `limit` | integer | Jumlah per halaman (default: 20) |
 | `userId` | integer | Filter berdasarkan user (Admin only) |
-| `status` | string | `PENDING` \| `APPROVED` \| `ONGOING` \| `COMPLETED` \| `REJECTED` \| `CANCELLED` |
+| `status` | string | `PENDING` \| `APPROVED` \| `ONGOING` \| `COMPLETED` \| `REJECTED` \| `CANCELLED` \| `OVERDUE` \| `EXPIRED` \| `IGNORED` |
 | `resourceId` | integer | Filter berdasarkan resource |
 | `resourceType` | string | `VEHICLE` \| `ROOM` |
 | `driverId` | integer | Filter berdasarkan driver |
 | `startDate` | string | RFC3339 format: `2025-05-01T00:00:00Z` |
 | `endDate` | string | RFC3339 format: `2025-05-31T23:59:59Z` |
+| `search` | string | Cari berdasarkan nama resource atau nama karyawan |
 
 **Response `200`:**
 ```json
@@ -2504,9 +2574,305 @@ Riwayat aktivitas sistem (Audit Trail).
 
 ---
 
+### `GET /api/v1/reports/overview`
+Ringkasan KPI periode ini vs periode sebelumnya (perbandingan persentase perubahan).
+
+**Akses:** Admin
+
+**Query Parameters:**
+| Parameter | Type | Keterangan |
+|-----------|------|-----------|
+| `period` | string | `monthly` (default) \| `quarterly` \| `yearly` |
+
+**Response `200`:**
+```json
+{
+  "success": true,
+  "message": "Overview report",
+  "data": {
+    "totalBookings": 45,
+    "totalCost": 15000000,
+    "avgUtilization": 72.5,
+    "overdueCount": 2,
+    "previousPeriod": { "totalBookings": 38, "totalCost": 12000000, "avgUtilization": 65.0, "overdueCount": 4 },
+    "changePercent": { "bookings": 18.4, "cost": 25.0, "utilization": 11.5, "overdue": -50.0 }
+  }
+}
+```
+
+---
+
+### `GET /api/v1/reports/bookings/trend`
+Tren jumlah booking per periode waktu.
+
+**Akses:** Admin
+
+**Query Parameters:**
+| Parameter | Type | Keterangan |
+|-----------|------|-----------|
+| `groupBy` | string | `daily` (default) \| `weekly` \| `monthly` |
+| `periods` | integer | Jumlah periode ke belakang (default: 12) |
+
+**Response `200`:**
+```json
+{
+  "success": true,
+  "message": "Booking trend",
+  "data": [
+    { "period": "2026-01", "totalBookings": 42, "approvedCount": 35, "rejectedCount": 4, "overdueCount": 3 }
+  ]
+}
+```
+
+---
+
+### `GET /api/v1/reports/bookings/by-department`
+Statistik booking dikelompokkan per departemen.
+
+**Akses:** Admin
+
+**Query Parameters:**
+| Parameter | Type | Keterangan |
+|-----------|------|-----------|
+| `startDate` | string | RFC3339 |
+| `endDate` | string | RFC3339 |
+
+**Response `200`:**
+```json
+{
+  "success": true,
+  "message": "Bookings by department",
+  "data": [
+    { "departmentId": 1, "departmentName": "Operations", "totalBookings": 28, "approvedCount": 24, "rejectedCount": 2, "overdueCount": 2, "totalCost": 8500000 }
+  ]
+}
+```
+
+---
+
+### `GET /api/v1/reports/bookings/by-resource`
+Statistik booking dikelompokkan per resource (kendaraan/ruangan).
+
+**Akses:** Admin
+
+**Query Parameters:**
+| Parameter | Type | Keterangan |
+|-----------|------|-----------|
+| `startDate` | string | RFC3339 |
+| `endDate` | string | RFC3339 |
+
+**Response `200`:**
+```json
+{
+  "success": true,
+  "message": "Bookings by resource",
+  "data": [
+    { "resourceId": 10, "resourceName": "Toyota Avanza", "resourceType": "VEHICLE", "totalBookings": 18, "approvedCount": 16, "rejectedCount": 1, "overdueCount": 1, "totalHours": 144 }
+  ]
+}
+```
+
+---
+
+### `GET /api/v1/reports/bookings/approval-performance`
+Performa proses approval (rata-rata waktu dari pengajuan ke keputusan).
+
+**Akses:** Admin
+
+**Query Parameters:**
+| Parameter | Type | Keterangan |
+|-----------|------|-----------|
+| `startDate` | string | RFC3339 |
+| `endDate` | string | RFC3339 |
+
+**Response `200`:**
+```json
+{
+  "success": true,
+  "message": "Approval performance",
+  "data": [
+    { "approverId": 1, "approverName": "Admin Utama", "totalDecisions": 30, "approvedCount": 26, "rejectedCount": 4, "avgHoursToDecision": 3.2 }
+  ]
+}
+```
+
+---
+
+### `GET /api/v1/reports/cost-summary`
+Ringkasan total biaya (BBM + maintenance) dengan perbandingan periode sebelumnya.
+
+**Akses:** Admin
+
+**Query Parameters:**
+| Parameter | Type | Keterangan |
+|-----------|------|-----------|
+| `startDate` | string | RFC3339 |
+| `endDate` | string | RFC3339 |
+
+**Response `200`:**
+```json
+{
+  "success": true,
+  "message": "Cost summary",
+  "data": {
+    "totalFuelCost": 8500000,
+    "totalMaintenanceCost": 3200000,
+    "totalCost": 11700000,
+    "previousPeriod": { "totalFuelCost": 7200000, "totalMaintenanceCost": 2900000, "totalCost": 10100000 },
+    "changePercent": { "fuel": 18.1, "maintenance": 10.3, "total": 15.8 }
+  }
+}
+```
+
+---
+
+### `GET /api/v1/reports/cost/by-vehicle`
+Biaya BBM dan maintenance per kendaraan.
+
+**Akses:** Admin
+
+**Query Parameters:**
+| Parameter | Type | Keterangan |
+|-----------|------|-----------|
+| `startDate` | string | RFC3339 |
+| `endDate` | string | RFC3339 |
+
+**Response `200`:**
+```json
+{
+  "success": true,
+  "message": "Cost by vehicle",
+  "data": [
+    { "vehicleId": 1, "vehicleName": "Toyota Avanza", "plateNumber": "B 1234 ABC", "totalFuelCost": 2100000, "totalMaintenanceCost": 850000, "totalCost": 2950000 }
+  ]
+}
+```
+
+---
+
+### `GET /api/v1/reports/cost/by-department`
+Biaya total per departemen.
+
+**Akses:** Admin
+
+**Query Parameters:**
+| Parameter | Type | Keterangan |
+|-----------|------|-----------|
+| `startDate` | string | RFC3339 |
+| `endDate` | string | RFC3339 |
+
+**Response `200`:**
+```json
+{
+  "success": true,
+  "message": "Cost by department",
+  "data": [
+    { "departmentId": 1, "departmentName": "Operations", "totalFuelCost": 4200000, "totalMaintenanceCost": 1500000, "totalCost": 5700000, "bookingCount": 22 }
+  ]
+}
+```
+
+---
+
+### `GET /api/v1/reports/cost/trend`
+Tren biaya per periode.
+
+**Akses:** Admin
+
+**Query Parameters:**
+| Parameter | Type | Keterangan |
+|-----------|------|-----------|
+| `groupBy` | string | `daily` \| `weekly` \| `monthly` (default) |
+| `periods` | integer | Jumlah periode ke belakang (default: 12) |
+
+**Response `200`:**
+```json
+{
+  "success": true,
+  "message": "Cost trend",
+  "data": [
+    { "period": "2026-01", "totalFuelCost": 2100000, "totalMaintenanceCost": 750000, "totalCost": 2850000 }
+  ]
+}
+```
+
+---
+
+### `GET /api/v1/reports/driver-performance`
+Performa driver: jumlah trip, on-time rate, total BBM.
+
+**Akses:** Admin
+
+**Query Parameters:**
+| Parameter | Type | Keterangan |
+|-----------|------|-----------|
+| `startDate` | string | RFC3339 |
+| `endDate` | string | RFC3339 |
+
+**Response `200`:**
+```json
+{
+  "success": true,
+  "message": "Driver performance",
+  "data": [
+    { "driverId": 3, "driverName": "Joko Susilo", "totalTrips": 18, "onTimeRate": 94.4, "overdueCount": 1, "totalFuelCost": 2100000, "avgRating": 4.7 }
+  ]
+}
+```
+
+---
+
+### `GET /api/v1/reports/department-summary`
+Ringkasan booking dan biaya per departemen dalam satu tabel.
+
+**Akses:** Admin
+
+**Query Parameters:**
+| Parameter | Type | Keterangan |
+|-----------|------|-----------|
+| `startDate` | string | RFC3339 |
+| `endDate` | string | RFC3339 |
+
+**Response `200`:**
+```json
+{
+  "success": true,
+  "message": "Department summary",
+  "data": [
+    {
+      "departmentId": 1,
+      "departmentName": "Operations",
+      "totalBookings": 28,
+      "approvedCount": 24,
+      "rejectedCount": 2,
+      "overdueCount": 2,
+      "totalCost": 5700000,
+      "avgCostPerBooking": 203571
+    }
+  ]
+}
+```
+
+---
+
 ## 📁 Static Files
 
-### `GET /files/*`
+### `GET /uploads/*` *(public — tanpa autentikasi)*
+Serve file yang diupload langsung di browser (untuk `<img src="">` di frontend).
+
+**Akses:** Publik (tidak perlu Bearer Token)
+
+**Catatan:** File gambar (`.jpg`, `.jpeg`, `.png`, `.gif`, `.webp`) dikirim dengan header `Content-Disposition: inline` sehingga browser langsung menampilkan gambar tanpa meminta download.
+
+**Contoh penggunaan di frontend:**
+```html
+<img src="http://server:8080/uploads/profile/2026/06/abc123.jpg" />
+<img src="http://server:8080/uploads/booking/2026/06/return_photo.jpg" />
+```
+
+---
+
+### `GET /files/*` *(deprecated — perlu autentikasi)*
 Serve file statis yang diupload (foto profil, foto kendaraan/ruangan, attachment).
 
 **Akses:** Auth required (Bearer Token)

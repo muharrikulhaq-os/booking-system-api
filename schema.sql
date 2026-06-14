@@ -50,7 +50,9 @@ CREATE TYPE booking_status AS ENUM (
     'ONGOING',
     'COMPLETED',
     'CANCELLED',
-    'OVERDUE'
+    'OVERDUE',
+    'EXPIRED',
+    'IGNORED'
 );
 
 CREATE TYPE approval_action AS ENUM (

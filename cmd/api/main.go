@@ -46,8 +46,10 @@ func main() {
 		return c.JSON(fiber.Map{"status": "ok"})
 	})
 
-	// serve uploaded files (auth-protected via token query param or rely on obscurity of paths)
+	// serve uploaded files (auth-protected)
 	app.Get("/files/*", middleware.Auth(), httph.ServeFile(config.C.UploadDir))
+	// public image serving — FE can embed URLs directly in <img> tags
+	app.Get("/uploads/*", httph.ServeFile(config.C.UploadDir))
 
 	// init services
 	authSvc := service.NewAuthService(db)

@@ -140,9 +140,7 @@ func serializeBookingByID(b repository.GetBookingByIDRow) map[string]any {
 	}
 	if b.OriginalResourceId.Valid {
 		out["originalResource"] = map[string]any{
-			"id":   b.OriginalResourceId.Int32,
-			"name": b.OriginalResourceName.String,
-			"type": b.OriginalResourceType.String,
+			"id": b.OriginalResourceId.Int32,
 		}
 	}
 	return out
@@ -172,7 +170,13 @@ func (s *BookingService) List(ctx context.Context,
 	startFrom, endTo *time.Time,
 	currentUserID int,
 	currentRole string,
+	search *string,
 ) ([]map[string]any, int64, error) {
+	// Auto-transition stale bookings on every list call (lightweight)
+	_, _ = s.q.MarkOverdueBookings(ctx)  // ONGOING + endDate passed → OVERDUE
+	_, _ = s.q.MarkExpiredBookings(ctx)  // APPROVED + endDate passed, never started → EXPIRED
+	_, _ = s.q.MarkIgnoredBookings(ctx)  // PENDING + endDate passed, admin didn't respond → IGNORED
+
 	params := repository.ListBookingsParams{
 		Limit:  int32(limit),
 		Offset: int32((page - 1) * limit),
@@ -216,6 +220,9 @@ func (s *BookingService) List(ctx context.Context,
 	if endTo != nil {
 		params.EndTo = sql.NullTime{Time: *endTo, Valid: true}
 	}
+	if search != nil {
+		params.Search = sql.NullString{String: *search, Valid: true}
+	}
 
 	rows, err := s.q.ListBookings(ctx, params)
 	if err != nil {
@@ -225,6 +232,7 @@ func (s *BookingService) List(ctx context.Context,
 		UserID: params.UserID, Status: params.Status,
 		ResourceID: params.ResourceID, ResourceType: params.ResourceType,
 		DriverID: params.DriverID, StartFrom: params.StartFrom, EndTo: params.EndTo,
+		Search: params.Search,
 	})
 
 	out := make([]map[string]any, len(rows))
@@ -628,11 +636,13 @@ func (s *BookingService) GetApprovalLog(ctx context.Context, bookingID int32) (a
 }
 
 func (s *BookingService) MarkOverdue(ctx context.Context) (int, error) {
-	rows, err := s.q.MarkOverdueBookings(ctx)
+	r1, err := s.q.MarkOverdueBookings(ctx)
 	if err != nil {
 		return 0, err
 	}
-	return len(rows), nil
+	r2, _ := s.q.MarkExpiredBookings(ctx)
+	r3, _ := s.q.MarkIgnoredBookings(ctx)
+	return len(r1) + len(r2) + len(r3), nil
 }
 
 func (s *BookingService) SubstituteResource(ctx context.Context, id int32, req SubstituteResourceRequest, adminID int) (map[string]any, error) {
@@ -795,6 +805,23 @@ func (s *BookingService) MergeBookings(ctx context.Context, primaryID int32, req
 		return nil, err
 	}
 
+	// Inherit primary's driver/vehicle onto the merged booking
+	if primary.AssignedDriverId.Valid || primary.AssignedVehicleId.Valid {
+		driverID := int32(0)
+		vehicleID := int32(0)
+		if primary.AssignedDriverId.Valid {
+			driverID = primary.AssignedDriverId.Int32
+		}
+		if primary.AssignedVehicleId.Valid {
+			vehicleID = primary.AssignedVehicleId.Int32
+		}
+		_ = s.q.InheritMergeDriverVehicle(ctx,
+			req.TargetBookingID,
+			driverID, vehicleID,
+			primary.AssignedDriverId.Valid, primary.AssignedVehicleId.Valid,
+		)
+	}
+
 	desc := "Booking merged with #" + itoa(req.TargetBookingID)
 	if req.Reason != "" {
 		desc += ": " + req.Reason
@@ -816,8 +843,8 @@ func (s *BookingService) MergeBookings(ctx context.Context, primaryID int32, req
 
 	return map[string]any{
 		"mergeId":            merge.ID,
-		"primaryBookingId":   merge.PrimaryBookingID,
-		"mergedBookingId":    merge.MergedBookingID,
+		"primaryBookingId":   merge.PrimaryBookingId,
+		"mergedBookingId":    merge.MergedBookingId,
 		"mergedBy":           adminID,
 		"reason":             nullStr(merge.Reason),
 		"effectiveStartDate": effectiveStart,
@@ -943,8 +970,8 @@ func (s *BookingService) GetReturnReport(ctx context.Context, bookingID int32, c
 
 	return map[string]any{
 		"id":            report.ID,
-		"bookingId":     report.BookingID,
-		"submittedBy":   map[string]any{"id": report.SubmittedByID, "name": report.SubmitterName},
+		"bookingId":     report.BookingId,
+		"submittedBy":   map[string]any{"id": report.SubmittedById, "name": report.SubmitterName},
 		"note":          report.Note,
 		"location":      report.Location,
 		"submittedAt":   report.SubmittedAt,
