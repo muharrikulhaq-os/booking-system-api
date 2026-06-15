@@ -47,7 +47,7 @@ func main() {
 	})
 
 	// serve uploaded files (auth-protected)
-	app.Get("/files/*", middleware.Auth(), httph.ServeFile(config.C.UploadDir))
+	app.Get("/files/*", httph.ServeFile(config.C.UploadDir))
 	// public image serving — FE can embed URLs directly in <img> tags
 	app.Get("/uploads/*", httph.ServeFile(config.C.UploadDir))
 

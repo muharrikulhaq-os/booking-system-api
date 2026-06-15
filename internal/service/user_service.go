@@ -46,7 +46,7 @@ func serializeUser(u repository.ListUsersRow) map[string]any {
 	}
 }
 
-func (s *UserService) List(ctx context.Context, page, limit int, search *string, roleID *int32, isActive *bool) ([]map[string]any, int64, error) {
+func (s *UserService) List(ctx context.Context, page, limit int, search *string, roleID *int32, isActive *bool, departmentID *int32) ([]map[string]any, int64, error) {
 	params := repository.ListUsersParams{
 		Limit:  int32(limit),
 		Offset: int32((page - 1) * limit),
@@ -60,13 +60,16 @@ func (s *UserService) List(ctx context.Context, page, limit int, search *string,
 	if isActive != nil {
 		params.IsActive = sql.NullBool{Bool: *isActive, Valid: true}
 	}
+	if departmentID != nil {
+		params.DepartmentID = sql.NullInt32{Int32: *departmentID, Valid: true}
+	}
 
 	rows, err := s.q.ListUsers(ctx, params)
 	if err != nil {
 		return nil, 0, err
 	}
 	total, err := s.q.CountUsers(ctx, repository.CountUsersParams{
-		Search: params.Search, RoleID: params.RoleID, IsActive: params.IsActive,
+		Search: params.Search, RoleID: params.RoleID, IsActive: params.IsActive, DepartmentID: params.DepartmentID,
 	})
 	if err != nil {
 		return nil, 0, err
@@ -182,4 +185,30 @@ func (s *UserService) ListRoles(ctx context.Context) (any, error) {
 
 func (s *UserService) ListDepartments(ctx context.Context) (any, error) {
 	return s.q.ListDepartments(ctx)
+}
+
+func (s *UserService) CreateDepartment(ctx context.Context, name string) (any, error) {
+	d, err := s.q.CreateDepartment(ctx, name)
+	if err != nil {
+		return nil, util.ErrDuplicate
+	}
+	return d, nil
+}
+
+func (s *UserService) UpdateDepartment(ctx context.Context, id int32, name string) (any, error) {
+	if _, err := s.q.GetDepartmentByID(ctx, id); err != nil {
+		return nil, util.ErrNotFound
+	}
+	d, err := s.q.UpdateDepartment(ctx, repository.UpdateDepartmentParams{ID: id, Name: name})
+	if err != nil {
+		return nil, err
+	}
+	return d, nil
+}
+
+func (s *UserService) DeleteDepartment(ctx context.Context, id int32) error {
+	if _, err := s.q.GetDepartmentByID(ctx, id); err != nil {
+		return util.ErrNotFound
+	}
+	return s.q.DeleteDepartment(ctx, id)
 }
