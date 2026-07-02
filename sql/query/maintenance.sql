@@ -1,32 +1,37 @@
 -- name: ListMaintenance :many
-SELECT mr.*, r.name AS resource_name, r.type AS resource_type,
+SELECT mr.*, r.name AS vehicle_name, v."plateNumber",
        u.name AS created_by_name
 FROM maintenance_records mr
-JOIN resources r ON r.id = mr."resourceId"
-JOIN users u ON u.id = mr."createdById"
-WHERE (sqlc.narg(resource_id)::int IS NULL OR mr."resourceId" = sqlc.narg(resource_id)::int)
+JOIN vehicles v ON v.id = mr."vehicleId"
+JOIN resources r ON r.id = v."resourceId"
+JOIN users u ON u.id = mr."recordedById"
+WHERE (sqlc.narg(vehicle_id)::int IS NULL OR mr."vehicleId" = sqlc.narg(vehicle_id)::int)
 ORDER BY mr."startDate" DESC
 LIMIT $1 OFFSET $2;
 
 -- name: CountMaintenance :one
 SELECT COUNT(*) FROM maintenance_records
-WHERE (sqlc.narg(resource_id)::int IS NULL OR "resourceId" = sqlc.narg(resource_id)::int);
+WHERE (sqlc.narg(vehicle_id)::int IS NULL OR "vehicleId" = sqlc.narg(vehicle_id)::int);
 
 -- name: GetMaintenanceByID :one
-SELECT mr.*, r.name AS resource_name, r.type AS resource_type,
+SELECT mr.*, r.name AS vehicle_name, v."plateNumber",
        u.name AS created_by_name
 FROM maintenance_records mr
-JOIN resources r ON r.id = mr."resourceId"
-JOIN users u ON u.id = mr."createdById"
+JOIN vehicles v ON v.id = mr."vehicleId"
+JOIN resources r ON r.id = v."resourceId"
+JOIN users u ON u.id = mr."recordedById"
 WHERE mr.id = $1 LIMIT 1;
 
 -- name: CreateMaintenance :one
-INSERT INTO maintenance_records ("resourceId", description, "startDate", cost, "createdById")
-VALUES ($1, $2, $3, $4, $5) RETURNING *;
+INSERT INTO maintenance_records (
+    "vehicleId", "maintenanceTypeId", description, odometer,
+    "totalCost", "vendorName", location, "startDate", "endDate", "recordedById"
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING *;
 
 -- name: UpdateMaintenance :one
 UPDATE maintenance_records
-SET description = $2, "startDate" = $3, "endDate" = $4, cost = $5
+SET "vehicleId" = $2, "maintenanceTypeId" = $3, description = $4, odometer = $5,
+    "totalCost" = $6, "vendorName" = $7, location = $8, "startDate" = $9, "endDate" = $10
 WHERE id = $1 RETURNING *;
 
 -- name: DeleteMaintenance :exec

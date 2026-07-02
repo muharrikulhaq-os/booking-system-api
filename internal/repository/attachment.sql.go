@@ -13,7 +13,7 @@ import (
 
 const createAttachmentForBooking = `-- name: CreateAttachmentForBooking :one
 INSERT INTO attachments ("uploadedById", "bookingId", "filePath", "fileName", "fileType", "fileSize", description)
-VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id, "uploadedById", "vehicleId", "roomId", "bookingId", "filePath", "fileName", "fileType", "fileSize", description, "createdAt"
+VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id, "uploadedById", "vehicleId", "roomId", "bookingId", "fuelExpenseId", "maintenanceId", "filePath", "fileName", "fileType", "fileSize", description, "createdAt"
 `
 
 type CreateAttachmentForBookingParams struct {
@@ -43,6 +43,8 @@ func (q *Queries) CreateAttachmentForBooking(ctx context.Context, arg CreateAtta
 		&i.VehicleId,
 		&i.RoomId,
 		&i.BookingId,
+		&i.FuelExpenseId,
+		&i.MaintenanceId,
 		&i.FilePath,
 		&i.FileName,
 		&i.FileType,
@@ -55,7 +57,7 @@ func (q *Queries) CreateAttachmentForBooking(ctx context.Context, arg CreateAtta
 
 const createAttachmentForRoom = `-- name: CreateAttachmentForRoom :one
 INSERT INTO attachments ("uploadedById", "roomId", "filePath", "fileName", "fileType", "fileSize", description)
-VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id, "uploadedById", "vehicleId", "roomId", "bookingId", "filePath", "fileName", "fileType", "fileSize", description, "createdAt"
+VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id, "uploadedById", "vehicleId", "roomId", "bookingId", "fuelExpenseId", "maintenanceId", "filePath", "fileName", "fileType", "fileSize", description, "createdAt"
 `
 
 type CreateAttachmentForRoomParams struct {
@@ -85,6 +87,8 @@ func (q *Queries) CreateAttachmentForRoom(ctx context.Context, arg CreateAttachm
 		&i.VehicleId,
 		&i.RoomId,
 		&i.BookingId,
+		&i.FuelExpenseId,
+		&i.MaintenanceId,
 		&i.FilePath,
 		&i.FileName,
 		&i.FileType,
@@ -97,7 +101,7 @@ func (q *Queries) CreateAttachmentForRoom(ctx context.Context, arg CreateAttachm
 
 const createAttachmentForVehicle = `-- name: CreateAttachmentForVehicle :one
 INSERT INTO attachments ("uploadedById", "vehicleId", "filePath", "fileName", "fileType", "fileSize", description)
-VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id, "uploadedById", "vehicleId", "roomId", "bookingId", "filePath", "fileName", "fileType", "fileSize", description, "createdAt"
+VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id, "uploadedById", "vehicleId", "roomId", "bookingId", "fuelExpenseId", "maintenanceId", "filePath", "fileName", "fileType", "fileSize", description, "createdAt"
 `
 
 type CreateAttachmentForVehicleParams struct {
@@ -127,6 +131,8 @@ func (q *Queries) CreateAttachmentForVehicle(ctx context.Context, arg CreateAtta
 		&i.VehicleId,
 		&i.RoomId,
 		&i.BookingId,
+		&i.FuelExpenseId,
+		&i.MaintenanceId,
 		&i.FilePath,
 		&i.FileName,
 		&i.FileType,
@@ -147,25 +153,27 @@ func (q *Queries) DeleteAttachment(ctx context.Context, id int32) error {
 }
 
 const getAttachmentByID = `-- name: GetAttachmentByID :one
-SELECT a.id, a."uploadedById", a."vehicleId", a."roomId", a."bookingId", a."filePath", a."fileName", a."fileType", a."fileSize", a.description, a."createdAt", u.name AS uploader_name
+SELECT a.id, a."uploadedById", a."vehicleId", a."roomId", a."bookingId", a."fuelExpenseId", a."maintenanceId", a."filePath", a."fileName", a."fileType", a."fileSize", a.description, a."createdAt", u.name AS uploader_name
 FROM attachments a
 JOIN users u ON u.id = a."uploadedById"
 WHERE a.id = $1 LIMIT 1
 `
 
 type GetAttachmentByIDRow struct {
-	ID           int32          `json:"id"`
-	UploadedById int32          `json:"uploadedById"`
-	VehicleId    sql.NullInt32  `json:"vehicleId"`
-	RoomId       sql.NullInt32  `json:"roomId"`
-	BookingId    sql.NullInt32  `json:"bookingId"`
-	FilePath     string         `json:"filePath"`
-	FileName     string         `json:"fileName"`
-	FileType     string         `json:"fileType"`
-	FileSize     sql.NullInt32  `json:"fileSize"`
-	Description  sql.NullString `json:"description"`
-	CreatedAt    time.Time      `json:"createdAt"`
-	UploaderName string         `json:"uploader_name"`
+	ID            int32          `json:"id"`
+	UploadedById  int32          `json:"uploadedById"`
+	VehicleId     sql.NullInt32  `json:"vehicleId"`
+	RoomId        sql.NullInt32  `json:"roomId"`
+	BookingId     sql.NullInt32  `json:"bookingId"`
+	FuelExpenseId sql.NullInt32  `json:"fuelExpenseId"`
+	MaintenanceId sql.NullInt32  `json:"maintenanceId"`
+	FilePath      string         `json:"filePath"`
+	FileName      string         `json:"fileName"`
+	FileType      string         `json:"fileType"`
+	FileSize      sql.NullInt32  `json:"fileSize"`
+	Description   sql.NullString `json:"description"`
+	CreatedAt     time.Time      `json:"createdAt"`
+	UploaderName  string         `json:"uploader_name"`
 }
 
 func (q *Queries) GetAttachmentByID(ctx context.Context, id int32) (GetAttachmentByIDRow, error) {
@@ -177,6 +185,8 @@ func (q *Queries) GetAttachmentByID(ctx context.Context, id int32) (GetAttachmen
 		&i.VehicleId,
 		&i.RoomId,
 		&i.BookingId,
+		&i.FuelExpenseId,
+		&i.MaintenanceId,
 		&i.FilePath,
 		&i.FileName,
 		&i.FileType,
@@ -189,7 +199,7 @@ func (q *Queries) GetAttachmentByID(ctx context.Context, id int32) (GetAttachmen
 }
 
 const listAttachmentsByBooking = `-- name: ListAttachmentsByBooking :many
-SELECT a.id, a."uploadedById", a."vehicleId", a."roomId", a."bookingId", a."filePath", a."fileName", a."fileType", a."fileSize", a.description, a."createdAt", u.name AS uploader_name
+SELECT a.id, a."uploadedById", a."vehicleId", a."roomId", a."bookingId", a."fuelExpenseId", a."maintenanceId", a."filePath", a."fileName", a."fileType", a."fileSize", a.description, a."createdAt", u.name AS uploader_name
 FROM attachments a
 JOIN users u ON u.id = a."uploadedById"
 WHERE a."bookingId" = $1
@@ -197,18 +207,20 @@ ORDER BY a."createdAt" DESC
 `
 
 type ListAttachmentsByBookingRow struct {
-	ID           int32          `json:"id"`
-	UploadedById int32          `json:"uploadedById"`
-	VehicleId    sql.NullInt32  `json:"vehicleId"`
-	RoomId       sql.NullInt32  `json:"roomId"`
-	BookingId    sql.NullInt32  `json:"bookingId"`
-	FilePath     string         `json:"filePath"`
-	FileName     string         `json:"fileName"`
-	FileType     string         `json:"fileType"`
-	FileSize     sql.NullInt32  `json:"fileSize"`
-	Description  sql.NullString `json:"description"`
-	CreatedAt    time.Time      `json:"createdAt"`
-	UploaderName string         `json:"uploader_name"`
+	ID            int32          `json:"id"`
+	UploadedById  int32          `json:"uploadedById"`
+	VehicleId     sql.NullInt32  `json:"vehicleId"`
+	RoomId        sql.NullInt32  `json:"roomId"`
+	BookingId     sql.NullInt32  `json:"bookingId"`
+	FuelExpenseId sql.NullInt32  `json:"fuelExpenseId"`
+	MaintenanceId sql.NullInt32  `json:"maintenanceId"`
+	FilePath      string         `json:"filePath"`
+	FileName      string         `json:"fileName"`
+	FileType      string         `json:"fileType"`
+	FileSize      sql.NullInt32  `json:"fileSize"`
+	Description   sql.NullString `json:"description"`
+	CreatedAt     time.Time      `json:"createdAt"`
+	UploaderName  string         `json:"uploader_name"`
 }
 
 func (q *Queries) ListAttachmentsByBooking(ctx context.Context, bookingid sql.NullInt32) ([]ListAttachmentsByBookingRow, error) {
@@ -226,6 +238,8 @@ func (q *Queries) ListAttachmentsByBooking(ctx context.Context, bookingid sql.Nu
 			&i.VehicleId,
 			&i.RoomId,
 			&i.BookingId,
+			&i.FuelExpenseId,
+			&i.MaintenanceId,
 			&i.FilePath,
 			&i.FileName,
 			&i.FileType,
@@ -248,7 +262,7 @@ func (q *Queries) ListAttachmentsByBooking(ctx context.Context, bookingid sql.Nu
 }
 
 const listAttachmentsByRoom = `-- name: ListAttachmentsByRoom :many
-SELECT a.id, a."uploadedById", a."vehicleId", a."roomId", a."bookingId", a."filePath", a."fileName", a."fileType", a."fileSize", a.description, a."createdAt", u.name AS uploader_name
+SELECT a.id, a."uploadedById", a."vehicleId", a."roomId", a."bookingId", a."fuelExpenseId", a."maintenanceId", a."filePath", a."fileName", a."fileType", a."fileSize", a.description, a."createdAt", u.name AS uploader_name
 FROM attachments a
 JOIN users u ON u.id = a."uploadedById"
 WHERE a."roomId" = $1
@@ -256,18 +270,20 @@ ORDER BY a."createdAt" DESC
 `
 
 type ListAttachmentsByRoomRow struct {
-	ID           int32          `json:"id"`
-	UploadedById int32          `json:"uploadedById"`
-	VehicleId    sql.NullInt32  `json:"vehicleId"`
-	RoomId       sql.NullInt32  `json:"roomId"`
-	BookingId    sql.NullInt32  `json:"bookingId"`
-	FilePath     string         `json:"filePath"`
-	FileName     string         `json:"fileName"`
-	FileType     string         `json:"fileType"`
-	FileSize     sql.NullInt32  `json:"fileSize"`
-	Description  sql.NullString `json:"description"`
-	CreatedAt    time.Time      `json:"createdAt"`
-	UploaderName string         `json:"uploader_name"`
+	ID            int32          `json:"id"`
+	UploadedById  int32          `json:"uploadedById"`
+	VehicleId     sql.NullInt32  `json:"vehicleId"`
+	RoomId        sql.NullInt32  `json:"roomId"`
+	BookingId     sql.NullInt32  `json:"bookingId"`
+	FuelExpenseId sql.NullInt32  `json:"fuelExpenseId"`
+	MaintenanceId sql.NullInt32  `json:"maintenanceId"`
+	FilePath      string         `json:"filePath"`
+	FileName      string         `json:"fileName"`
+	FileType      string         `json:"fileType"`
+	FileSize      sql.NullInt32  `json:"fileSize"`
+	Description   sql.NullString `json:"description"`
+	CreatedAt     time.Time      `json:"createdAt"`
+	UploaderName  string         `json:"uploader_name"`
 }
 
 func (q *Queries) ListAttachmentsByRoom(ctx context.Context, roomid sql.NullInt32) ([]ListAttachmentsByRoomRow, error) {
@@ -285,6 +301,8 @@ func (q *Queries) ListAttachmentsByRoom(ctx context.Context, roomid sql.NullInt3
 			&i.VehicleId,
 			&i.RoomId,
 			&i.BookingId,
+			&i.FuelExpenseId,
+			&i.MaintenanceId,
 			&i.FilePath,
 			&i.FileName,
 			&i.FileType,
@@ -307,7 +325,7 @@ func (q *Queries) ListAttachmentsByRoom(ctx context.Context, roomid sql.NullInt3
 }
 
 const listAttachmentsByVehicle = `-- name: ListAttachmentsByVehicle :many
-SELECT a.id, a."uploadedById", a."vehicleId", a."roomId", a."bookingId", a."filePath", a."fileName", a."fileType", a."fileSize", a.description, a."createdAt", u.name AS uploader_name
+SELECT a.id, a."uploadedById", a."vehicleId", a."roomId", a."bookingId", a."fuelExpenseId", a."maintenanceId", a."filePath", a."fileName", a."fileType", a."fileSize", a.description, a."createdAt", u.name AS uploader_name
 FROM attachments a
 JOIN users u ON u.id = a."uploadedById"
 WHERE a."vehicleId" = $1
@@ -315,18 +333,20 @@ ORDER BY a."createdAt" DESC
 `
 
 type ListAttachmentsByVehicleRow struct {
-	ID           int32          `json:"id"`
-	UploadedById int32          `json:"uploadedById"`
-	VehicleId    sql.NullInt32  `json:"vehicleId"`
-	RoomId       sql.NullInt32  `json:"roomId"`
-	BookingId    sql.NullInt32  `json:"bookingId"`
-	FilePath     string         `json:"filePath"`
-	FileName     string         `json:"fileName"`
-	FileType     string         `json:"fileType"`
-	FileSize     sql.NullInt32  `json:"fileSize"`
-	Description  sql.NullString `json:"description"`
-	CreatedAt    time.Time      `json:"createdAt"`
-	UploaderName string         `json:"uploader_name"`
+	ID            int32          `json:"id"`
+	UploadedById  int32          `json:"uploadedById"`
+	VehicleId     sql.NullInt32  `json:"vehicleId"`
+	RoomId        sql.NullInt32  `json:"roomId"`
+	BookingId     sql.NullInt32  `json:"bookingId"`
+	FuelExpenseId sql.NullInt32  `json:"fuelExpenseId"`
+	MaintenanceId sql.NullInt32  `json:"maintenanceId"`
+	FilePath      string         `json:"filePath"`
+	FileName      string         `json:"fileName"`
+	FileType      string         `json:"fileType"`
+	FileSize      sql.NullInt32  `json:"fileSize"`
+	Description   sql.NullString `json:"description"`
+	CreatedAt     time.Time      `json:"createdAt"`
+	UploaderName  string         `json:"uploader_name"`
 }
 
 func (q *Queries) ListAttachmentsByVehicle(ctx context.Context, vehicleid sql.NullInt32) ([]ListAttachmentsByVehicleRow, error) {
@@ -344,6 +364,8 @@ func (q *Queries) ListAttachmentsByVehicle(ctx context.Context, vehicleid sql.Nu
 			&i.VehicleId,
 			&i.RoomId,
 			&i.BookingId,
+			&i.FuelExpenseId,
+			&i.MaintenanceId,
 			&i.FilePath,
 			&i.FileName,
 			&i.FileType,

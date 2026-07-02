@@ -60,12 +60,9 @@ func (h *FuelExpenseHandler) CreateBBM(c *fiber.Ctx) error {
 	if err := bindAndValidate(c, &req); err != nil {
 		return err
 	}
-	// get driverId from current user's driver profile
 	driverID := queryInt32(c, "driverId")
-	if driverID == nil {
-		return fiber.NewError(fiber.StatusBadRequest, "driverId is required")
-	}
-	data, err := h.svc.CreateBBM(c.Context(), req, *driverID)
+	recordedByID := int32(middleware.GetUserID(c))
+	data, err := h.svc.CreateBBM(c.Context(), req, recordedByID, driverID)
 	if err != nil {
 		return err
 	}
@@ -78,10 +75,8 @@ func (h *FuelExpenseHandler) CreateListrik(c *fiber.Ctx) error {
 		return err
 	}
 	driverID := queryInt32(c, "driverId")
-	if driverID == nil {
-		return fiber.NewError(fiber.StatusBadRequest, "driverId is required")
-	}
-	data, err := h.svc.CreateListrik(c.Context(), req, *driverID)
+	recordedByID := int32(middleware.GetUserID(c))
+	data, err := h.svc.CreateListrik(c.Context(), req, recordedByID, driverID)
 	if err != nil {
 		return err
 	}
@@ -124,7 +119,7 @@ func (h *MaintenanceHandler) Register(r fiber.Router) {
 func (h *MaintenanceHandler) List(c *fiber.Ctx) error {
 	page := queryInt(c, "page", 1)
 	limit := queryInt(c, "limit", 20)
-	data, total, err := h.svc.List(c.Context(), page, limit, queryInt32(c, "resourceId"))
+	data, total, err := h.svc.List(c.Context(), page, limit, queryInt32(c, "vehicleId"))
 	if err != nil {
 		return err
 	}
@@ -148,11 +143,19 @@ func (h *MaintenanceHandler) Create(c *fiber.Ctx) error {
 	if err := bindAndValidate(c, &req); err != nil {
 		return err
 	}
-	data, err := h.svc.Create(c.Context(), req, int32(middleware.GetUserID(c)))
+	resp, err := h.svc.Create(c.Context(), req, int32(middleware.GetUserID(c)))
 	if err != nil {
 		return err
 	}
-	return util.Created(c, "Maintenance record created", data)
+	if resp.Warning != "" {
+		return c.Status(fiber.StatusCreated).JSON(fiber.Map{
+			"status":  "success",
+			"message": "Maintenance record created with warning",
+			"warning": resp.Warning,
+			"data":    resp.Data,
+		})
+	}
+	return util.Created(c, "Maintenance record created", resp.Data)
 }
 
 func (h *MaintenanceHandler) Update(c *fiber.Ctx) error {

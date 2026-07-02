@@ -102,46 +102,131 @@ func (ns NullBookingStatus) Value() (driver.Value, error) {
 	return string(ns.BookingStatus), nil
 }
 
-type FuelType string
+type EnergyType string
 
 const (
-	FuelTypeBBM     FuelType = "BBM"
-	FuelTypeLISTRIK FuelType = "LISTRIK"
+	EnergyTypeBBM     EnergyType = "BBM"
+	EnergyTypeLISTRIK EnergyType = "LISTRIK"
+	EnergyTypeHYBRID  EnergyType = "HYBRID"
 )
 
-func (e *FuelType) Scan(src interface{}) error {
+func (e *EnergyType) Scan(src interface{}) error {
 	switch s := src.(type) {
 	case []byte:
-		*e = FuelType(s)
+		*e = EnergyType(s)
 	case string:
-		*e = FuelType(s)
+		*e = EnergyType(s)
 	default:
-		return fmt.Errorf("unsupported scan type for FuelType: %T", src)
+		return fmt.Errorf("unsupported scan type for EnergyType: %T", src)
 	}
 	return nil
 }
 
-type NullFuelType struct {
-	FuelType FuelType `json:"fuel_type"`
-	Valid    bool     `json:"valid"` // Valid is true if FuelType is not NULL
+type NullEnergyType struct {
+	EnergyType EnergyType `json:"energy_type"`
+	Valid      bool       `json:"valid"` // Valid is true if EnergyType is not NULL
 }
 
 // Scan implements the Scanner interface.
-func (ns *NullFuelType) Scan(value interface{}) error {
+func (ns *NullEnergyType) Scan(value interface{}) error {
 	if value == nil {
-		ns.FuelType, ns.Valid = "", false
+		ns.EnergyType, ns.Valid = "", false
 		return nil
 	}
 	ns.Valid = true
-	return ns.FuelType.Scan(value)
+	return ns.EnergyType.Scan(value)
 }
 
 // Value implements the driver Valuer interface.
-func (ns NullFuelType) Value() (driver.Value, error) {
+func (ns NullEnergyType) Value() (driver.Value, error) {
 	if !ns.Valid {
 		return nil, nil
 	}
-	return string(ns.FuelType), nil
+	return string(ns.EnergyType), nil
+}
+
+type FuelCategory string
+
+const (
+	FuelCategoryBBM     FuelCategory = "BBM"
+	FuelCategoryLISTRIK FuelCategory = "LISTRIK"
+)
+
+func (e *FuelCategory) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = FuelCategory(s)
+	case string:
+		*e = FuelCategory(s)
+	default:
+		return fmt.Errorf("unsupported scan type for FuelCategory: %T", src)
+	}
+	return nil
+}
+
+type NullFuelCategory struct {
+	FuelCategory FuelCategory `json:"fuel_category"`
+	Valid        bool         `json:"valid"` // Valid is true if FuelCategory is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullFuelCategory) Scan(value interface{}) error {
+	if value == nil {
+		ns.FuelCategory, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.FuelCategory.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullFuelCategory) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.FuelCategory), nil
+}
+
+type FuelUnit string
+
+const (
+	FuelUnitLITER FuelUnit = "LITER"
+	FuelUnitKWH   FuelUnit = "KWH"
+)
+
+func (e *FuelUnit) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = FuelUnit(s)
+	case string:
+		*e = FuelUnit(s)
+	default:
+		return fmt.Errorf("unsupported scan type for FuelUnit: %T", src)
+	}
+	return nil
+}
+
+type NullFuelUnit struct {
+	FuelUnit FuelUnit `json:"fuel_unit"`
+	Valid    bool     `json:"valid"` // Valid is true if FuelUnit is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullFuelUnit) Scan(value interface{}) error {
+	if value == nil {
+		ns.FuelUnit, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.FuelUnit.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullFuelUnit) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.FuelUnit), nil
 }
 
 type ResourceStatus string
@@ -283,17 +368,19 @@ type ApprovalLog struct {
 }
 
 type Attachment struct {
-	ID           int32          `json:"id"`
-	UploadedById int32          `json:"uploadedById"`
-	VehicleId    sql.NullInt32  `json:"vehicleId"`
-	RoomId       sql.NullInt32  `json:"roomId"`
-	BookingId    sql.NullInt32  `json:"bookingId"`
-	FilePath     string         `json:"filePath"`
-	FileName     string         `json:"fileName"`
-	FileType     string         `json:"fileType"`
-	FileSize     sql.NullInt32  `json:"fileSize"`
-	Description  sql.NullString `json:"description"`
-	CreatedAt    time.Time      `json:"createdAt"`
+	ID            int32          `json:"id"`
+	UploadedById  int32          `json:"uploadedById"`
+	VehicleId     sql.NullInt32  `json:"vehicleId"`
+	RoomId        sql.NullInt32  `json:"roomId"`
+	BookingId     sql.NullInt32  `json:"bookingId"`
+	FuelExpenseId sql.NullInt32  `json:"fuelExpenseId"`
+	MaintenanceId sql.NullInt32  `json:"maintenanceId"`
+	FilePath      string         `json:"filePath"`
+	FileName      string         `json:"fileName"`
+	FileType      string         `json:"fileType"`
+	FileSize      sql.NullInt32  `json:"fileSize"`
+	Description   sql.NullString `json:"description"`
+	CreatedAt     time.Time      `json:"createdAt"`
 }
 
 type AuditLog struct {
@@ -378,22 +465,33 @@ type DriverRating struct {
 }
 
 type FuelExpense struct {
-	ID             int32          `json:"id"`
-	DriverId       int32          `json:"driverId"`
-	VehicleId      int32          `json:"vehicleId"`
-	BookingId      sql.NullInt32  `json:"bookingId"`
-	FuelType       FuelType       `json:"fuelType"`
-	Liter          sql.NullString `json:"liter"`
-	PricePerLiter  sql.NullString `json:"pricePerLiter"`
-	OdometerBefore sql.NullInt32  `json:"odometerBefore"`
-	OdometerAfter  sql.NullInt32  `json:"odometerAfter"`
-	Kwh            sql.NullString `json:"kwh"`
-	PricePerKwh    sql.NullString `json:"pricePerKwh"`
-	BatteryBefore  sql.NullString `json:"batteryBefore"`
-	BatteryAfter   sql.NullString `json:"batteryAfter"`
-	TotalAmount    string         `json:"totalAmount"`
-	Note           sql.NullString `json:"note"`
-	CreatedAt      time.Time      `json:"createdAt"`
+	ID            int32          `json:"id"`
+	VehicleId     int32          `json:"vehicleId"`
+	FuelTypeId    int32          `json:"fuelTypeId"`
+	BookingId     sql.NullInt32  `json:"bookingId"`
+	DriverId      sql.NullInt32  `json:"driverId"`
+	RecordedById  int32          `json:"recordedById"`
+	Odometer      sql.NullInt32  `json:"odometer"`
+	Quantity      string         `json:"quantity"`
+	PricePerUnit  string         `json:"pricePerUnit"`
+	TotalCost     string         `json:"totalCost"`
+	BatteryBefore sql.NullString `json:"batteryBefore"`
+	BatteryAfter  sql.NullString `json:"batteryAfter"`
+	Location      string         `json:"location"`
+	StationName   sql.NullString `json:"stationName"`
+	Note          sql.NullString `json:"note"`
+	CreatedAt     time.Time      `json:"createdAt"`
+}
+
+type FuelType struct {
+	ID           int32          `json:"id"`
+	Name         string         `json:"name"`
+	Type         FuelCategory   `json:"type"`
+	Unit         FuelUnit       `json:"unit"`
+	DefaultPrice sql.NullString `json:"default_price"`
+	IsActive     bool           `json:"is_active"`
+	CreatedAt    time.Time      `json:"created_at"`
+	UpdatedAt    time.Time      `json:"updated_at"`
 }
 
 type GuestBooking struct {
@@ -417,14 +515,23 @@ type GuestBooking struct {
 }
 
 type MaintenanceRecord struct {
-	ID          int32          `json:"id"`
-	ResourceId  int32          `json:"resourceId"`
-	Description string         `json:"description"`
-	StartDate   time.Time      `json:"startDate"`
-	EndDate     sql.NullTime   `json:"endDate"`
-	Cost        sql.NullString `json:"cost"`
-	CreatedById int32          `json:"createdById"`
-	CreatedAt   time.Time      `json:"createdAt"`
+	ID                int32          `json:"id"`
+	VehicleId         int32          `json:"vehicleId"`
+	MaintenanceTypeId sql.NullInt32  `json:"maintenanceTypeId"`
+	Description       string         `json:"description"`
+	Odometer          sql.NullInt32  `json:"odometer"`
+	TotalCost         sql.NullString `json:"totalCost"`
+	VendorName        sql.NullString `json:"vendorName"`
+	Location          string         `json:"location"`
+	StartDate         time.Time      `json:"startDate"`
+	EndDate           sql.NullTime   `json:"endDate"`
+	RecordedById      int32          `json:"recordedById"`
+	CreatedAt         time.Time      `json:"createdAt"`
+}
+
+type MaintenanceType struct {
+	ID   int32  `json:"id"`
+	Name string `json:"name"`
 }
 
 type MasterSetting struct {
@@ -571,6 +678,7 @@ type Vehicle struct {
 	CategoryId      int32          `json:"categoryId"`
 	Capacity        int16          `json:"capacity"`
 	PhotoUrl        sql.NullString `json:"photoUrl"`
+	EnergyType      EnergyType     `json:"energy_type"`
 }
 
 type VehicleCategory struct {

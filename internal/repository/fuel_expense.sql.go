@@ -13,126 +13,83 @@ import (
 
 const countFuelExpenses = `-- name: CountFuelExpenses :one
 SELECT COUNT(*) FROM fuel_expenses fe
+JOIN fuel_types ft ON ft.id = fe."fuelTypeId"
 WHERE ($1::int IS NULL OR fe."driverId" = $1::int)
   AND ($2::int IS NULL OR fe."vehicleId" = $2::int)
-  AND ($3::fuel_type IS NULL OR fe."fuelType" = $3::fuel_type)
+  AND ($3::fuel_category IS NULL OR ft.type = $3::fuel_category)
 `
 
 type CountFuelExpensesParams struct {
-	DriverID  sql.NullInt32 `json:"driver_id"`
-	VehicleID sql.NullInt32 `json:"vehicle_id"`
-	FuelType  NullFuelType  `json:"fuel_type"`
+	DriverID     sql.NullInt32    `json:"driver_id"`
+	VehicleID    sql.NullInt32    `json:"vehicle_id"`
+	FuelCategory NullFuelCategory `json:"fuel_category"`
 }
 
 func (q *Queries) CountFuelExpenses(ctx context.Context, arg CountFuelExpensesParams) (int64, error) {
-	row := q.db.QueryRowContext(ctx, countFuelExpenses, arg.DriverID, arg.VehicleID, arg.FuelType)
+	row := q.db.QueryRowContext(ctx, countFuelExpenses, arg.DriverID, arg.VehicleID, arg.FuelCategory)
 	var count int64
 	err := row.Scan(&count)
 	return count, err
 }
 
-const createFuelExpenseBBM = `-- name: CreateFuelExpenseBBM :one
+const createFuelExpense = `-- name: CreateFuelExpense :one
 INSERT INTO fuel_expenses (
-    "driverId", "vehicleId", "bookingId", "fuelType",
-    liter, "pricePerLiter", "odometerBefore", "odometerAfter",
-    "totalAmount", note
-) VALUES ($1, $2, $3, 'BBM', $4, $5, $6, $7, $8, $9) RETURNING id, "driverId", "vehicleId", "bookingId", "fuelType", liter, "pricePerLiter", "odometerBefore", "odometerAfter", kwh, "pricePerKwh", "batteryBefore", "batteryAfter", "totalAmount", note, "createdAt"
+    "vehicleId", "fuelTypeId", "bookingId", "driverId", "recordedById",
+    odometer, quantity, "pricePerUnit", "totalCost",
+    "batteryBefore", "batteryAfter", location, "stationName", note
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14) RETURNING id, "vehicleId", "fuelTypeId", "bookingId", "driverId", "recordedById", odometer, quantity, "pricePerUnit", "totalCost", "batteryBefore", "batteryAfter", location, "stationName", note, "createdAt"
 `
 
-type CreateFuelExpenseBBMParams struct {
-	DriverId       int32          `json:"driverId"`
-	VehicleId      int32          `json:"vehicleId"`
-	BookingId      sql.NullInt32  `json:"bookingId"`
-	Liter          sql.NullString `json:"liter"`
-	PricePerLiter  sql.NullString `json:"pricePerLiter"`
-	OdometerBefore sql.NullInt32  `json:"odometerBefore"`
-	OdometerAfter  sql.NullInt32  `json:"odometerAfter"`
-	TotalAmount    string         `json:"totalAmount"`
-	Note           sql.NullString `json:"note"`
-}
-
-func (q *Queries) CreateFuelExpenseBBM(ctx context.Context, arg CreateFuelExpenseBBMParams) (FuelExpense, error) {
-	row := q.db.QueryRowContext(ctx, createFuelExpenseBBM,
-		arg.DriverId,
-		arg.VehicleId,
-		arg.BookingId,
-		arg.Liter,
-		arg.PricePerLiter,
-		arg.OdometerBefore,
-		arg.OdometerAfter,
-		arg.TotalAmount,
-		arg.Note,
-	)
-	var i FuelExpense
-	err := row.Scan(
-		&i.ID,
-		&i.DriverId,
-		&i.VehicleId,
-		&i.BookingId,
-		&i.FuelType,
-		&i.Liter,
-		&i.PricePerLiter,
-		&i.OdometerBefore,
-		&i.OdometerAfter,
-		&i.Kwh,
-		&i.PricePerKwh,
-		&i.BatteryBefore,
-		&i.BatteryAfter,
-		&i.TotalAmount,
-		&i.Note,
-		&i.CreatedAt,
-	)
-	return i, err
-}
-
-const createFuelExpenseListrik = `-- name: CreateFuelExpenseListrik :one
-INSERT INTO fuel_expenses (
-    "driverId", "vehicleId", "bookingId", "fuelType",
-    kwh, "pricePerKwh", "batteryBefore", "batteryAfter",
-    "totalAmount", note
-) VALUES ($1, $2, $3, 'LISTRIK', $4, $5, $6, $7, $8, $9) RETURNING id, "driverId", "vehicleId", "bookingId", "fuelType", liter, "pricePerLiter", "odometerBefore", "odometerAfter", kwh, "pricePerKwh", "batteryBefore", "batteryAfter", "totalAmount", note, "createdAt"
-`
-
-type CreateFuelExpenseListrikParams struct {
-	DriverId      int32          `json:"driverId"`
+type CreateFuelExpenseParams struct {
 	VehicleId     int32          `json:"vehicleId"`
+	FuelTypeId    int32          `json:"fuelTypeId"`
 	BookingId     sql.NullInt32  `json:"bookingId"`
-	Kwh           sql.NullString `json:"kwh"`
-	PricePerKwh   sql.NullString `json:"pricePerKwh"`
+	DriverId      sql.NullInt32  `json:"driverId"`
+	RecordedById  int32          `json:"recordedById"`
+	Odometer      sql.NullInt32  `json:"odometer"`
+	Quantity      string         `json:"quantity"`
+	PricePerUnit  string         `json:"pricePerUnit"`
+	TotalCost     string         `json:"totalCost"`
 	BatteryBefore sql.NullString `json:"batteryBefore"`
 	BatteryAfter  sql.NullString `json:"batteryAfter"`
-	TotalAmount   string         `json:"totalAmount"`
+	Location      string         `json:"location"`
+	StationName   sql.NullString `json:"stationName"`
 	Note          sql.NullString `json:"note"`
 }
 
-func (q *Queries) CreateFuelExpenseListrik(ctx context.Context, arg CreateFuelExpenseListrikParams) (FuelExpense, error) {
-	row := q.db.QueryRowContext(ctx, createFuelExpenseListrik,
-		arg.DriverId,
+func (q *Queries) CreateFuelExpense(ctx context.Context, arg CreateFuelExpenseParams) (FuelExpense, error) {
+	row := q.db.QueryRowContext(ctx, createFuelExpense,
 		arg.VehicleId,
+		arg.FuelTypeId,
 		arg.BookingId,
-		arg.Kwh,
-		arg.PricePerKwh,
+		arg.DriverId,
+		arg.RecordedById,
+		arg.Odometer,
+		arg.Quantity,
+		arg.PricePerUnit,
+		arg.TotalCost,
 		arg.BatteryBefore,
 		arg.BatteryAfter,
-		arg.TotalAmount,
+		arg.Location,
+		arg.StationName,
 		arg.Note,
 	)
 	var i FuelExpense
 	err := row.Scan(
 		&i.ID,
-		&i.DriverId,
 		&i.VehicleId,
+		&i.FuelTypeId,
 		&i.BookingId,
-		&i.FuelType,
-		&i.Liter,
-		&i.PricePerLiter,
-		&i.OdometerBefore,
-		&i.OdometerAfter,
-		&i.Kwh,
-		&i.PricePerKwh,
+		&i.DriverId,
+		&i.RecordedById,
+		&i.Odometer,
+		&i.Quantity,
+		&i.PricePerUnit,
+		&i.TotalCost,
 		&i.BatteryBefore,
 		&i.BatteryAfter,
-		&i.TotalAmount,
+		&i.Location,
+		&i.StationName,
 		&i.Note,
 		&i.CreatedAt,
 	)
@@ -149,35 +106,37 @@ func (q *Queries) DeleteFuelExpense(ctx context.Context, id int32) error {
 }
 
 const getFuelExpenseByID = `-- name: GetFuelExpenseByID :one
-SELECT fe.id, fe."driverId", fe."vehicleId", fe."bookingId", fe."fuelType", fe.liter, fe."pricePerLiter", fe."odometerBefore", fe."odometerAfter", fe.kwh, fe."pricePerKwh", fe."batteryBefore", fe."batteryAfter", fe."totalAmount", fe.note, fe."createdAt", d_u.name AS driver_name, v."plateNumber", r.name AS vehicle_name
+SELECT fe.id, fe."vehicleId", fe."fuelTypeId", fe."bookingId", fe."driverId", fe."recordedById", fe.odometer, fe.quantity, fe."pricePerUnit", fe."totalCost", fe."batteryBefore", fe."batteryAfter", fe.location, fe."stationName", fe.note, fe."createdAt", d_u.name AS driver_name, v."plateNumber", r.name AS vehicle_name, ft.type AS fuel_category_name
 FROM fuel_expenses fe
-JOIN drivers d ON d.id = fe."driverId"
-JOIN users d_u ON d_u.id = d."userId"
+LEFT JOIN drivers d ON d.id = fe."driverId"
+LEFT JOIN users d_u ON d_u.id = d."userId"
 JOIN vehicles v ON v.id = fe."vehicleId"
 JOIN resources r ON r.id = v."resourceId"
+JOIN fuel_types ft ON ft.id = fe."fuelTypeId"
 WHERE fe.id = $1 LIMIT 1
 `
 
 type GetFuelExpenseByIDRow struct {
-	ID             int32          `json:"id"`
-	DriverId       int32          `json:"driverId"`
-	VehicleId      int32          `json:"vehicleId"`
-	BookingId      sql.NullInt32  `json:"bookingId"`
-	FuelType       FuelType       `json:"fuelType"`
-	Liter          sql.NullString `json:"liter"`
-	PricePerLiter  sql.NullString `json:"pricePerLiter"`
-	OdometerBefore sql.NullInt32  `json:"odometerBefore"`
-	OdometerAfter  sql.NullInt32  `json:"odometerAfter"`
-	Kwh            sql.NullString `json:"kwh"`
-	PricePerKwh    sql.NullString `json:"pricePerKwh"`
-	BatteryBefore  sql.NullString `json:"batteryBefore"`
-	BatteryAfter   sql.NullString `json:"batteryAfter"`
-	TotalAmount    string         `json:"totalAmount"`
-	Note           sql.NullString `json:"note"`
-	CreatedAt      time.Time      `json:"createdAt"`
-	DriverName     string         `json:"driver_name"`
-	PlateNumber    string         `json:"plateNumber"`
-	VehicleName    string         `json:"vehicle_name"`
+	ID               int32          `json:"id"`
+	VehicleId        int32          `json:"vehicleId"`
+	FuelTypeId       int32          `json:"fuelTypeId"`
+	BookingId        sql.NullInt32  `json:"bookingId"`
+	DriverId         sql.NullInt32  `json:"driverId"`
+	RecordedById     int32          `json:"recordedById"`
+	Odometer         sql.NullInt32  `json:"odometer"`
+	Quantity         string         `json:"quantity"`
+	PricePerUnit     string         `json:"pricePerUnit"`
+	TotalCost        string         `json:"totalCost"`
+	BatteryBefore    sql.NullString `json:"batteryBefore"`
+	BatteryAfter     sql.NullString `json:"batteryAfter"`
+	Location         string         `json:"location"`
+	StationName      sql.NullString `json:"stationName"`
+	Note             sql.NullString `json:"note"`
+	CreatedAt        time.Time      `json:"createdAt"`
+	DriverName       sql.NullString `json:"driver_name"`
+	PlateNumber      string         `json:"plateNumber"`
+	VehicleName      string         `json:"vehicle_name"`
+	FuelCategoryName FuelCategory   `json:"fuel_category_name"`
 }
 
 func (q *Queries) GetFuelExpenseByID(ctx context.Context, id int32) (GetFuelExpenseByIDRow, error) {
@@ -185,70 +144,73 @@ func (q *Queries) GetFuelExpenseByID(ctx context.Context, id int32) (GetFuelExpe
 	var i GetFuelExpenseByIDRow
 	err := row.Scan(
 		&i.ID,
-		&i.DriverId,
 		&i.VehicleId,
+		&i.FuelTypeId,
 		&i.BookingId,
-		&i.FuelType,
-		&i.Liter,
-		&i.PricePerLiter,
-		&i.OdometerBefore,
-		&i.OdometerAfter,
-		&i.Kwh,
-		&i.PricePerKwh,
+		&i.DriverId,
+		&i.RecordedById,
+		&i.Odometer,
+		&i.Quantity,
+		&i.PricePerUnit,
+		&i.TotalCost,
 		&i.BatteryBefore,
 		&i.BatteryAfter,
-		&i.TotalAmount,
+		&i.Location,
+		&i.StationName,
 		&i.Note,
 		&i.CreatedAt,
 		&i.DriverName,
 		&i.PlateNumber,
 		&i.VehicleName,
+		&i.FuelCategoryName,
 	)
 	return i, err
 }
 
 const listFuelExpenses = `-- name: ListFuelExpenses :many
-SELECT fe.id, fe."driverId", fe."vehicleId", fe."bookingId", fe."fuelType", fe.liter, fe."pricePerLiter", fe."odometerBefore", fe."odometerAfter", fe.kwh, fe."pricePerKwh", fe."batteryBefore", fe."batteryAfter", fe."totalAmount", fe.note, fe."createdAt", d_u.name AS driver_name, v."plateNumber", r.name AS vehicle_name
+SELECT fe.id, fe."vehicleId", fe."fuelTypeId", fe."bookingId", fe."driverId", fe."recordedById", fe.odometer, fe.quantity, fe."pricePerUnit", fe."totalCost", fe."batteryBefore", fe."batteryAfter", fe.location, fe."stationName", fe.note, fe."createdAt", d_u.name AS driver_name, v."plateNumber", r.name AS vehicle_name, ft.type AS fuel_category_name
 FROM fuel_expenses fe
-JOIN drivers d ON d.id = fe."driverId"
-JOIN users d_u ON d_u.id = d."userId"
+LEFT JOIN drivers d ON d.id = fe."driverId"
+LEFT JOIN users d_u ON d_u.id = d."userId"
 JOIN vehicles v ON v.id = fe."vehicleId"
 JOIN resources r ON r.id = v."resourceId"
+JOIN fuel_types ft ON ft.id = fe."fuelTypeId"
 WHERE ($3::int IS NULL OR fe."driverId" = $3::int)
   AND ($4::int IS NULL OR fe."vehicleId" = $4::int)
-  AND ($5::fuel_type IS NULL OR fe."fuelType" = $5::fuel_type)
+  AND ($5::fuel_category IS NULL OR ft.type = $5::fuel_category)
 ORDER BY fe."createdAt" DESC
 LIMIT $1 OFFSET $2
 `
 
 type ListFuelExpensesParams struct {
-	Limit     int32         `json:"limit"`
-	Offset    int32         `json:"offset"`
-	DriverID  sql.NullInt32 `json:"driver_id"`
-	VehicleID sql.NullInt32 `json:"vehicle_id"`
-	FuelType  NullFuelType  `json:"fuel_type"`
+	Limit        int32            `json:"limit"`
+	Offset       int32            `json:"offset"`
+	DriverID     sql.NullInt32    `json:"driver_id"`
+	VehicleID    sql.NullInt32    `json:"vehicle_id"`
+	FuelCategory NullFuelCategory `json:"fuel_category"`
 }
 
 type ListFuelExpensesRow struct {
-	ID             int32          `json:"id"`
-	DriverId       int32          `json:"driverId"`
-	VehicleId      int32          `json:"vehicleId"`
-	BookingId      sql.NullInt32  `json:"bookingId"`
-	FuelType       FuelType       `json:"fuelType"`
-	Liter          sql.NullString `json:"liter"`
-	PricePerLiter  sql.NullString `json:"pricePerLiter"`
-	OdometerBefore sql.NullInt32  `json:"odometerBefore"`
-	OdometerAfter  sql.NullInt32  `json:"odometerAfter"`
-	Kwh            sql.NullString `json:"kwh"`
-	PricePerKwh    sql.NullString `json:"pricePerKwh"`
-	BatteryBefore  sql.NullString `json:"batteryBefore"`
-	BatteryAfter   sql.NullString `json:"batteryAfter"`
-	TotalAmount    string         `json:"totalAmount"`
-	Note           sql.NullString `json:"note"`
-	CreatedAt      time.Time      `json:"createdAt"`
-	DriverName     string         `json:"driver_name"`
-	PlateNumber    string         `json:"plateNumber"`
-	VehicleName    string         `json:"vehicle_name"`
+	ID               int32          `json:"id"`
+	VehicleId        int32          `json:"vehicleId"`
+	FuelTypeId       int32          `json:"fuelTypeId"`
+	BookingId        sql.NullInt32  `json:"bookingId"`
+	DriverId         sql.NullInt32  `json:"driverId"`
+	RecordedById     int32          `json:"recordedById"`
+	Odometer         sql.NullInt32  `json:"odometer"`
+	Quantity         string         `json:"quantity"`
+	PricePerUnit     string         `json:"pricePerUnit"`
+	TotalCost        string         `json:"totalCost"`
+	BatteryBefore    sql.NullString `json:"batteryBefore"`
+	BatteryAfter     sql.NullString `json:"batteryAfter"`
+	Location         string         `json:"location"`
+	StationName      sql.NullString `json:"stationName"`
+	Note             sql.NullString `json:"note"`
+	CreatedAt        time.Time      `json:"createdAt"`
+	DriverName       sql.NullString `json:"driver_name"`
+	PlateNumber      string         `json:"plateNumber"`
+	VehicleName      string         `json:"vehicle_name"`
+	FuelCategoryName FuelCategory   `json:"fuel_category_name"`
 }
 
 func (q *Queries) ListFuelExpenses(ctx context.Context, arg ListFuelExpensesParams) ([]ListFuelExpensesRow, error) {
@@ -257,7 +219,7 @@ func (q *Queries) ListFuelExpenses(ctx context.Context, arg ListFuelExpensesPara
 		arg.Offset,
 		arg.DriverID,
 		arg.VehicleID,
-		arg.FuelType,
+		arg.FuelCategory,
 	)
 	if err != nil {
 		return nil, err
@@ -268,24 +230,25 @@ func (q *Queries) ListFuelExpenses(ctx context.Context, arg ListFuelExpensesPara
 		var i ListFuelExpensesRow
 		if err := rows.Scan(
 			&i.ID,
-			&i.DriverId,
 			&i.VehicleId,
+			&i.FuelTypeId,
 			&i.BookingId,
-			&i.FuelType,
-			&i.Liter,
-			&i.PricePerLiter,
-			&i.OdometerBefore,
-			&i.OdometerAfter,
-			&i.Kwh,
-			&i.PricePerKwh,
+			&i.DriverId,
+			&i.RecordedById,
+			&i.Odometer,
+			&i.Quantity,
+			&i.PricePerUnit,
+			&i.TotalCost,
 			&i.BatteryBefore,
 			&i.BatteryAfter,
-			&i.TotalAmount,
+			&i.Location,
+			&i.StationName,
 			&i.Note,
 			&i.CreatedAt,
 			&i.DriverName,
 			&i.PlateNumber,
 			&i.VehicleName,
+			&i.FuelCategoryName,
 		); err != nil {
 			return nil, err
 		}
@@ -300,98 +263,67 @@ func (q *Queries) ListFuelExpenses(ctx context.Context, arg ListFuelExpensesPara
 	return items, nil
 }
 
-const updateFuelExpenseBBM = `-- name: UpdateFuelExpenseBBM :one
+const updateFuelExpense = `-- name: UpdateFuelExpense :one
 UPDATE fuel_expenses
-SET liter = $2, "pricePerLiter" = $3, "odometerBefore" = $4,
-    "odometerAfter" = $5, "totalAmount" = $6, note = $7
-WHERE id = $1 RETURNING id, "driverId", "vehicleId", "bookingId", "fuelType", liter, "pricePerLiter", "odometerBefore", "odometerAfter", kwh, "pricePerKwh", "batteryBefore", "batteryAfter", "totalAmount", note, "createdAt"
+SET "vehicleId" = $2, "fuelTypeId" = $3, "bookingId" = $4, "driverId" = $5,
+    "recordedById" = $6, odometer = $7, quantity = $8, "pricePerUnit" = $9,
+    "totalCost" = $10, "batteryBefore" = $11, "batteryAfter" = $12,
+    location = $13, "stationName" = $14, note = $15
+WHERE id = $1 RETURNING id, "vehicleId", "fuelTypeId", "bookingId", "driverId", "recordedById", odometer, quantity, "pricePerUnit", "totalCost", "batteryBefore", "batteryAfter", location, "stationName", note, "createdAt"
 `
 
-type UpdateFuelExpenseBBMParams struct {
-	ID             int32          `json:"id"`
-	Liter          sql.NullString `json:"liter"`
-	PricePerLiter  sql.NullString `json:"pricePerLiter"`
-	OdometerBefore sql.NullInt32  `json:"odometerBefore"`
-	OdometerAfter  sql.NullInt32  `json:"odometerAfter"`
-	TotalAmount    string         `json:"totalAmount"`
-	Note           sql.NullString `json:"note"`
-}
-
-func (q *Queries) UpdateFuelExpenseBBM(ctx context.Context, arg UpdateFuelExpenseBBMParams) (FuelExpense, error) {
-	row := q.db.QueryRowContext(ctx, updateFuelExpenseBBM,
-		arg.ID,
-		arg.Liter,
-		arg.PricePerLiter,
-		arg.OdometerBefore,
-		arg.OdometerAfter,
-		arg.TotalAmount,
-		arg.Note,
-	)
-	var i FuelExpense
-	err := row.Scan(
-		&i.ID,
-		&i.DriverId,
-		&i.VehicleId,
-		&i.BookingId,
-		&i.FuelType,
-		&i.Liter,
-		&i.PricePerLiter,
-		&i.OdometerBefore,
-		&i.OdometerAfter,
-		&i.Kwh,
-		&i.PricePerKwh,
-		&i.BatteryBefore,
-		&i.BatteryAfter,
-		&i.TotalAmount,
-		&i.Note,
-		&i.CreatedAt,
-	)
-	return i, err
-}
-
-const updateFuelExpenseListrik = `-- name: UpdateFuelExpenseListrik :one
-UPDATE fuel_expenses
-SET kwh = $2, "pricePerKwh" = $3, "batteryBefore" = $4,
-    "batteryAfter" = $5, "totalAmount" = $6, note = $7
-WHERE id = $1 RETURNING id, "driverId", "vehicleId", "bookingId", "fuelType", liter, "pricePerLiter", "odometerBefore", "odometerAfter", kwh, "pricePerKwh", "batteryBefore", "batteryAfter", "totalAmount", note, "createdAt"
-`
-
-type UpdateFuelExpenseListrikParams struct {
+type UpdateFuelExpenseParams struct {
 	ID            int32          `json:"id"`
-	Kwh           sql.NullString `json:"kwh"`
-	PricePerKwh   sql.NullString `json:"pricePerKwh"`
+	VehicleId     int32          `json:"vehicleId"`
+	FuelTypeId    int32          `json:"fuelTypeId"`
+	BookingId     sql.NullInt32  `json:"bookingId"`
+	DriverId      sql.NullInt32  `json:"driverId"`
+	RecordedById  int32          `json:"recordedById"`
+	Odometer      sql.NullInt32  `json:"odometer"`
+	Quantity      string         `json:"quantity"`
+	PricePerUnit  string         `json:"pricePerUnit"`
+	TotalCost     string         `json:"totalCost"`
 	BatteryBefore sql.NullString `json:"batteryBefore"`
 	BatteryAfter  sql.NullString `json:"batteryAfter"`
-	TotalAmount   string         `json:"totalAmount"`
+	Location      string         `json:"location"`
+	StationName   sql.NullString `json:"stationName"`
 	Note          sql.NullString `json:"note"`
 }
 
-func (q *Queries) UpdateFuelExpenseListrik(ctx context.Context, arg UpdateFuelExpenseListrikParams) (FuelExpense, error) {
-	row := q.db.QueryRowContext(ctx, updateFuelExpenseListrik,
+func (q *Queries) UpdateFuelExpense(ctx context.Context, arg UpdateFuelExpenseParams) (FuelExpense, error) {
+	row := q.db.QueryRowContext(ctx, updateFuelExpense,
 		arg.ID,
-		arg.Kwh,
-		arg.PricePerKwh,
+		arg.VehicleId,
+		arg.FuelTypeId,
+		arg.BookingId,
+		arg.DriverId,
+		arg.RecordedById,
+		arg.Odometer,
+		arg.Quantity,
+		arg.PricePerUnit,
+		arg.TotalCost,
 		arg.BatteryBefore,
 		arg.BatteryAfter,
-		arg.TotalAmount,
+		arg.Location,
+		arg.StationName,
 		arg.Note,
 	)
 	var i FuelExpense
 	err := row.Scan(
 		&i.ID,
-		&i.DriverId,
 		&i.VehicleId,
+		&i.FuelTypeId,
 		&i.BookingId,
-		&i.FuelType,
-		&i.Liter,
-		&i.PricePerLiter,
-		&i.OdometerBefore,
-		&i.OdometerAfter,
-		&i.Kwh,
-		&i.PricePerKwh,
+		&i.DriverId,
+		&i.RecordedById,
+		&i.Odometer,
+		&i.Quantity,
+		&i.PricePerUnit,
+		&i.TotalCost,
 		&i.BatteryBefore,
 		&i.BatteryAfter,
-		&i.TotalAmount,
+		&i.Location,
+		&i.StationName,
 		&i.Note,
 		&i.CreatedAt,
 	)

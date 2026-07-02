@@ -10,7 +10,7 @@ import (
 )
 
 type FuelExpenseService struct {
-	q *repository.Queries
+	q repository.Querier
 }
 
 func NewFuelExpenseService(db *sql.DB) *FuelExpenseService {
@@ -19,21 +19,26 @@ func NewFuelExpenseService(db *sql.DB) *FuelExpenseService {
 
 type CreateFuelExpenseBBMRequest struct {
 	VehicleID      int32   `json:"vehicleId"      validate:"required"`
+	FuelTypeID     int32   `json:"fuelTypeId"     validate:"required"`
 	BookingID      *int32  `json:"bookingId"`
-	Liter          float64 `json:"liter"          validate:"required,gt=0"`
-	PricePerLiter  float64 `json:"pricePerLiter"  validate:"required,gt=0"`
-	OdometerBefore int32   `json:"odometerBefore" validate:"required"`
-	OdometerAfter  int32   `json:"odometerAfter"  validate:"required"`
+	Quantity       float64 `json:"quantity"       validate:"required,gt=0"`
+	PricePerUnit   float64 `json:"pricePerUnit"`
+	Odometer       int32   `json:"odometer"       validate:"required"`
+	Location       string  `json:"location"       validate:"required"`
+	StationName    string  `json:"stationName"`
 	Note           string  `json:"note"`
 }
 
 type CreateFuelExpenseListrikRequest struct {
 	VehicleID     int32   `json:"vehicleId"     validate:"required"`
+	FuelTypeID    int32   `json:"fuelTypeId"    validate:"required"`
 	BookingID     *int32  `json:"bookingId"`
-	Kwh           float64 `json:"kwh"           validate:"required,gt=0"`
-	PricePerKwh   float64 `json:"pricePerKwh"   validate:"required,gt=0"`
+	Quantity      float64 `json:"quantity"      validate:"required,gt=0"`
+	PricePerUnit  float64 `json:"pricePerUnit"`
 	BatteryBefore float64 `json:"batteryBefore" validate:"min=0,max=100"`
 	BatteryAfter  float64 `json:"batteryAfter"  validate:"min=0,max=100"`
+	Location      string  `json:"location"      validate:"required"`
+	StationName   string  `json:"stationName"`
 	Note          string  `json:"note"`
 }
 
@@ -45,26 +50,26 @@ func numericStr(f float64) string {
 	return fmt.Sprintf("%g", f)
 }
 
-func nullNumeric(f *float64) sql.NullString {
-	if f == nil {
-		return sql.NullString{}
-	}
-	return numericFromFloat(*f)
-}
-
 func serializeFuelExpenseRow(fe repository.ListFuelExpensesRow) map[string]any {
 	return map[string]any{
-		"id":          fe.ID,
-		"driverId":    fe.DriverId,
-		"driverName":  fe.DriverName,
-		"vehicleId":   fe.VehicleId,
-		"plateNumber": fe.PlateNumber,
-		"vehicleName": fe.VehicleName,
-		"bookingId":   nullInt32(fe.BookingId),
-		"fuelType":    string(fe.FuelType),
-		"totalAmount": fe.TotalAmount,
-		"note":        nullStr(fe.Note),
-		"createdAt":   fe.CreatedAt,
+		"id":           fe.ID,
+		"vehicleId":    fe.VehicleId,
+		"plateNumber":  fe.PlateNumber,
+		"vehicleName":  fe.VehicleName,
+		"fuelTypeId":   fe.FuelTypeId,
+		"fuelCategory": fe.FuelCategoryName,
+		"bookingId":    fe.BookingId.Int32,
+		"driverId":     fe.DriverId.Int32,
+		"driverName":   fe.DriverName.String,
+		"recordedById": fe.RecordedById,
+		"odometer":     fe.Odometer.Int32,
+		"quantity":     fe.Quantity,
+		"pricePerUnit": fe.PricePerUnit,
+		"totalCost":    fe.TotalCost,
+		"location":     fe.Location,
+		"stationName":  fe.StationName.String,
+		"note":         fe.Note.String,
+		"createdAt":    fe.CreatedAt,
 	}
 }
 
@@ -80,7 +85,7 @@ func (s *FuelExpenseService) List(ctx context.Context, page, limit int, driverID
 		params.VehicleID = sql.NullInt32{Int32: *vehicleID, Valid: true}
 	}
 	if fuelType != nil {
-		params.FuelType = repository.NullFuelType{FuelType: repository.FuelType(*fuelType), Valid: true}
+		params.FuelCategory = repository.NullFuelCategory{FuelCategory: repository.FuelCategory(*fuelType), Valid: true}
 	}
 
 	rows, err := s.q.ListFuelExpenses(ctx, params)
@@ -88,7 +93,7 @@ func (s *FuelExpenseService) List(ctx context.Context, page, limit int, driverID
 		return nil, 0, err
 	}
 	total, _ := s.q.CountFuelExpenses(ctx, repository.CountFuelExpensesParams{
-		DriverID: params.DriverID, VehicleID: params.VehicleID, FuelType: params.FuelType,
+		DriverID: params.DriverID, VehicleID: params.VehicleID, FuelCategory: params.FuelCategory,
 	})
 	out := make([]map[string]any, len(rows))
 	for i, r := range rows {
@@ -102,34 +107,39 @@ func (s *FuelExpenseService) GetByID(ctx context.Context, id int32) (map[string]
 	if err != nil {
 		return nil, util.ErrNotFound
 	}
-	return serializeFuelExpenseRow(repository.ListFuelExpensesRow{
-		ID: fe.ID, DriverId: fe.DriverId, DriverName: fe.DriverName,
-		VehicleId: fe.VehicleId, PlateNumber: fe.PlateNumber, VehicleName: fe.VehicleName,
-		BookingId: fe.BookingId, FuelType: fe.FuelType, TotalAmount: fe.TotalAmount,
-		Note: fe.Note, CreatedAt: fe.CreatedAt,
-	}), nil
+	return serializeFuelExpenseRow(repository.ListFuelExpensesRow(fe)), nil
 }
 
-func (s *FuelExpenseService) CreateBBM(ctx context.Context, req CreateFuelExpenseBBMRequest, driverID int32) (map[string]any, error) {
-	if req.OdometerAfter <= req.OdometerBefore {
-		return nil, util.NewError(400, "odometerAfter must be greater than odometerBefore", util.ErrBadRequest)
+func (s *FuelExpenseService) CreateBBM(ctx context.Context, req CreateFuelExpenseBBMRequest, recordedByID int32, driverID *int32) (map[string]any, error) {
+	if req.PricePerUnit == 0 {
+		ms, err := s.q.GetMasterSettingByKey(ctx, "price_per_liter_bbm")
+		if err == nil {
+			req.PricePerUnit = util.ParseStringToFloat64(ms.Value)
+		}
 	}
-	total := req.Liter * req.PricePerLiter
+	total := req.Quantity * req.PricePerUnit
 	var bookingID sql.NullInt32
 	if req.BookingID != nil {
 		bookingID = sql.NullInt32{Int32: *req.BookingID, Valid: true}
 	}
+	var dID sql.NullInt32
+	if driverID != nil {
+		dID = sql.NullInt32{Int32: *driverID, Valid: true}
+	}
 
-	fe, err := s.q.CreateFuelExpenseBBM(ctx, repository.CreateFuelExpenseBBMParams{
-		DriverId:       driverID,
-		VehicleId:      req.VehicleID,
-		BookingId:      bookingID,
-		Liter:          numericFromFloat(req.Liter),
-		PricePerLiter:  numericFromFloat(req.PricePerLiter),
-		OdometerBefore: sql.NullInt32{Int32: req.OdometerBefore, Valid: true},
-		OdometerAfter:  sql.NullInt32{Int32: req.OdometerAfter, Valid: true},
-		TotalAmount:    numericStr(total),
-		Note:           sql.NullString{String: req.Note, Valid: req.Note != ""},
+	fe, err := s.q.CreateFuelExpense(ctx, repository.CreateFuelExpenseParams{
+		VehicleId:    req.VehicleID,
+		FuelTypeId:   req.FuelTypeID,
+		BookingId:    bookingID,
+		DriverId:     dID,
+		RecordedById: recordedByID,
+		Odometer:     sql.NullInt32{Int32: req.Odometer, Valid: true},
+		Quantity:     numericStr(req.Quantity),
+		PricePerUnit: numericStr(req.PricePerUnit),
+		TotalCost:    numericStr(total),
+		Location:     req.Location,
+		StationName:  sql.NullString{String: req.StationName, Valid: req.StationName != ""},
+		Note:         sql.NullString{String: req.Note, Valid: req.Note != ""},
 	})
 	if err != nil {
 		return nil, err
@@ -137,22 +147,36 @@ func (s *FuelExpenseService) CreateBBM(ctx context.Context, req CreateFuelExpens
 	return s.GetByID(ctx, fe.ID)
 }
 
-func (s *FuelExpenseService) CreateListrik(ctx context.Context, req CreateFuelExpenseListrikRequest, driverID int32) (map[string]any, error) {
-	total := req.Kwh * req.PricePerKwh
+func (s *FuelExpenseService) CreateListrik(ctx context.Context, req CreateFuelExpenseListrikRequest, recordedByID int32, driverID *int32) (map[string]any, error) {
+	if req.PricePerUnit == 0 {
+		ms, err := s.q.GetMasterSettingByKey(ctx, "price_per_kwh_listrik")
+		if err == nil {
+			req.PricePerUnit = util.ParseStringToFloat64(ms.Value)
+		}
+	}
+	total := req.Quantity * req.PricePerUnit
 	var bookingID sql.NullInt32
 	if req.BookingID != nil {
 		bookingID = sql.NullInt32{Int32: *req.BookingID, Valid: true}
 	}
+	var dID sql.NullInt32
+	if driverID != nil {
+		dID = sql.NullInt32{Int32: *driverID, Valid: true}
+	}
 
-	fe, err := s.q.CreateFuelExpenseListrik(ctx, repository.CreateFuelExpenseListrikParams{
-		DriverId:      driverID,
+	fe, err := s.q.CreateFuelExpense(ctx, repository.CreateFuelExpenseParams{
 		VehicleId:     req.VehicleID,
+		FuelTypeId:    req.FuelTypeID,
 		BookingId:     bookingID,
-		Kwh:           numericFromFloat(req.Kwh),
-		PricePerKwh:   numericFromFloat(req.PricePerKwh),
+		DriverId:      dID,
+		RecordedById:  recordedByID,
+		Quantity:      numericStr(req.Quantity),
+		PricePerUnit:  numericStr(req.PricePerUnit),
+		TotalCost:     numericStr(total),
 		BatteryBefore: numericFromFloat(req.BatteryBefore),
 		BatteryAfter:  numericFromFloat(req.BatteryAfter),
-		TotalAmount:   numericStr(total),
+		Location:      req.Location,
+		StationName:   sql.NullString{String: req.StationName, Valid: req.StationName != ""},
 		Note:          sql.NullString{String: req.Note, Valid: req.Note != ""},
 	})
 	if err != nil {

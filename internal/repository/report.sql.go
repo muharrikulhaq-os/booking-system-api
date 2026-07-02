@@ -145,7 +145,7 @@ const reportDriverActivity = `-- name: ReportDriverActivity :many
 SELECT d.id AS driver_id, u.name AS driver_name, u."employeeId",
        COUNT(DISTINCT b.id) AS total_bookings,
        SUM(CASE WHEN b.status = 'COMPLETED' THEN 1 ELSE 0 END) AS completed_bookings,
-       COALESCE(SUM(fe."totalAmount"), 0) AS total_fuel_expenses
+       COALESCE(SUM(fe."totalCost"), 0) AS total_fuel_expenses
 FROM drivers d
 JOIN users u ON u.id = d."userId"
 LEFT JOIN bookings b ON b."assignedDriverId" = d.id
@@ -272,21 +272,22 @@ func (q *Queries) ReportFuelExpenses(ctx context.Context) ([]VFuelExpenseSummary
 }
 
 const reportMaintenanceCost = `-- name: ReportMaintenanceCost :many
-SELECT mr."resourceId", r.name AS resource_name, r.type AS resource_type,
+SELECT mr."vehicleId", r.name AS resource_name, 'VEHICLE' AS resource_type,
        COUNT(mr.id) AS total_records,
-       COALESCE(SUM(mr.cost), 0) AS total_cost
+       COALESCE(SUM(mr."totalCost"), 0) AS total_cost
 FROM maintenance_records mr
-JOIN resources r ON r.id = mr."resourceId"
-GROUP BY mr."resourceId", r.name, r.type
+JOIN vehicles v ON v.id = mr."vehicleId"
+JOIN resources r ON r.id = v."resourceId"
+GROUP BY mr."vehicleId", r.name
 ORDER BY total_cost DESC
 `
 
 type ReportMaintenanceCostRow struct {
-	ResourceId   int32        `json:"resourceId"`
-	ResourceName string       `json:"resource_name"`
-	ResourceType ResourceType `json:"resource_type"`
-	TotalRecords int64        `json:"total_records"`
-	TotalCost    interface{}  `json:"total_cost"`
+	VehicleId    int32       `json:"vehicleId"`
+	ResourceName string      `json:"resource_name"`
+	ResourceType string      `json:"resource_type"`
+	TotalRecords int64       `json:"total_records"`
+	TotalCost    interface{} `json:"total_cost"`
 }
 
 func (q *Queries) ReportMaintenanceCost(ctx context.Context) ([]ReportMaintenanceCostRow, error) {
@@ -299,7 +300,7 @@ func (q *Queries) ReportMaintenanceCost(ctx context.Context) ([]ReportMaintenanc
 	for rows.Next() {
 		var i ReportMaintenanceCostRow
 		if err := rows.Scan(
-			&i.ResourceId,
+			&i.VehicleId,
 			&i.ResourceName,
 			&i.ResourceType,
 			&i.TotalRecords,

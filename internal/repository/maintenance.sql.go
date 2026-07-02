@@ -13,46 +13,62 @@ import (
 
 const countMaintenance = `-- name: CountMaintenance :one
 SELECT COUNT(*) FROM maintenance_records
-WHERE ($1::int IS NULL OR "resourceId" = $1::int)
+WHERE ($1::int IS NULL OR "vehicleId" = $1::int)
 `
 
-func (q *Queries) CountMaintenance(ctx context.Context, resourceID sql.NullInt32) (int64, error) {
-	row := q.db.QueryRowContext(ctx, countMaintenance, resourceID)
+func (q *Queries) CountMaintenance(ctx context.Context, vehicleID sql.NullInt32) (int64, error) {
+	row := q.db.QueryRowContext(ctx, countMaintenance, vehicleID)
 	var count int64
 	err := row.Scan(&count)
 	return count, err
 }
 
 const createMaintenance = `-- name: CreateMaintenance :one
-INSERT INTO maintenance_records ("resourceId", description, "startDate", cost, "createdById")
-VALUES ($1, $2, $3, $4, $5) RETURNING id, "resourceId", description, "startDate", "endDate", cost, "createdById", "createdAt"
+INSERT INTO maintenance_records (
+    "vehicleId", "maintenanceTypeId", description, odometer,
+    "totalCost", "vendorName", location, "startDate", "endDate", "recordedById"
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING id, "vehicleId", "maintenanceTypeId", description, odometer, "totalCost", "vendorName", location, "startDate", "endDate", "recordedById", "createdAt"
 `
 
 type CreateMaintenanceParams struct {
-	ResourceId  int32          `json:"resourceId"`
-	Description string         `json:"description"`
-	StartDate   time.Time      `json:"startDate"`
-	Cost        sql.NullString `json:"cost"`
-	CreatedById int32          `json:"createdById"`
+	VehicleId         int32          `json:"vehicleId"`
+	MaintenanceTypeId sql.NullInt32  `json:"maintenanceTypeId"`
+	Description       string         `json:"description"`
+	Odometer          sql.NullInt32  `json:"odometer"`
+	TotalCost         sql.NullString `json:"totalCost"`
+	VendorName        sql.NullString `json:"vendorName"`
+	Location          string         `json:"location"`
+	StartDate         time.Time      `json:"startDate"`
+	EndDate           sql.NullTime   `json:"endDate"`
+	RecordedById      int32          `json:"recordedById"`
 }
 
 func (q *Queries) CreateMaintenance(ctx context.Context, arg CreateMaintenanceParams) (MaintenanceRecord, error) {
 	row := q.db.QueryRowContext(ctx, createMaintenance,
-		arg.ResourceId,
+		arg.VehicleId,
+		arg.MaintenanceTypeId,
 		arg.Description,
+		arg.Odometer,
+		arg.TotalCost,
+		arg.VendorName,
+		arg.Location,
 		arg.StartDate,
-		arg.Cost,
-		arg.CreatedById,
+		arg.EndDate,
+		arg.RecordedById,
 	)
 	var i MaintenanceRecord
 	err := row.Scan(
 		&i.ID,
-		&i.ResourceId,
+		&i.VehicleId,
+		&i.MaintenanceTypeId,
 		&i.Description,
+		&i.Odometer,
+		&i.TotalCost,
+		&i.VendorName,
+		&i.Location,
 		&i.StartDate,
 		&i.EndDate,
-		&i.Cost,
-		&i.CreatedById,
+		&i.RecordedById,
 		&i.CreatedAt,
 	)
 	return i, err
@@ -68,26 +84,31 @@ func (q *Queries) DeleteMaintenance(ctx context.Context, id int32) error {
 }
 
 const getMaintenanceByID = `-- name: GetMaintenanceByID :one
-SELECT mr.id, mr."resourceId", mr.description, mr."startDate", mr."endDate", mr.cost, mr."createdById", mr."createdAt", r.name AS resource_name, r.type AS resource_type,
+SELECT mr.id, mr."vehicleId", mr."maintenanceTypeId", mr.description, mr.odometer, mr."totalCost", mr."vendorName", mr.location, mr."startDate", mr."endDate", mr."recordedById", mr."createdAt", r.name AS vehicle_name, v."plateNumber",
        u.name AS created_by_name
 FROM maintenance_records mr
-JOIN resources r ON r.id = mr."resourceId"
-JOIN users u ON u.id = mr."createdById"
+JOIN vehicles v ON v.id = mr."vehicleId"
+JOIN resources r ON r.id = v."resourceId"
+JOIN users u ON u.id = mr."recordedById"
 WHERE mr.id = $1 LIMIT 1
 `
 
 type GetMaintenanceByIDRow struct {
-	ID            int32          `json:"id"`
-	ResourceId    int32          `json:"resourceId"`
-	Description   string         `json:"description"`
-	StartDate     time.Time      `json:"startDate"`
-	EndDate       sql.NullTime   `json:"endDate"`
-	Cost          sql.NullString `json:"cost"`
-	CreatedById   int32          `json:"createdById"`
-	CreatedAt     time.Time      `json:"createdAt"`
-	ResourceName  string         `json:"resource_name"`
-	ResourceType  ResourceType   `json:"resource_type"`
-	CreatedByName string         `json:"created_by_name"`
+	ID                int32          `json:"id"`
+	VehicleId         int32          `json:"vehicleId"`
+	MaintenanceTypeId sql.NullInt32  `json:"maintenanceTypeId"`
+	Description       string         `json:"description"`
+	Odometer          sql.NullInt32  `json:"odometer"`
+	TotalCost         sql.NullString `json:"totalCost"`
+	VendorName        sql.NullString `json:"vendorName"`
+	Location          string         `json:"location"`
+	StartDate         time.Time      `json:"startDate"`
+	EndDate           sql.NullTime   `json:"endDate"`
+	RecordedById      int32          `json:"recordedById"`
+	CreatedAt         time.Time      `json:"createdAt"`
+	VehicleName       string         `json:"vehicle_name"`
+	PlateNumber       string         `json:"plateNumber"`
+	CreatedByName     string         `json:"created_by_name"`
 }
 
 func (q *Queries) GetMaintenanceByID(ctx context.Context, id int32) (GetMaintenanceByIDRow, error) {
@@ -95,53 +116,62 @@ func (q *Queries) GetMaintenanceByID(ctx context.Context, id int32) (GetMaintena
 	var i GetMaintenanceByIDRow
 	err := row.Scan(
 		&i.ID,
-		&i.ResourceId,
+		&i.VehicleId,
+		&i.MaintenanceTypeId,
 		&i.Description,
+		&i.Odometer,
+		&i.TotalCost,
+		&i.VendorName,
+		&i.Location,
 		&i.StartDate,
 		&i.EndDate,
-		&i.Cost,
-		&i.CreatedById,
+		&i.RecordedById,
 		&i.CreatedAt,
-		&i.ResourceName,
-		&i.ResourceType,
+		&i.VehicleName,
+		&i.PlateNumber,
 		&i.CreatedByName,
 	)
 	return i, err
 }
 
 const listMaintenance = `-- name: ListMaintenance :many
-SELECT mr.id, mr."resourceId", mr.description, mr."startDate", mr."endDate", mr.cost, mr."createdById", mr."createdAt", r.name AS resource_name, r.type AS resource_type,
+SELECT mr.id, mr."vehicleId", mr."maintenanceTypeId", mr.description, mr.odometer, mr."totalCost", mr."vendorName", mr.location, mr."startDate", mr."endDate", mr."recordedById", mr."createdAt", r.name AS vehicle_name, v."plateNumber",
        u.name AS created_by_name
 FROM maintenance_records mr
-JOIN resources r ON r.id = mr."resourceId"
-JOIN users u ON u.id = mr."createdById"
-WHERE ($3::int IS NULL OR mr."resourceId" = $3::int)
+JOIN vehicles v ON v.id = mr."vehicleId"
+JOIN resources r ON r.id = v."resourceId"
+JOIN users u ON u.id = mr."recordedById"
+WHERE ($3::int IS NULL OR mr."vehicleId" = $3::int)
 ORDER BY mr."startDate" DESC
 LIMIT $1 OFFSET $2
 `
 
 type ListMaintenanceParams struct {
-	Limit      int32         `json:"limit"`
-	Offset     int32         `json:"offset"`
-	ResourceID sql.NullInt32 `json:"resource_id"`
+	Limit     int32         `json:"limit"`
+	Offset    int32         `json:"offset"`
+	VehicleID sql.NullInt32 `json:"vehicle_id"`
 }
 
 type ListMaintenanceRow struct {
-	ID            int32          `json:"id"`
-	ResourceId    int32          `json:"resourceId"`
-	Description   string         `json:"description"`
-	StartDate     time.Time      `json:"startDate"`
-	EndDate       sql.NullTime   `json:"endDate"`
-	Cost          sql.NullString `json:"cost"`
-	CreatedById   int32          `json:"createdById"`
-	CreatedAt     time.Time      `json:"createdAt"`
-	ResourceName  string         `json:"resource_name"`
-	ResourceType  ResourceType   `json:"resource_type"`
-	CreatedByName string         `json:"created_by_name"`
+	ID                int32          `json:"id"`
+	VehicleId         int32          `json:"vehicleId"`
+	MaintenanceTypeId sql.NullInt32  `json:"maintenanceTypeId"`
+	Description       string         `json:"description"`
+	Odometer          sql.NullInt32  `json:"odometer"`
+	TotalCost         sql.NullString `json:"totalCost"`
+	VendorName        sql.NullString `json:"vendorName"`
+	Location          string         `json:"location"`
+	StartDate         time.Time      `json:"startDate"`
+	EndDate           sql.NullTime   `json:"endDate"`
+	RecordedById      int32          `json:"recordedById"`
+	CreatedAt         time.Time      `json:"createdAt"`
+	VehicleName       string         `json:"vehicle_name"`
+	PlateNumber       string         `json:"plateNumber"`
+	CreatedByName     string         `json:"created_by_name"`
 }
 
 func (q *Queries) ListMaintenance(ctx context.Context, arg ListMaintenanceParams) ([]ListMaintenanceRow, error) {
-	rows, err := q.db.QueryContext(ctx, listMaintenance, arg.Limit, arg.Offset, arg.ResourceID)
+	rows, err := q.db.QueryContext(ctx, listMaintenance, arg.Limit, arg.Offset, arg.VehicleID)
 	if err != nil {
 		return nil, err
 	}
@@ -151,15 +181,19 @@ func (q *Queries) ListMaintenance(ctx context.Context, arg ListMaintenanceParams
 		var i ListMaintenanceRow
 		if err := rows.Scan(
 			&i.ID,
-			&i.ResourceId,
+			&i.VehicleId,
+			&i.MaintenanceTypeId,
 			&i.Description,
+			&i.Odometer,
+			&i.TotalCost,
+			&i.VendorName,
+			&i.Location,
 			&i.StartDate,
 			&i.EndDate,
-			&i.Cost,
-			&i.CreatedById,
+			&i.RecordedById,
 			&i.CreatedAt,
-			&i.ResourceName,
-			&i.ResourceType,
+			&i.VehicleName,
+			&i.PlateNumber,
 			&i.CreatedByName,
 		); err != nil {
 			return nil, err
@@ -177,35 +211,50 @@ func (q *Queries) ListMaintenance(ctx context.Context, arg ListMaintenanceParams
 
 const updateMaintenance = `-- name: UpdateMaintenance :one
 UPDATE maintenance_records
-SET description = $2, "startDate" = $3, "endDate" = $4, cost = $5
-WHERE id = $1 RETURNING id, "resourceId", description, "startDate", "endDate", cost, "createdById", "createdAt"
+SET "vehicleId" = $2, "maintenanceTypeId" = $3, description = $4, odometer = $5,
+    "totalCost" = $6, "vendorName" = $7, location = $8, "startDate" = $9, "endDate" = $10
+WHERE id = $1 RETURNING id, "vehicleId", "maintenanceTypeId", description, odometer, "totalCost", "vendorName", location, "startDate", "endDate", "recordedById", "createdAt"
 `
 
 type UpdateMaintenanceParams struct {
-	ID          int32          `json:"id"`
-	Description string         `json:"description"`
-	StartDate   time.Time      `json:"startDate"`
-	EndDate     sql.NullTime   `json:"endDate"`
-	Cost        sql.NullString `json:"cost"`
+	ID                int32          `json:"id"`
+	VehicleId         int32          `json:"vehicleId"`
+	MaintenanceTypeId sql.NullInt32  `json:"maintenanceTypeId"`
+	Description       string         `json:"description"`
+	Odometer          sql.NullInt32  `json:"odometer"`
+	TotalCost         sql.NullString `json:"totalCost"`
+	VendorName        sql.NullString `json:"vendorName"`
+	Location          string         `json:"location"`
+	StartDate         time.Time      `json:"startDate"`
+	EndDate           sql.NullTime   `json:"endDate"`
 }
 
 func (q *Queries) UpdateMaintenance(ctx context.Context, arg UpdateMaintenanceParams) (MaintenanceRecord, error) {
 	row := q.db.QueryRowContext(ctx, updateMaintenance,
 		arg.ID,
+		arg.VehicleId,
+		arg.MaintenanceTypeId,
 		arg.Description,
+		arg.Odometer,
+		arg.TotalCost,
+		arg.VendorName,
+		arg.Location,
 		arg.StartDate,
 		arg.EndDate,
-		arg.Cost,
 	)
 	var i MaintenanceRecord
 	err := row.Scan(
 		&i.ID,
-		&i.ResourceId,
+		&i.VehicleId,
+		&i.MaintenanceTypeId,
 		&i.Description,
+		&i.Odometer,
+		&i.TotalCost,
+		&i.VendorName,
+		&i.Location,
 		&i.StartDate,
 		&i.EndDate,
-		&i.Cost,
-		&i.CreatedById,
+		&i.RecordedById,
 		&i.CreatedAt,
 	)
 	return i, err
