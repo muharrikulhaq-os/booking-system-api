@@ -216,6 +216,72 @@ func (q *Queries) GetDriverCurrentAssignment(ctx context.Context, driverid int32
 	return i, err
 }
 
+const listAvailableDrivers = `-- name: ListAvailableDrivers :many
+SELECT d.id AS driver_id, u.name AS driver_name, u."employeeId",
+       v.id AS vehicle_id, v."plateNumber", v.capacity,
+       COALESCE(
+           (SELECT SUM(b."passengerCount")::int
+            FROM bookings b
+            WHERE b."assignedDriverId" = d.id
+              AND b.status IN ('APPROVED', 'ONGOING')
+              AND b."startDate" < $1::timestamptz
+              AND b."endDate" > $2::timestamptz
+           ), 0
+       )::int AS overlapping_passengers
+FROM drivers d
+JOIN users u ON u.id = d."userId"
+JOIN driver_assignments da ON da."driverId" = d.id AND da."releasedAt" IS NULL
+JOIN vehicles v ON v.id = da."vehicleId"
+WHERE d."isActive" = TRUE
+ORDER BY overlapping_passengers ASC
+`
+
+type ListAvailableDriversParams struct {
+	EndTo     time.Time `json:"end_to"`
+	StartFrom time.Time `json:"start_from"`
+}
+
+type ListAvailableDriversRow struct {
+	DriverID              int32  `json:"driver_id"`
+	DriverName            string `json:"driver_name"`
+	EmployeeId            string `json:"employeeId"`
+	VehicleID             int32  `json:"vehicle_id"`
+	PlateNumber           string `json:"plateNumber"`
+	Capacity              int16  `json:"capacity"`
+	OverlappingPassengers int32  `json:"overlapping_passengers"`
+}
+
+func (q *Queries) ListAvailableDrivers(ctx context.Context, arg ListAvailableDriversParams) ([]ListAvailableDriversRow, error) {
+	rows, err := q.db.QueryContext(ctx, listAvailableDrivers, arg.EndTo, arg.StartFrom)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListAvailableDriversRow
+	for rows.Next() {
+		var i ListAvailableDriversRow
+		if err := rows.Scan(
+			&i.DriverID,
+			&i.DriverName,
+			&i.EmployeeId,
+			&i.VehicleID,
+			&i.PlateNumber,
+			&i.Capacity,
+			&i.OverlappingPassengers,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listDrivers = `-- name: ListDrivers :many
 SELECT d.id, d."userId", d."licenseNumber", d."phoneNumber", d."isActive", d."createdAt", u.name AS user_name, u."employeeId", u.email,
        v."plateNumber" AS assigned_plate

@@ -320,7 +320,7 @@ func (q *Queries) ReportMaintenanceCost(ctx context.Context) ([]ReportMaintenanc
 }
 
 const reportOverdueBookings = `-- name: ReportOverdueBookings :many
-SELECT b.id, b."userId", b."resourceId", b."startDate", b."endDate", b.purpose, b.status, b."approvedById", b."approvedAt", b."assignedDriverId", b."assignedVehicleId", b."assignedAt", b."returnedAt", b."createdAt", b."updatedAt", b."originalResourceId",
+SELECT b.id, b."userId", b."resourceId", b."startDate", b."endDate", b.purpose, b."passengerCount", b.status, b."approvedById", b."approvedAt", b."assignedDriverId", b."assignedVehicleId", b."assignedAt", b."returnedAt", b."createdAt", b."updatedAt", b."originalResourceId",
        u.name AS user_name, u."employeeId",
        r.name AS resource_name, r.type AS resource_type
 FROM bookings b
@@ -337,6 +337,7 @@ type ReportOverdueBookingsRow struct {
 	StartDate          time.Time     `json:"startDate"`
 	EndDate            time.Time     `json:"endDate"`
 	Purpose            string        `json:"purpose"`
+	PassengerCount     int32         `json:"passengerCount"`
 	Status             BookingStatus `json:"status"`
 	ApprovedById       sql.NullInt32 `json:"approvedById"`
 	ApprovedAt         sql.NullTime  `json:"approvedAt"`
@@ -369,6 +370,7 @@ func (q *Queries) ReportOverdueBookings(ctx context.Context) ([]ReportOverdueBoo
 			&i.StartDate,
 			&i.EndDate,
 			&i.Purpose,
+			&i.PassengerCount,
 			&i.Status,
 			&i.ApprovedById,
 			&i.ApprovedAt,

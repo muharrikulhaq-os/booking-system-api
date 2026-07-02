@@ -1,6 +1,8 @@
 package http
 
 import (
+	"time"
+
 	"booking-system-api/internal/middleware"
 	"booking-system-api/internal/service"
 	"booking-system-api/internal/util"
@@ -22,6 +24,7 @@ func (h *DriverHandler) Register(r fiber.Router) {
 
 	g := r.Group("/drivers", auth)
 	g.Get("", h.List)
+	g.Get("/available", h.AvailableDrivers)
 	g.Get("/:driver_id", h.GetByID)
 	g.Post("", admin, h.Create)
 	g.Put("/:driver_id", admin, h.Update)
@@ -135,3 +138,24 @@ func (h *DriverHandler) Assignments(c *fiber.Ctx) error {
 
 // attach the middleware reference so it can be used in handler
 var _ = middleware.GetUserID
+
+func (h *DriverHandler) AvailableDrivers(c *fiber.Ctx) error {
+	s := c.Query("startDate")
+	e := c.Query("endDate")
+	if s == "" || e == "" {
+		return fiber.NewError(fiber.StatusBadRequest, "startDate and endDate are required")
+	}
+	start, err := time.Parse(time.RFC3339, s)
+	if err != nil {
+		return fiber.NewError(fiber.StatusBadRequest, "invalid startDate format")
+	}
+	end, err := time.Parse(time.RFC3339, e)
+	if err != nil {
+		return fiber.NewError(fiber.StatusBadRequest, "invalid endDate format")
+	}
+	data, err := h.svc.GetAvailableDrivers(c.Context(), start, end)
+	if err != nil {
+		return err
+	}
+	return util.OK(c, "Available drivers retrieved", data)
+}

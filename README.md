@@ -1233,7 +1233,9 @@ Ajukan permohonan booking baru.
   "resourceId": 10,
   "startDate": "2025-06-01T08:00:00Z",
   "endDate": "2025-06-01T18:00:00Z",
-  "purpose": "Kunjungan klien ke Bandung"
+  "purpose": "Kunjungan klien ke Bandung",
+  "passengerCount": 4,
+  "assignedDriverId": 3
 }
 ```
 
@@ -1243,8 +1245,10 @@ Ajukan permohonan booking baru.
 | `startDate` | string | ✅ | Format RFC3339 |
 | `endDate` | string | ✅ | Format RFC3339 |
 | `purpose` | string | ✅ | Tujuan peminjaman |
+| `passengerCount` | integer | ✅ | Jumlah penumpang (min: 1) |
+| `assignedDriverId` | integer | ❌ | ID Supir (opsional, Auto-assign jika null) |
 
-> ⚠️ Sistem otomatis mengecek conflict jadwal. Jika resource sedang dipesan pada rentang waktu yang sama, request akan ditolak dengan `409 Conflict`.
+> ⚠️ Sistem akan mengecek jadwal. Konflik untuk ruangan bersifat strict. Namun untuk kendaraan (berdasarkan paradigma System-Validated), beberapa request dapat berstatus PENDING secara paralel sebelum di-_approve_ oleh Admin.
 
 **Response `201`:** *(data booking)*
 
@@ -1279,6 +1283,8 @@ Setujui booking.
 ```
 
 **Response `200`:** *(data booking dengan status `APPROVED`)*
+
+> **Catatan (Soft Warning):** Jika kapasitas mobil tersisa tidak mencukupi untuk jumlah `passengerCount` saat ini, API tidak menolak secara hard-block, tetapi akan me-return properti `"warning"` di dalam response body JSON. Admin berhak untuk melakukan _override_ ini (misalnya nanti mensubstitusi resource).
 
 ---
 
@@ -1706,6 +1712,39 @@ Upload lampiran pada booking (surat tugas, dokumen, dll).
 ---
 
 ## 🧑‍✈️ Modul 6 — Driver (`/api/v1/drivers`)
+
+### `GET /api/v1/drivers/available`
+Ambil daftar driver beserta kendaraan yang diassign yang tersedia untuk jadwal booking, termasuk kalkulasi dynamic sisa kursi (remaining seats).
+
+**Akses:** User (Auth required)
+
+**Query Parameters:**
+| Parameter | Type | Required | Keterangan |
+|-----------|------|----------|-----------|
+| `startDate` | string | ✅ | RFC3339 format |
+| `endDate` | string | ✅ | RFC3339 format |
+
+**Response `200`:**
+```json
+{
+  "success": true,
+  "message": "Available drivers retrieved",
+  "data": [
+    {
+      "driverId": 1,
+      "driverName": "Budi",
+      "employeeId": "EMP-001",
+      "vehicleId": 1,
+      "plateNumber": "B 1234 CD",
+      "vehicleCapacity": 6,
+      "overlappingPassengers": 2,
+      "remainingSeats": 4
+    }
+  ]
+}
+```
+
+---
 
 ### `GET /api/v1/drivers`
 Daftar semua driver.
@@ -2969,3 +3008,24 @@ File disimpan berdasarkan kategori dan bulan upload:
   }
 }
 ```
+---
+
+## 💾 Database Migration Guide (Update Terbaru)
+
+Sehubungan dengan pembaruan fitur (Fuel Expense Unified, Maintenance Vehicle Bind, Passenger Count & Capacity Validation), berikut perintah SQL yang perlu dijalankan untuk memperbarui schema lama:
+
+```sql
+-- 1. Tambahkan passengerCount ke bookings
+ALTER TABLE bookings ADD COLUMN passenger_count INT NOT NULL DEFAULT 1;
+
+-- 2. Modifikasi Fuel Expenses
+ALTER TABLE fuel_expenses RENAME COLUMN resource_id TO vehicle_id;
+ALTER TABLE fuel_expenses DROP COLUMN resource_type;
+ALTER TABLE fuel_expenses ALTER COLUMN price_per_unit DROP NOT NULL;
+ALTER TABLE fuel_expenses ALTER COLUMN total_cost DROP NOT NULL;
+
+-- 3. Modifikasi Maintenance Records
+ALTER TABLE maintenance_records RENAME COLUMN resource_id TO vehicle_id;
+ALTER TABLE maintenance_records DROP COLUMN resource_type;
+```
+*(Catatan: Schema utama baru sudah di-bundle pada `000001_init.up.sql` jika melakukan inisialisasi dari awal).*

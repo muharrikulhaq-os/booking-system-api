@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"database/sql"
+	"time"
 
 	"booking-system-api/internal/repository"
 	"booking-system-api/internal/util"
@@ -161,4 +162,29 @@ func (s *DriverService) Release(ctx context.Context, id int32) (map[string]any, 
 
 func (s *DriverService) GetAssignments(ctx context.Context, id int32) (any, error) {
 	return s.q.GetDriverAssignmentHistory(ctx, id)
+}
+
+func (s *DriverService) GetAvailableDrivers(ctx context.Context, start, end time.Time) ([]map[string]any, error) {
+	rows, err := s.q.ListAvailableDrivers(ctx, repository.ListAvailableDriversParams{
+		StartFrom: start,
+		EndTo:     end,
+	})
+	if err != nil {
+		return nil, err
+	}
+	
+	out := make([]map[string]any, len(rows))
+	for i, r := range rows {
+		out[i] = map[string]any{
+			"driverId":              r.DriverID,
+			"driverName":            r.DriverName,
+			"employeeId":            r.EmployeeId,
+			"vehicleId":             r.VehicleID,
+			"plateNumber":           r.PlateNumber,
+			"vehicleCapacity":       r.Capacity,
+			"overlappingPassengers": r.OverlappingPassengers,
+			"remainingSeats":        int(r.Capacity) - int(r.OverlappingPassengers),
+		}
+	}
+	return out, nil
 }

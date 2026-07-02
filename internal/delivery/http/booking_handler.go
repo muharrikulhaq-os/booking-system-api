@@ -120,11 +120,19 @@ func (h *BookingHandler) Approve(c *fiber.Ctx) error {
 	}
 	var req service.ApproveBookingRequest
 	_ = c.BodyParser(&req)
-	data, err := h.svc.Approve(c.Context(), id, req, middleware.GetUserID(c))
+	resp, err := h.svc.Approve(c.Context(), id, req, middleware.GetUserID(c))
 	if err != nil {
 		return err
 	}
-	return util.OK(c, "Booking approved", data)
+	if resp.Warning != "" {
+		return c.Status(fiber.StatusOK).JSON(fiber.Map{
+			"status":  "success",
+			"message": "Booking approved with warning",
+			"warning": resp.Warning,
+			"data":    resp.Data,
+		})
+	}
+	return util.OK(c, "Booking approved", resp.Data)
 }
 
 func (h *BookingHandler) Reject(c *fiber.Ctx) error {

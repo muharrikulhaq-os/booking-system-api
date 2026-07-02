@@ -72,6 +72,7 @@ type Querier interface {
 	GetGuestBookingByToken(ctx context.Context, accesstoken string) (GetGuestBookingByTokenRow, error)
 	GetMaintenanceByID(ctx context.Context, id int32) (GetMaintenanceByIDRow, error)
 	GetMasterSettingByKey(ctx context.Context, key string) (MasterSetting, error)
+	GetOverlappingPassengerCount(ctx context.Context, arg GetOverlappingPassengerCountParams) (int32, error)
 	GetRefreshToken(ctx context.Context, arg GetRefreshTokenParams) (RefreshToken, error)
 	GetResourceByID(ctx context.Context, id int32) (Resource, error)
 	GetRoomByID(ctx context.Context, id int32) (GetRoomByIDRow, error)
@@ -86,6 +87,7 @@ type Querier interface {
 	ListAttachmentsByBooking(ctx context.Context, bookingid sql.NullInt32) ([]ListAttachmentsByBookingRow, error)
 	ListAttachmentsByRoom(ctx context.Context, roomid sql.NullInt32) ([]ListAttachmentsByRoomRow, error)
 	ListAttachmentsByVehicle(ctx context.Context, vehicleid sql.NullInt32) ([]ListAttachmentsByVehicleRow, error)
+	ListAvailableDrivers(ctx context.Context, arg ListAvailableDriversParams) ([]ListAvailableDriversRow, error)
 	ListBookings(ctx context.Context, arg ListBookingsParams) ([]ListBookingsRow, error)
 	ListDepartments(ctx context.Context) ([]Department, error)
 	ListDrivers(ctx context.Context, arg ListDriversParams) ([]ListDriversRow, error)
@@ -128,6 +130,7 @@ type Querier interface {
 	UpdateFuelExpense(ctx context.Context, arg UpdateFuelExpenseParams) (FuelExpense, error)
 	UpdateGuestBookingStatus(ctx context.Context, arg UpdateGuestBookingStatusParams) (GuestBooking, error)
 	UpdateMaintenance(ctx context.Context, arg UpdateMaintenanceParams) (MaintenanceRecord, error)
+	UpdateMergedBooking(ctx context.Context, arg UpdateMergedBookingParams) (Booking, error)
 	UpdateProfilePhoto(ctx context.Context, arg UpdateProfilePhotoParams) (User, error)
 	UpdateResourceName(ctx context.Context, arg UpdateResourceNameParams) error
 	UpdateResourceStatus(ctx context.Context, arg UpdateResourceStatusParams) (Resource, error)

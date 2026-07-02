@@ -174,6 +174,7 @@ CREATE TABLE bookings (
     "startDate"          TIMESTAMPTZ    NOT NULL,
     "endDate"            TIMESTAMPTZ    NOT NULL,
     purpose              TEXT           NOT NULL,
+    "passengerCount"     INTEGER        NOT NULL DEFAULT 1,
     status               booking_status NOT NULL DEFAULT 'PENDING',
     "approvedById"       INTEGER        REFERENCES users(id),
     "approvedAt"         TIMESTAMPTZ,

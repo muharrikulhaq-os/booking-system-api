@@ -55,8 +55,11 @@ LEFT JOIN vehicles v ON v.id = b."assignedVehicleId"
 WHERE b.id = $1 LIMIT 1;
 
 -- name: CreateBooking :one
-INSERT INTO bookings ("userId", "resourceId", "startDate", "endDate", purpose, status)
-VALUES ($1, $2, $3, $4, $5, 'PENDING') RETURNING *;
+INSERT INTO bookings (
+    "userId", "resourceId", "startDate", "endDate", purpose, 
+    "passengerCount", "assignedDriverId", "assignedVehicleId", status
+)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'PENDING') RETURNING *;
 
 -- name: UpdateBookingStatus :one
 UPDATE bookings SET status = $2, "updatedAt" = NOW() WHERE id = $1 RETURNING *;
@@ -148,3 +151,18 @@ RETURNING *;
 UPDATE bookings SET status = 'IGNORED', "updatedAt" = NOW()
 WHERE status = 'PENDING' AND "endDate" < NOW()
 RETURNING *;
+
+-- name: UpdateMergedBooking :one
+UPDATE bookings
+SET "startDate" = $2, "endDate" = $3, "purpose" = $4,
+    "assignedDriverId" = $5, "assignedVehicleId" = $6,
+    "resourceId" = $7, "updatedAt" = NOW()
+WHERE id = $1 RETURNING *;
+
+-- name: GetOverlappingPassengerCount :one
+SELECT COALESCE(SUM("passengerCount"), 0)::int FROM bookings
+WHERE "assignedVehicleId" = $1
+  AND status IN ('APPROVED', 'ONGOING')
+  AND "startDate" < $3
+  AND "endDate" > $2
+  AND id != $4;

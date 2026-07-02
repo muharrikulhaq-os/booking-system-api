@@ -400,6 +400,7 @@ type Booking struct {
 	StartDate          time.Time     `json:"startDate"`
 	EndDate            time.Time     `json:"endDate"`
 	Purpose            string        `json:"purpose"`
+	PassengerCount     int32         `json:"passengerCount"`
 	Status             BookingStatus `json:"status"`
 	ApprovedById       sql.NullInt32 `json:"approvedById"`
 	ApprovedAt         sql.NullTime  `json:"approvedAt"`

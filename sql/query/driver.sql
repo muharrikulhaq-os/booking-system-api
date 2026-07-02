@@ -54,3 +54,22 @@ FROM driver_assignments da
 JOIN vehicles v ON v.id = da."vehicleId"
 WHERE da."driverId" = $1
 ORDER BY da."assignedAt" DESC;
+
+-- name: ListAvailableDrivers :many
+SELECT d.id AS driver_id, u.name AS driver_name, u."employeeId",
+       v.id AS vehicle_id, v."plateNumber", v.capacity,
+       COALESCE(
+           (SELECT SUM(b."passengerCount")::int
+            FROM bookings b
+            WHERE b."assignedDriverId" = d.id
+              AND b.status IN ('APPROVED', 'ONGOING')
+              AND b."startDate" < sqlc.arg(end_to)::timestamptz
+              AND b."endDate" > sqlc.arg(start_from)::timestamptz
+           ), 0
+       )::int AS overlapping_passengers
+FROM drivers d
+JOIN users u ON u.id = d."userId"
+JOIN driver_assignments da ON da."driverId" = d.id AND da."releasedAt" IS NULL
+JOIN vehicles v ON v.id = da."vehicleId"
+WHERE d."isActive" = TRUE
+ORDER BY overlapping_passengers ASC;
