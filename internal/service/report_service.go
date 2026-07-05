@@ -9,7 +9,7 @@ import (
 )
 
 type ReportService struct {
-	q  *repository.Queries
+	q  repository.ExtendedQuerier
 	db *sql.DB
 }
 

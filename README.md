@@ -6,10 +6,50 @@
 > **Content-Type:** `application/json` (kecuali upload file: `multipart/form-data`)
 
 ---
+## 🚀 Recent Updates (KCE - Bookings, Drivers, Fuel, Maintenance, & Export)
+1. **Fuel Expense Optimization**: Migrated fuel price source from error-prone Master Settings strings to a robust `fuel_types` database table. Fuel expenses (`BBM` and `Listrik`) now reliably fetch `default_price` using `fuelTypeId`.
+2. **Merge Booking & Driver Assignment**: Admin users can now specify a `DriverID` when merging bookings (`POST /bookings/:id/merge`). The system validates vehicle capacity conflicts and handles driver assignment out-of-the-gate via `assignedDriverId`.
+3. **WebSocket Real-time Notifications**: Implemented a WebSocket hub at `/api/v1/ws`. Connected drivers receive `NEW_BOOKING` notifications when assigned, and users receive `BOOKING_APPROVED` notifications upon admin approval.
+4. **Maintenance Tracking Enhancements**: Upgraded `PATCH /maintenance/:id/complete` to accept `multipart/form-data` uploads (proof photos), mark completion dates automatically, and instantly set vehicle status back to `AVAILABLE`.
+5. **Comprehensive Reports & Excel Export**: Fully integrated reporting endpoints (e.g., `/cost-summary`, `/bookings/by-department`) along with an advanced `GET /reports/export/excel` endpoint that exports all metrics across 18 sheets with native Pie/Line Charts built directly into the generated `.xlsx`.
 
 ## 📐 Standar Response Format
 
-### Success Response
+### WebSocket Connection (Real-time Notifications)
+Sistem menggunakan WebSocket untuk push notification secara real-time ke *Driver* maupun *User*. 
+
+**Endpoint:** `GET /api/v1/ws`
+
+**Auth & Koneksi:**
+Karena WebSocket bawaan browser tidak mendukung custom header `Authorization`, Anda bisa menyisipkan token via query parameter:
+```javascript
+const token = "eyJhbGciOiJIUzI1...";
+const ws = new WebSocket(`ws://localhost:8080/api/v1/ws?token=${token}`);
+
+ws.onmessage = function(event) {
+  const data = JSON.parse(event.data);
+  console.log("New Notification:", data);
+};
+```
+
+**Struktur Payload Notifikasi (JSON):**
+```json
+{
+  "type": "NEW_BOOKING", 
+  "message": "You have been assigned to a new booking",
+  "data": {
+    "bookingId": 999,
+    "vehicleId": 10
+  }
+}
+```
+*Event Type yang didukung saat ini:*
+- `NEW_BOOKING`: Diterima oleh Driver saat ditugaskan ke booking baru (saat booking di-approve atau re-assign).
+- `BOOKING_APPROVED`: Diterima oleh User saat booking mereka disetujui oleh Admin.
+
+---
+
+### REST API Success Response
 ```json
 {
   "success": true,

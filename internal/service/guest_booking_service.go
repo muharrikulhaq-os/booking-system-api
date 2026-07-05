@@ -10,7 +10,7 @@ import (
 )
 
 type GuestBookingService struct {
-	q *repository.Queries
+	q repository.ExtendedQuerier
 }
 
 func NewGuestBookingService(db *sql.DB) *GuestBookingService {

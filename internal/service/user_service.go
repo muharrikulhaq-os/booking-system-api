@@ -9,7 +9,7 @@ import (
 )
 
 type UserService struct {
-	q *repository.Queries
+	q repository.ExtendedQuerier
 }
 
 func NewUserService(db *sql.DB) *UserService {

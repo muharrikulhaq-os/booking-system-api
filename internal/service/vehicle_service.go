@@ -9,7 +9,7 @@ import (
 )
 
 type VehicleService struct {
-	q *repository.Queries
+	q repository.ExtendedQuerier
 }
 
 func NewVehicleService(db *sql.DB) *VehicleService {

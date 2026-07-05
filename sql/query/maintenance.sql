@@ -24,14 +24,15 @@ WHERE mr.id = $1 LIMIT 1;
 
 -- name: CreateMaintenance :one
 INSERT INTO maintenance_records (
-    "vehicleId", "maintenanceTypeId", description, odometer,
-    "totalCost", "vendorName", location, "startDate", "endDate", "recordedById"
-) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING *;
+    "vehicleId", "maintenanceTypeId", description, type, status,
+    odometer, "totalCost", "vendorName", location, "startDate", "endDate", "completedAt", "proofPhotos", "recordedById"
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14) RETURNING *;
 
 -- name: UpdateMaintenance :one
 UPDATE maintenance_records
-SET "vehicleId" = $2, "maintenanceTypeId" = $3, description = $4, odometer = $5,
-    "totalCost" = $6, "vendorName" = $7, location = $8, "startDate" = $9, "endDate" = $10
+SET "vehicleId" = $2, "maintenanceTypeId" = $3, description = $4, type = $5, status = $6,
+    odometer = $7, "totalCost" = $8, "vendorName" = $9, location = $10,
+    "startDate" = $11, "endDate" = $12, "completedAt" = $13, "proofPhotos" = $14
 WHERE id = $1 RETURNING *;
 
 -- name: DeleteMaintenance :exec

@@ -35,26 +35,31 @@ func (q *Queries) CountFuelExpenses(ctx context.Context, arg CountFuelExpensesPa
 const createFuelExpense = `-- name: CreateFuelExpense :one
 INSERT INTO fuel_expenses (
     "vehicleId", "fuelTypeId", "bookingId", "driverId", "recordedById",
-    odometer, quantity, "pricePerUnit", "totalCost",
+    "fuelGrade", "proofPhotoUrl", "odometerBefore", "odometerAfter", "distanceKm",
+    quantity, "pricePerUnit", "totalCost",
     "batteryBefore", "batteryAfter", location, "stationName", note
-) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14) RETURNING id, "vehicleId", "fuelTypeId", "bookingId", "driverId", "recordedById", odometer, quantity, "pricePerUnit", "totalCost", "batteryBefore", "batteryAfter", location, "stationName", note, "createdAt"
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18) RETURNING id, "vehicleId", "fuelTypeId", "bookingId", "driverId", "recordedById", "fuelGrade", "proofPhotoUrl", "odometerBefore", "odometerAfter", "distanceKm", quantity, "pricePerUnit", "totalCost", "batteryBefore", "batteryAfter", location, "stationName", note, "createdAt"
 `
 
 type CreateFuelExpenseParams struct {
-	VehicleId     int32          `json:"vehicleId"`
-	FuelTypeId    int32          `json:"fuelTypeId"`
-	BookingId     sql.NullInt32  `json:"bookingId"`
-	DriverId      sql.NullInt32  `json:"driverId"`
-	RecordedById  int32          `json:"recordedById"`
-	Odometer      sql.NullInt32  `json:"odometer"`
-	Quantity      string         `json:"quantity"`
-	PricePerUnit  string         `json:"pricePerUnit"`
-	TotalCost     string         `json:"totalCost"`
-	BatteryBefore sql.NullString `json:"batteryBefore"`
-	BatteryAfter  sql.NullString `json:"batteryAfter"`
-	Location      string         `json:"location"`
-	StationName   sql.NullString `json:"stationName"`
-	Note          sql.NullString `json:"note"`
+	VehicleId      int32          `json:"vehicleId"`
+	FuelTypeId     int32          `json:"fuelTypeId"`
+	BookingId      sql.NullInt32  `json:"bookingId"`
+	DriverId       sql.NullInt32  `json:"driverId"`
+	RecordedById   int32          `json:"recordedById"`
+	FuelGrade      sql.NullString `json:"fuelGrade"`
+	ProofPhotoUrl  sql.NullString `json:"proofPhotoUrl"`
+	OdometerBefore sql.NullInt32  `json:"odometerBefore"`
+	OdometerAfter  sql.NullInt32  `json:"odometerAfter"`
+	DistanceKm     sql.NullInt32  `json:"distanceKm"`
+	Quantity       sql.NullString `json:"quantity"`
+	PricePerUnit   sql.NullString `json:"pricePerUnit"`
+	TotalCost      sql.NullString `json:"totalCost"`
+	BatteryBefore  sql.NullString `json:"batteryBefore"`
+	BatteryAfter   sql.NullString `json:"batteryAfter"`
+	Location       string         `json:"location"`
+	StationName    sql.NullString `json:"stationName"`
+	Note           sql.NullString `json:"note"`
 }
 
 func (q *Queries) CreateFuelExpense(ctx context.Context, arg CreateFuelExpenseParams) (FuelExpense, error) {
@@ -64,7 +69,11 @@ func (q *Queries) CreateFuelExpense(ctx context.Context, arg CreateFuelExpensePa
 		arg.BookingId,
 		arg.DriverId,
 		arg.RecordedById,
-		arg.Odometer,
+		arg.FuelGrade,
+		arg.ProofPhotoUrl,
+		arg.OdometerBefore,
+		arg.OdometerAfter,
+		arg.DistanceKm,
 		arg.Quantity,
 		arg.PricePerUnit,
 		arg.TotalCost,
@@ -82,7 +91,11 @@ func (q *Queries) CreateFuelExpense(ctx context.Context, arg CreateFuelExpensePa
 		&i.BookingId,
 		&i.DriverId,
 		&i.RecordedById,
-		&i.Odometer,
+		&i.FuelGrade,
+		&i.ProofPhotoUrl,
+		&i.OdometerBefore,
+		&i.OdometerAfter,
+		&i.DistanceKm,
 		&i.Quantity,
 		&i.PricePerUnit,
 		&i.TotalCost,
@@ -106,7 +119,7 @@ func (q *Queries) DeleteFuelExpense(ctx context.Context, id int32) error {
 }
 
 const getFuelExpenseByID = `-- name: GetFuelExpenseByID :one
-SELECT fe.id, fe."vehicleId", fe."fuelTypeId", fe."bookingId", fe."driverId", fe."recordedById", fe.odometer, fe.quantity, fe."pricePerUnit", fe."totalCost", fe."batteryBefore", fe."batteryAfter", fe.location, fe."stationName", fe.note, fe."createdAt", d_u.name AS driver_name, v."plateNumber", r.name AS vehicle_name, ft.type AS fuel_category_name
+SELECT fe.id, fe."vehicleId", fe."fuelTypeId", fe."bookingId", fe."driverId", fe."recordedById", fe."fuelGrade", fe."proofPhotoUrl", fe."odometerBefore", fe."odometerAfter", fe."distanceKm", fe.quantity, fe."pricePerUnit", fe."totalCost", fe."batteryBefore", fe."batteryAfter", fe.location, fe."stationName", fe.note, fe."createdAt", d_u.name AS driver_name, v."plateNumber", r.name AS vehicle_name, ft.type AS fuel_category_name
 FROM fuel_expenses fe
 LEFT JOIN drivers d ON d.id = fe."driverId"
 LEFT JOIN users d_u ON d_u.id = d."userId"
@@ -123,10 +136,14 @@ type GetFuelExpenseByIDRow struct {
 	BookingId        sql.NullInt32  `json:"bookingId"`
 	DriverId         sql.NullInt32  `json:"driverId"`
 	RecordedById     int32          `json:"recordedById"`
-	Odometer         sql.NullInt32  `json:"odometer"`
-	Quantity         string         `json:"quantity"`
-	PricePerUnit     string         `json:"pricePerUnit"`
-	TotalCost        string         `json:"totalCost"`
+	FuelGrade        sql.NullString `json:"fuelGrade"`
+	ProofPhotoUrl    sql.NullString `json:"proofPhotoUrl"`
+	OdometerBefore   sql.NullInt32  `json:"odometerBefore"`
+	OdometerAfter    sql.NullInt32  `json:"odometerAfter"`
+	DistanceKm       sql.NullInt32  `json:"distanceKm"`
+	Quantity         sql.NullString `json:"quantity"`
+	PricePerUnit     sql.NullString `json:"pricePerUnit"`
+	TotalCost        sql.NullString `json:"totalCost"`
 	BatteryBefore    sql.NullString `json:"batteryBefore"`
 	BatteryAfter     sql.NullString `json:"batteryAfter"`
 	Location         string         `json:"location"`
@@ -149,7 +166,11 @@ func (q *Queries) GetFuelExpenseByID(ctx context.Context, id int32) (GetFuelExpe
 		&i.BookingId,
 		&i.DriverId,
 		&i.RecordedById,
-		&i.Odometer,
+		&i.FuelGrade,
+		&i.ProofPhotoUrl,
+		&i.OdometerBefore,
+		&i.OdometerAfter,
+		&i.DistanceKm,
 		&i.Quantity,
 		&i.PricePerUnit,
 		&i.TotalCost,
@@ -167,8 +188,28 @@ func (q *Queries) GetFuelExpenseByID(ctx context.Context, id int32) (GetFuelExpe
 	return i, err
 }
 
+const getFuelTypeByID = `-- name: GetFuelTypeByID :one
+SELECT id, name, type, unit, default_price, is_active, created_at, updated_at FROM fuel_types WHERE id = $1 LIMIT 1
+`
+
+func (q *Queries) GetFuelTypeByID(ctx context.Context, id int32) (FuelType, error) {
+	row := q.db.QueryRowContext(ctx, getFuelTypeByID, id)
+	var i FuelType
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Type,
+		&i.Unit,
+		&i.DefaultPrice,
+		&i.IsActive,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const listFuelExpenses = `-- name: ListFuelExpenses :many
-SELECT fe.id, fe."vehicleId", fe."fuelTypeId", fe."bookingId", fe."driverId", fe."recordedById", fe.odometer, fe.quantity, fe."pricePerUnit", fe."totalCost", fe."batteryBefore", fe."batteryAfter", fe.location, fe."stationName", fe.note, fe."createdAt", d_u.name AS driver_name, v."plateNumber", r.name AS vehicle_name, ft.type AS fuel_category_name
+SELECT fe.id, fe."vehicleId", fe."fuelTypeId", fe."bookingId", fe."driverId", fe."recordedById", fe."fuelGrade", fe."proofPhotoUrl", fe."odometerBefore", fe."odometerAfter", fe."distanceKm", fe.quantity, fe."pricePerUnit", fe."totalCost", fe."batteryBefore", fe."batteryAfter", fe.location, fe."stationName", fe.note, fe."createdAt", d_u.name AS driver_name, v."plateNumber", r.name AS vehicle_name, ft.type AS fuel_category_name
 FROM fuel_expenses fe
 LEFT JOIN drivers d ON d.id = fe."driverId"
 LEFT JOIN users d_u ON d_u.id = d."userId"
@@ -197,10 +238,14 @@ type ListFuelExpensesRow struct {
 	BookingId        sql.NullInt32  `json:"bookingId"`
 	DriverId         sql.NullInt32  `json:"driverId"`
 	RecordedById     int32          `json:"recordedById"`
-	Odometer         sql.NullInt32  `json:"odometer"`
-	Quantity         string         `json:"quantity"`
-	PricePerUnit     string         `json:"pricePerUnit"`
-	TotalCost        string         `json:"totalCost"`
+	FuelGrade        sql.NullString `json:"fuelGrade"`
+	ProofPhotoUrl    sql.NullString `json:"proofPhotoUrl"`
+	OdometerBefore   sql.NullInt32  `json:"odometerBefore"`
+	OdometerAfter    sql.NullInt32  `json:"odometerAfter"`
+	DistanceKm       sql.NullInt32  `json:"distanceKm"`
+	Quantity         sql.NullString `json:"quantity"`
+	PricePerUnit     sql.NullString `json:"pricePerUnit"`
+	TotalCost        sql.NullString `json:"totalCost"`
 	BatteryBefore    sql.NullString `json:"batteryBefore"`
 	BatteryAfter     sql.NullString `json:"batteryAfter"`
 	Location         string         `json:"location"`
@@ -235,7 +280,11 @@ func (q *Queries) ListFuelExpenses(ctx context.Context, arg ListFuelExpensesPara
 			&i.BookingId,
 			&i.DriverId,
 			&i.RecordedById,
-			&i.Odometer,
+			&i.FuelGrade,
+			&i.ProofPhotoUrl,
+			&i.OdometerBefore,
+			&i.OdometerAfter,
+			&i.DistanceKm,
 			&i.Quantity,
 			&i.PricePerUnit,
 			&i.TotalCost,
@@ -266,28 +315,33 @@ func (q *Queries) ListFuelExpenses(ctx context.Context, arg ListFuelExpensesPara
 const updateFuelExpense = `-- name: UpdateFuelExpense :one
 UPDATE fuel_expenses
 SET "vehicleId" = $2, "fuelTypeId" = $3, "bookingId" = $4, "driverId" = $5,
-    "recordedById" = $6, odometer = $7, quantity = $8, "pricePerUnit" = $9,
-    "totalCost" = $10, "batteryBefore" = $11, "batteryAfter" = $12,
-    location = $13, "stationName" = $14, note = $15
-WHERE id = $1 RETURNING id, "vehicleId", "fuelTypeId", "bookingId", "driverId", "recordedById", odometer, quantity, "pricePerUnit", "totalCost", "batteryBefore", "batteryAfter", location, "stationName", note, "createdAt"
+    "recordedById" = $6, "fuelGrade" = $7, "proofPhotoUrl" = $8,
+    "odometerBefore" = $9, "odometerAfter" = $10, "distanceKm" = $11,
+    quantity = $12, "pricePerUnit" = $13, "totalCost" = $14,
+    "batteryBefore" = $15, "batteryAfter" = $16, location = $17, "stationName" = $18, note = $19
+WHERE id = $1 RETURNING id, "vehicleId", "fuelTypeId", "bookingId", "driverId", "recordedById", "fuelGrade", "proofPhotoUrl", "odometerBefore", "odometerAfter", "distanceKm", quantity, "pricePerUnit", "totalCost", "batteryBefore", "batteryAfter", location, "stationName", note, "createdAt"
 `
 
 type UpdateFuelExpenseParams struct {
-	ID            int32          `json:"id"`
-	VehicleId     int32          `json:"vehicleId"`
-	FuelTypeId    int32          `json:"fuelTypeId"`
-	BookingId     sql.NullInt32  `json:"bookingId"`
-	DriverId      sql.NullInt32  `json:"driverId"`
-	RecordedById  int32          `json:"recordedById"`
-	Odometer      sql.NullInt32  `json:"odometer"`
-	Quantity      string         `json:"quantity"`
-	PricePerUnit  string         `json:"pricePerUnit"`
-	TotalCost     string         `json:"totalCost"`
-	BatteryBefore sql.NullString `json:"batteryBefore"`
-	BatteryAfter  sql.NullString `json:"batteryAfter"`
-	Location      string         `json:"location"`
-	StationName   sql.NullString `json:"stationName"`
-	Note          sql.NullString `json:"note"`
+	ID             int32          `json:"id"`
+	VehicleId      int32          `json:"vehicleId"`
+	FuelTypeId     int32          `json:"fuelTypeId"`
+	BookingId      sql.NullInt32  `json:"bookingId"`
+	DriverId       sql.NullInt32  `json:"driverId"`
+	RecordedById   int32          `json:"recordedById"`
+	FuelGrade      sql.NullString `json:"fuelGrade"`
+	ProofPhotoUrl  sql.NullString `json:"proofPhotoUrl"`
+	OdometerBefore sql.NullInt32  `json:"odometerBefore"`
+	OdometerAfter  sql.NullInt32  `json:"odometerAfter"`
+	DistanceKm     sql.NullInt32  `json:"distanceKm"`
+	Quantity       sql.NullString `json:"quantity"`
+	PricePerUnit   sql.NullString `json:"pricePerUnit"`
+	TotalCost      sql.NullString `json:"totalCost"`
+	BatteryBefore  sql.NullString `json:"batteryBefore"`
+	BatteryAfter   sql.NullString `json:"batteryAfter"`
+	Location       string         `json:"location"`
+	StationName    sql.NullString `json:"stationName"`
+	Note           sql.NullString `json:"note"`
 }
 
 func (q *Queries) UpdateFuelExpense(ctx context.Context, arg UpdateFuelExpenseParams) (FuelExpense, error) {
@@ -298,7 +352,11 @@ func (q *Queries) UpdateFuelExpense(ctx context.Context, arg UpdateFuelExpensePa
 		arg.BookingId,
 		arg.DriverId,
 		arg.RecordedById,
-		arg.Odometer,
+		arg.FuelGrade,
+		arg.ProofPhotoUrl,
+		arg.OdometerBefore,
+		arg.OdometerAfter,
+		arg.DistanceKm,
 		arg.Quantity,
 		arg.PricePerUnit,
 		arg.TotalCost,
@@ -316,7 +374,11 @@ func (q *Queries) UpdateFuelExpense(ctx context.Context, arg UpdateFuelExpensePa
 		&i.BookingId,
 		&i.DriverId,
 		&i.RecordedById,
-		&i.Odometer,
+		&i.FuelGrade,
+		&i.ProofPhotoUrl,
+		&i.OdometerBefore,
+		&i.OdometerAfter,
+		&i.DistanceKm,
 		&i.Quantity,
 		&i.PricePerUnit,
 		&i.TotalCost,

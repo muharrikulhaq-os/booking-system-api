@@ -9,6 +9,8 @@ import (
 	"database/sql/driver"
 	"fmt"
 	"time"
+
+	"github.com/sqlc-dev/pqtype"
 )
 
 type ApprovalAction string
@@ -466,22 +468,26 @@ type DriverRating struct {
 }
 
 type FuelExpense struct {
-	ID            int32          `json:"id"`
-	VehicleId     int32          `json:"vehicleId"`
-	FuelTypeId    int32          `json:"fuelTypeId"`
-	BookingId     sql.NullInt32  `json:"bookingId"`
-	DriverId      sql.NullInt32  `json:"driverId"`
-	RecordedById  int32          `json:"recordedById"`
-	Odometer      sql.NullInt32  `json:"odometer"`
-	Quantity      string         `json:"quantity"`
-	PricePerUnit  string         `json:"pricePerUnit"`
-	TotalCost     string         `json:"totalCost"`
-	BatteryBefore sql.NullString `json:"batteryBefore"`
-	BatteryAfter  sql.NullString `json:"batteryAfter"`
-	Location      string         `json:"location"`
-	StationName   sql.NullString `json:"stationName"`
-	Note          sql.NullString `json:"note"`
-	CreatedAt     time.Time      `json:"createdAt"`
+	ID             int32          `json:"id"`
+	VehicleId      int32          `json:"vehicleId"`
+	FuelTypeId     int32          `json:"fuelTypeId"`
+	BookingId      sql.NullInt32  `json:"bookingId"`
+	DriverId       sql.NullInt32  `json:"driverId"`
+	RecordedById   int32          `json:"recordedById"`
+	FuelGrade      sql.NullString `json:"fuelGrade"`
+	ProofPhotoUrl  sql.NullString `json:"proofPhotoUrl"`
+	OdometerBefore sql.NullInt32  `json:"odometerBefore"`
+	OdometerAfter  sql.NullInt32  `json:"odometerAfter"`
+	DistanceKm     sql.NullInt32  `json:"distanceKm"`
+	Quantity       sql.NullString `json:"quantity"`
+	PricePerUnit   sql.NullString `json:"pricePerUnit"`
+	TotalCost      sql.NullString `json:"totalCost"`
+	BatteryBefore  sql.NullString `json:"batteryBefore"`
+	BatteryAfter   sql.NullString `json:"batteryAfter"`
+	Location       string         `json:"location"`
+	StationName    sql.NullString `json:"stationName"`
+	Note           sql.NullString `json:"note"`
+	CreatedAt      time.Time      `json:"createdAt"`
 }
 
 type FuelType struct {
@@ -516,18 +522,22 @@ type GuestBooking struct {
 }
 
 type MaintenanceRecord struct {
-	ID                int32          `json:"id"`
-	VehicleId         int32          `json:"vehicleId"`
-	MaintenanceTypeId sql.NullInt32  `json:"maintenanceTypeId"`
-	Description       string         `json:"description"`
-	Odometer          sql.NullInt32  `json:"odometer"`
-	TotalCost         sql.NullString `json:"totalCost"`
-	VendorName        sql.NullString `json:"vendorName"`
-	Location          string         `json:"location"`
-	StartDate         time.Time      `json:"startDate"`
-	EndDate           sql.NullTime   `json:"endDate"`
-	RecordedById      int32          `json:"recordedById"`
-	CreatedAt         time.Time      `json:"createdAt"`
+	ID                int32                 `json:"id"`
+	VehicleId         int32                 `json:"vehicleId"`
+	MaintenanceTypeId sql.NullInt32         `json:"maintenanceTypeId"`
+	Description       string                `json:"description"`
+	Type              string                `json:"type"`
+	Status            string                `json:"status"`
+	VendorName        sql.NullString        `json:"vendorName"`
+	ProofPhotos       pqtype.NullRawMessage `json:"proofPhotos"`
+	Odometer          sql.NullInt32         `json:"odometer"`
+	TotalCost         sql.NullString        `json:"totalCost"`
+	Location          string                `json:"location"`
+	StartDate         time.Time             `json:"startDate"`
+	EndDate           sql.NullTime          `json:"endDate"`
+	CompletedAt       sql.NullTime          `json:"completedAt"`
+	RecordedById      int32                 `json:"recordedById"`
+	CreatedAt         time.Time             `json:"createdAt"`
 }
 
 type MaintenanceType struct {

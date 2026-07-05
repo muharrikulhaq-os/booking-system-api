@@ -9,6 +9,7 @@ import (
 	"booking-system-api/internal/middleware"
 	"booking-system-api/internal/repository"
 	"booking-system-api/internal/service"
+	ws "booking-system-api/internal/websocket"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/cors"
@@ -51,13 +52,18 @@ func main() {
 	// public image serving — FE can embed URLs directly in <img> tags
 	app.Get("/uploads/*", httph.ServeFile(config.C.UploadDir))
 
+	// websocket hub
+	wsHub := ws.NewHub()
+	go wsHub.Run()
+
 	// init services
 	authSvc := service.NewAuthService(db)
 	userSvc := service.NewUserService(db)
 	vehicleSvc := service.NewVehicleService(db)
 	roomSvc := service.NewRoomService(db)
+	notifSvc := service.NewNotificationService(wsHub)
 	driverSvc := service.NewDriverService(db)
-	bookingSvc := service.NewBookingService(db)
+	bookingSvc := service.NewBookingService(db, notifSvc)
 	fuelSvc := service.NewFuelExpenseService(db)
 	maintSvc := service.NewMaintenanceService(db)
 	attachSvc := service.NewAttachmentService(db)
@@ -68,6 +74,7 @@ func main() {
 
 	// register routes
 	v1 := app.Group("/api/v1")
+	httph.NewWebsocketHandler(wsHub).Register(v1)
 	httph.NewAuthHandler(authSvc).Register(v1)
 	httph.NewUserHandler(userSvc, attachSvc).Register(v1)
 	httph.NewDashboardHandler(dashboardSvc).Register(v1)
@@ -81,6 +88,7 @@ func main() {
 	httph.NewGuestBookingHandler(guestSvc).Register(v1)
 	httph.NewMasterSettingHandler(settingSvc).Register(v1)
 	httph.NewReportHandler(reportSvc).Register(v1)
+	httph.NewExcelHandler(reportSvc).Register(v1)
 
 	log.Printf("server starting on :%s", config.C.AppPort)
 	log.Fatal(app.Listen(":" + config.C.AppPort))

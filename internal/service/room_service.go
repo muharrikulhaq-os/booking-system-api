@@ -9,7 +9,7 @@ import (
 )
 
 type RoomService struct {
-	q *repository.Queries
+	q repository.ExtendedQuerier
 }
 
 func NewRoomService(db *sql.DB) *RoomService {

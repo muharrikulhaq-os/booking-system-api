@@ -3,6 +3,10 @@ package service
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
+	"mime/multipart"
+	"strings"
+	"github.com/sqlc-dev/pqtype"
 	"fmt"
 	"time"
 
@@ -11,7 +15,7 @@ import (
 )
 
 type MaintenanceService struct {
-	q repository.Querier
+	q repository.ExtendedQuerier
 }
 
 func NewMaintenanceService(db *sql.DB) *MaintenanceService {
@@ -21,6 +25,8 @@ func NewMaintenanceService(db *sql.DB) *MaintenanceService {
 type CreateMaintenanceRequest struct {
 	VehicleID         int32      `json:"vehicleId"         validate:"required"`
 	MaintenanceTypeID *int32     `json:"maintenanceTypeId"`
+	Type              string     `json:"type"              validate:"required"` // e.g. routine, repair
+	Status            string     `json:"status"            validate:"required"` // e.g. pending, completed
 	Description       string     `json:"description"       validate:"required"`
 	Odometer          *int32     `json:"odometer"`
 	TotalCost         *float64   `json:"totalCost"`
@@ -33,6 +39,8 @@ type CreateMaintenanceRequest struct {
 type UpdateMaintenanceRequest struct {
 	VehicleID         int32      `json:"vehicleId"         validate:"required"`
 	MaintenanceTypeID *int32     `json:"maintenanceTypeId"`
+	Type              string     `json:"type"              validate:"required"`
+	Status            string     `json:"status"            validate:"required"`
 	Description       string     `json:"description"       validate:"required"`
 	Odometer          *int32     `json:"odometer"`
 	TotalCost         *float64   `json:"totalCost"`
@@ -43,12 +51,19 @@ type UpdateMaintenanceRequest struct {
 }
 
 func serializeMaintenanceRow(m repository.ListMaintenanceRow) map[string]any {
+	var proofPhotos []string
+	if m.ProofPhotos.Valid && len(m.ProofPhotos.RawMessage) > 0 {
+		_ = json.Unmarshal(m.ProofPhotos.RawMessage, &proofPhotos)
+	}
+
 	return map[string]any{
 		"id":                m.ID,
 		"vehicleId":         m.VehicleId,
 		"vehicleName":       m.VehicleName,
 		"plateNumber":       m.PlateNumber,
 		"maintenanceTypeId": m.MaintenanceTypeId.Int32,
+		"type":              m.Type,
+		"status":            m.Status,
 		"description":       m.Description,
 		"odometer":          m.Odometer.Int32,
 		"totalCost":         m.TotalCost.String,
@@ -56,18 +71,27 @@ func serializeMaintenanceRow(m repository.ListMaintenanceRow) map[string]any {
 		"location":          m.Location,
 		"startDate":         m.StartDate,
 		"endDate":           nullTime(m.EndDate),
+		"completedAt":       nullTime(m.CompletedAt),
+		"proofPhotos":       proofPhotos,
 		"createdBy":         m.CreatedByName,
 		"createdAt":         m.CreatedAt,
 	}
 }
 
 func serializeMaintenanceByID(m repository.GetMaintenanceByIDRow) map[string]any {
+	var proofPhotos []string
+	if m.ProofPhotos.Valid && len(m.ProofPhotos.RawMessage) > 0 {
+		_ = json.Unmarshal(m.ProofPhotos.RawMessage, &proofPhotos)
+	}
+
 	return map[string]any{
 		"id":                m.ID,
 		"vehicleId":         m.VehicleId,
 		"vehicleName":       m.VehicleName,
 		"plateNumber":       m.PlateNumber,
 		"maintenanceTypeId": m.MaintenanceTypeId.Int32,
+		"type":              m.Type,
+		"status":            m.Status,
 		"description":       m.Description,
 		"odometer":          m.Odometer.Int32,
 		"totalCost":         m.TotalCost.String,
@@ -75,6 +99,8 @@ func serializeMaintenanceByID(m repository.GetMaintenanceByIDRow) map[string]any
 		"location":          m.Location,
 		"startDate":         m.StartDate,
 		"endDate":           nullTime(m.EndDate),
+		"completedAt":       nullTime(m.CompletedAt),
+		"proofPhotos":       proofPhotos,
 		"createdBy":         m.CreatedByName,
 		"createdAt":         m.CreatedAt,
 	}
@@ -156,16 +182,25 @@ func (s *MaintenanceService) Create(ctx context.Context, req CreateMaintenanceRe
 		ed = sql.NullTime{Time: *req.EndDate, Valid: true}
 	}
 
+	var completedAt sql.NullTime
+	if req.Status == "completed" {
+		completedAt = sql.NullTime{Time: time.Now(), Valid: true}
+	}
+
 	m, err := s.q.CreateMaintenance(ctx, repository.CreateMaintenanceParams{
 		VehicleId:         req.VehicleID,
 		MaintenanceTypeId: nullInt32Ptr(req.MaintenanceTypeID),
 		Description:       req.Description,
+		Type:              req.Type,
+		Status:            req.Status,
 		Odometer:          nullInt32Ptr(req.Odometer),
 		TotalCost:         nullNumeric(req.TotalCost),
 		VendorName:        sql.NullString{String: req.VendorName, Valid: req.VendorName != ""},
 		Location:          req.Location,
 		StartDate:         req.StartDate,
 		EndDate:           ed,
+		CompletedAt:       completedAt,
+		ProofPhotos:       pqtype.NullRawMessage{},
 		RecordedById:      createdByID,
 	})
 	if err != nil {
@@ -194,7 +229,7 @@ func (s *MaintenanceService) Create(ctx context.Context, req CreateMaintenanceRe
 }
 
 func (s *MaintenanceService) Update(ctx context.Context, id int32, req UpdateMaintenanceRequest) (map[string]any, error) {
-	_, err := s.q.GetMaintenanceByID(ctx, id)
+	existing, err := s.q.GetMaintenanceByID(ctx, id)
 	if err != nil {
 		return nil, util.ErrNotFound
 	}
@@ -209,17 +244,33 @@ func (s *MaintenanceService) Update(ctx context.Context, id int32, req UpdateMai
 		endDate = sql.NullTime{Time: *req.EndDate, Valid: true}
 	}
 
+	var completedAt sql.NullTime
+	if req.Status == "completed" {
+		completedAt = sql.NullTime{Time: time.Now(), Valid: true}
+	} else {
+		// if not completed, retain existing completedAt? or clear it?
+		// Usually if changing back to pending, we clear it.
+		completedAt = sql.NullTime{}
+	}
+	if req.Status == existing.Status {
+		completedAt = existing.CompletedAt
+	}
+
 	if _, err = s.q.UpdateMaintenance(ctx, repository.UpdateMaintenanceParams{
 		ID:                id,
 		VehicleId:         req.VehicleID,
 		MaintenanceTypeId: nullInt32Ptr(req.MaintenanceTypeID),
 		Description:       req.Description,
+		Type:              req.Type,
+		Status:            req.Status,
 		Odometer:          nullInt32Ptr(req.Odometer),
 		TotalCost:         nullNumeric(req.TotalCost),
 		VendorName:        sql.NullString{String: req.VendorName, Valid: req.VendorName != ""},
 		Location:          req.Location,
 		StartDate:         req.StartDate,
 		EndDate:           endDate,
+		CompletedAt:       completedAt,
+		ProofPhotos:       existing.ProofPhotos,
 	}); err != nil {
 		return nil, err
 	}
@@ -258,4 +309,61 @@ func (s *MaintenanceService) Delete(ctx context.Context, id int32) error {
 		})
 	}
 	return err
+}
+
+func (s *MaintenanceService) Complete(ctx context.Context, id int32, photos []*multipart.FileHeader) (map[string]any, error) {
+	existing, err := s.q.GetMaintenanceByID(ctx, id)
+	if err != nil {
+		return nil, util.ErrNotFound
+	}
+	if existing.Status == "completed" {
+		return nil, util.NewError(400, "Maintenance is already completed", util.ErrBadRequest)
+	}
+
+	var proofPhotos []string
+	if existing.ProofPhotos.Valid && len(existing.ProofPhotos.RawMessage) > 0 {
+		_ = json.Unmarshal(existing.ProofPhotos.RawMessage, &proofPhotos)
+	}
+
+	for _, fh := range photos {
+		filePath, err := util.SaveUploadedFile(fh, "maintenance")
+		if err == nil {
+			if !strings.HasPrefix(filePath, "/uploads/") {
+				filePath = "/uploads/" + filePath
+			}
+			proofPhotos = append(proofPhotos, filePath)
+		}
+	}
+
+	photosJSON, _ := json.Marshal(proofPhotos)
+
+	if _, err = s.q.UpdateMaintenance(ctx, repository.UpdateMaintenanceParams{
+		ID:                id,
+		VehicleId:         existing.VehicleId,
+		MaintenanceTypeId: existing.MaintenanceTypeId,
+		Type:              existing.Type,
+		Status:            "completed",
+		Description:       existing.Description,
+		Odometer:          existing.Odometer,
+		TotalCost:         existing.TotalCost,
+		VendorName:        existing.VendorName,
+		Location:          existing.Location,
+		StartDate:         existing.StartDate,
+		EndDate:           existing.EndDate,
+		CompletedAt:       sql.NullTime{Time: time.Now(), Valid: true},
+		ProofPhotos:       pqtype.NullRawMessage{RawMessage: photosJSON, Valid: true},
+	}); err != nil {
+		return nil, err
+	}
+
+	// Update resource status to AVAILABLE
+	vehicle, _ := s.q.GetVehicleByID(ctx, existing.VehicleId)
+	if vehicle.ResourceId != 0 {
+		_, _ = s.q.UpdateResourceStatus(ctx, repository.UpdateResourceStatusParams{
+			ID:     vehicle.ResourceId,
+			Status: repository.ResourceStatusAVAILABLE,
+		})
+	}
+
+	return s.GetByID(ctx, id)
 }

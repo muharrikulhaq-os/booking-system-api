@@ -68,6 +68,7 @@ type Querier interface {
 	GetDriverRatingByBooking(ctx context.Context, bookingid int32) (DriverRating, error)
 	GetDriverRatings(ctx context.Context, driverid int32) ([]GetDriverRatingsRow, error)
 	GetFuelExpenseByID(ctx context.Context, id int32) (GetFuelExpenseByIDRow, error)
+	GetFuelTypeByID(ctx context.Context, id int32) (FuelType, error)
 	GetGuestBookingByID(ctx context.Context, id int32) (GetGuestBookingByIDRow, error)
 	GetGuestBookingByToken(ctx context.Context, accesstoken string) (GetGuestBookingByTokenRow, error)
 	GetMaintenanceByID(ctx context.Context, id int32) (GetMaintenanceByIDRow, error)

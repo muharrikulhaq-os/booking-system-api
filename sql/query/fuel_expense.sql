@@ -32,17 +32,22 @@ WHERE fe.id = $1 LIMIT 1;
 -- name: CreateFuelExpense :one
 INSERT INTO fuel_expenses (
     "vehicleId", "fuelTypeId", "bookingId", "driverId", "recordedById",
-    odometer, quantity, "pricePerUnit", "totalCost",
+    "fuelGrade", "proofPhotoUrl", "odometerBefore", "odometerAfter", "distanceKm",
+    quantity, "pricePerUnit", "totalCost",
     "batteryBefore", "batteryAfter", location, "stationName", note
-) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14) RETURNING *;
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18) RETURNING *;
 
 -- name: UpdateFuelExpense :one
 UPDATE fuel_expenses
 SET "vehicleId" = $2, "fuelTypeId" = $3, "bookingId" = $4, "driverId" = $5,
-    "recordedById" = $6, odometer = $7, quantity = $8, "pricePerUnit" = $9,
-    "totalCost" = $10, "batteryBefore" = $11, "batteryAfter" = $12,
-    location = $13, "stationName" = $14, note = $15
+    "recordedById" = $6, "fuelGrade" = $7, "proofPhotoUrl" = $8,
+    "odometerBefore" = $9, "odometerAfter" = $10, "distanceKm" = $11,
+    quantity = $12, "pricePerUnit" = $13, "totalCost" = $14,
+    "batteryBefore" = $15, "batteryAfter" = $16, location = $17, "stationName" = $18, note = $19
 WHERE id = $1 RETURNING *;
 
 -- name: DeleteFuelExpense :exec
 DELETE FROM fuel_expenses WHERE id = $1;
+
+-- name: GetFuelTypeByID :one
+SELECT * FROM fuel_types WHERE id = $1 LIMIT 1;

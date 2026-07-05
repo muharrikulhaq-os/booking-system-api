@@ -10,7 +10,7 @@ import (
 )
 
 type AuthService struct {
-	q  *repository.Queries
+	q  repository.ExtendedQuerier
 	db *sql.DB
 }
 

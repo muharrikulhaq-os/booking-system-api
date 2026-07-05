@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"database/sql"
+	"strings"
 	"mime/multipart"
 	"path/filepath"
 
@@ -11,7 +12,7 @@ import (
 )
 
 type AttachmentService struct {
-	q *repository.Queries
+	q repository.ExtendedQuerier
 }
 
 func NewAttachmentService(db *sql.DB) *AttachmentService {
@@ -23,6 +24,10 @@ func serializeAttachment(id int32, uploadedByID int32, uploaderName string,
 	filePath, fileName, fileType string,
 	fileSize sql.NullInt32, description sql.NullString,
 	createdAt any) map[string]any {
+	if !strings.HasPrefix(filePath, "/uploads/") {
+		filePath = "/uploads/" + filePath
+	}
+
 	return map[string]any{
 		"id":           id,
 		"uploadedById": uploadedByID,

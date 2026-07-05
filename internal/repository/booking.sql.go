@@ -414,7 +414,19 @@ SELECT b.id, b."userId", b."resourceId", b."startDate", b."endDate", b.purpose, 
        r.name AS resource_name, r.type AS resource_type, r.status AS resource_status,
        ab.name AS approver_name,
        drv.id AS driver_id, du.name AS driver_name, drv."phoneNumber" AS driver_phone,
-       v.id AS vehicle_id, v."plateNumber", v.brand, v.model, v.capacity
+       v.id AS vehicle_id, v."plateNumber", v.brand, v.model, v.capacity,
+       (
+           SELECT EXISTS (
+               SELECT 1 FROM bookings b2 
+               WHERE b2.id != b.id 
+                 AND b2.status = 'PENDING' 
+                 AND b.status = 'PENDING'
+                 AND b2."resourceId" = b."resourceId"
+                 AND (
+                     (b2."startDate" <= b."endDate" AND b2."endDate" >= b."startDate")
+                 )
+           )
+       ) AS has_merge_suggestion
 FROM bookings b
 JOIN users u ON u.id = b."userId"
 JOIN departments dept ON dept.id = u."departmentId"
@@ -459,6 +471,7 @@ type GetBookingByIDRow struct {
 	Brand              sql.NullString `json:"brand"`
 	Model              sql.NullString `json:"model"`
 	Capacity           sql.NullInt16  `json:"capacity"`
+	HasMergeSuggestion bool           `json:"has_merge_suggestion"`
 }
 
 func (q *Queries) GetBookingByID(ctx context.Context, id int32) (GetBookingByIDRow, error) {
@@ -497,6 +510,7 @@ func (q *Queries) GetBookingByID(ctx context.Context, id int32) (GetBookingByIDR
 		&i.Brand,
 		&i.Model,
 		&i.Capacity,
+		&i.HasMergeSuggestion,
 	)
 	return i, err
 }
@@ -605,7 +619,19 @@ SELECT b.id, b."userId", b."resourceId", b."startDate", b."endDate", b.purpose, 
        r.name AS resource_name, r.type AS resource_type, r.status AS resource_status,
        ab.name AS approver_name,
        drv.id AS driver_id, du.name AS driver_name, drv."phoneNumber" AS driver_phone,
-       v.id AS vehicle_id, v."plateNumber", v.brand, v.model, v.capacity
+       v.id AS vehicle_id, v."plateNumber", v.brand, v.model, v.capacity,
+       (
+           SELECT EXISTS (
+               SELECT 1 FROM bookings b2 
+               WHERE b2.id != b.id 
+                 AND b2.status = 'PENDING' 
+                 AND b.status = 'PENDING'
+                 AND b2."resourceId" = b."resourceId"
+                 AND (
+                     (b2."startDate" <= b."endDate" AND b2."endDate" >= b."startDate")
+                 )
+           )
+       ) AS has_merge_suggestion
 FROM bookings b
 JOIN users u ON u.id = b."userId"
 JOIN departments dept ON dept.id = u."departmentId"
@@ -672,6 +698,7 @@ type ListBookingsRow struct {
 	Brand              sql.NullString `json:"brand"`
 	Model              sql.NullString `json:"model"`
 	Capacity           sql.NullInt16  `json:"capacity"`
+	HasMergeSuggestion bool           `json:"has_merge_suggestion"`
 }
 
 func (q *Queries) ListBookings(ctx context.Context, arg ListBookingsParams) ([]ListBookingsRow, error) {
@@ -727,6 +754,7 @@ func (q *Queries) ListBookings(ctx context.Context, arg ListBookingsParams) ([]L
 			&i.Brand,
 			&i.Model,
 			&i.Capacity,
+			&i.HasMergeSuggestion,
 		); err != nil {
 			return nil, err
 		}

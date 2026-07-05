@@ -10,7 +10,7 @@ import (
 )
 
 type DriverService struct {
-	q *repository.Queries
+	q repository.ExtendedQuerier
 }
 
 func NewDriverService(db *sql.DB) *DriverService {

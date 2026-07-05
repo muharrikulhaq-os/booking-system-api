@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"database/sql"
+	"strings"
 	"strconv"
 	"time"
 
@@ -11,12 +12,12 @@ import (
 )
 
 type BookingService struct {
-	q  *repository.Queries
-	db *sql.DB
+	q     repository.ExtendedQuerier
+	notif *NotificationService
 }
 
-func NewBookingService(db *sql.DB) *BookingService {
-	return &BookingService{q: repository.New(db), db: db}
+func NewBookingService(db *sql.DB, notif *NotificationService) *BookingService {
+	return &BookingService{q: repository.New(db), notif: notif}
 }
 
 type CreateBookingRequest struct {
@@ -25,7 +26,7 @@ type CreateBookingRequest struct {
 	EndDate          time.Time  `json:"endDate"    validate:"required"`
 	Purpose          string     `json:"purpose"    validate:"required"`
 	PassengerCount   int32      `json:"passengerCount" validate:"required,min=1"`
-	AssignedDriverID *int32     `json:"assignedDriverId"`
+	DriverID         *int32     `json:"driverId"`
 }
 
 type ApproveBookingRequest struct {
@@ -56,6 +57,7 @@ type MergeBookingRequest struct {
 	Reason          string     `json:"reason"`
 	StartDate       *time.Time `json:"startDate"` // optional: override merged time window start
 	EndDate         *time.Time `json:"endDate"`   // optional: override merged time window end
+	DriverID        *int32     `json:"driverId"`  // optional: choose a driver for the merged booking
 }
 
 func serializeBookingRow(b repository.ListBookingsRow) map[string]any {
@@ -82,6 +84,7 @@ func serializeBookingRow(b repository.ListBookingsRow) map[string]any {
 		"assignedDriver":  nil,
 		"assignedVehicle": nil,
 		"isReassigned":    b.OriginalResourceId.Valid,
+		"hasMergeSuggestion": b.HasMergeSuggestion,
 	}
 	if b.ApproverName.Valid {
 		out["approvedBy"] = map[string]any{"id": b.ApprovedById.Int32, "name": b.ApproverName.String}
@@ -124,6 +127,7 @@ func serializeBookingByID(b repository.GetBookingByIDRow) map[string]any {
 		"assignedDriver":   nil,
 		"assignedVehicle":  nil,
 		"isReassigned":     b.OriginalResourceId.Valid,
+		"hasMergeSuggestion": b.HasMergeSuggestion,
 		"originalResource": nil,
 	}
 	if b.ApproverName.Valid {
@@ -277,9 +281,9 @@ func (s *BookingService) Create(ctx context.Context, req CreateBookingRequest, u
 	var driverID sql.NullInt32
 	var vehicleID sql.NullInt32
 
-	if req.AssignedDriverID != nil {
-		driverID = sql.NullInt32{Int32: *req.AssignedDriverID, Valid: true}
-		da, err := s.q.GetDriverCurrentAssignment(ctx, *req.AssignedDriverID)
+	if req.DriverID != nil {
+		driverID = sql.NullInt32{Int32: *req.DriverID, Valid: true}
+		da, err := s.q.GetDriverCurrentAssignment(ctx, *req.DriverID)
 		if err == nil {
 			vehicleID = sql.NullInt32{Int32: da.VehicleId, Valid: true}
 		}
@@ -384,6 +388,23 @@ func (s *BookingService) Approve(ctx context.Context, id int32, req ApproveBooki
 	})
 
 	full, _ := s.q.GetBookingByID(ctx, id)
+	
+	// Notify user
+	if s.notif != nil {
+		s.notif.NotifyUser(full.UserId, "Your booking has been approved", map[string]any{
+			"bookingId": full.ID,
+		})
+	}
+	// Notify driver if assigned
+	if full.DriverID.Valid && s.notif != nil {
+		driver, err := s.q.GetDriverByID(ctx, full.DriverID.Int32)
+		if err == nil {
+			s.notif.NotifyDriver(driver.UserId, "You have been assigned to a new booking", map[string]any{
+				"bookingId": full.ID,
+			})
+		}
+	}
+
 	return ApproveBookingResponse{
 		Data:    serializeBookingByID(full),
 		Warning: warningMsg,
@@ -477,6 +498,14 @@ func (s *BookingService) AssignVehicle(ctx context.Context, id int32, req Assign
 	})
 
 	full, _ := s.q.GetBookingByID(ctx, id)
+	
+	if s.notif != nil {
+		s.notif.NotifyDriver(driver.UserId, "You have been assigned to a vehicle and booking", map[string]any{
+			"bookingId": full.ID,
+			"vehicleId": vehicle.ID,
+		})
+	}
+	
 	return serializeBookingByID(full), nil
 }
 
@@ -824,6 +853,26 @@ func (s *BookingService) MergeBookings(ctx context.Context, primaryID int32, req
 		}
 	}
 
+	// Update primary booking's driver if requested
+	if req.DriverID != nil {
+		driverID := sql.NullInt32{Int32: *req.DriverID, Valid: true}
+		var vehicleID sql.NullInt32
+		da, err := s.q.GetDriverCurrentAssignment(ctx, *req.DriverID)
+		if err == nil {
+			vehicleID = sql.NullInt32{Int32: da.VehicleId, Valid: true}
+		}
+		_, err = s.q.AssignVehicleToBooking(ctx, repository.AssignVehicleToBookingParams{
+			ID:                primaryID,
+			AssignedDriverId:  driverID,
+			AssignedVehicleId: vehicleID,
+		})
+		if err != nil {
+			return nil, err
+		}
+		primary.AssignedDriverId = driverID
+		primary.AssignedVehicleId = vehicleID
+	}
+
 	merge, err := s.q.CreateBookingMerge(ctx, primaryID, req.TargetBookingID, int32(adminID), req.Reason)
 	if err != nil {
 		return nil, err
@@ -983,9 +1032,13 @@ func (s *BookingService) GetReturnReport(ctx context.Context, bookingID int32, c
 	photos := make([]map[string]any, 0)
 	for _, a := range attachments {
 		if a.Description.Valid && a.Description.String == "return_photo" {
+			fp := a.FilePath
+			if !strings.HasPrefix(fp, "/uploads/") {
+				fp = "/uploads/" + fp
+			}
 			photos = append(photos, map[string]any{
 				"id":       a.ID,
-				"filePath": a.FilePath,
+				"filePath": fp,
 				"fileName": a.FileName,
 				"fileType": a.FileType,
 			})

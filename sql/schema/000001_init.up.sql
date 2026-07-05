@@ -21,6 +21,23 @@ CREATE TYPE fuel_category AS ENUM ('BBM', 'LISTRIK');
 CREATE TYPE energy_type AS ENUM ('BBM', 'LISTRIK', 'HYBRID');
 CREATE TYPE fuel_unit AS ENUM ('LITER', 'KWH');
 
+-- ─── FUNCTIONS ────────────────────────────────────────────────────────────────
+CREATE OR REPLACE FUNCTION trigger_set_updated_at()
+RETURNS TRIGGER AS $$
+BEGIN
+    NEW."updatedAt" = NOW();
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE FUNCTION trigger_set_updated_at_snake_case()
+RETURNS TRIGGER AS $$
+BEGIN
+    NEW.updated_at = NOW();
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
 -- ─── ROLES ───────────────────────────────────────────────────────────────────
 CREATE TABLE roles (
     id   SERIAL    PRIMARY KEY,
@@ -106,7 +123,7 @@ CREATE TABLE fuel_types (
 );
 
 CREATE TRIGGER set_updated_at_fuel_types
-    BEFORE UPDATE ON fuel_types FOR EACH ROW EXECUTE FUNCTION trigger_set_updated_at();
+    BEFORE UPDATE ON fuel_types FOR EACH ROW EXECUTE FUNCTION trigger_set_updated_at_snake_case();
 
 -- ─── VEHICLE CATEGORIES ───────────────────────────────────────────────────────
 CREATE TABLE vehicle_categories (
@@ -267,10 +284,14 @@ CREATE TABLE fuel_expenses (
     "bookingId"      INTEGER       REFERENCES bookings(id),
     "driverId"       INTEGER       REFERENCES drivers(id),
     "recordedById"   INTEGER       NOT NULL REFERENCES users(id),
-    odometer         INTEGER       NULL CHECK (odometer IS NULL OR odometer >= 0),
-    quantity         NUMERIC(10,2) NOT NULL CHECK (quantity > 0),
-    "pricePerUnit"   NUMERIC(12,2) NOT NULL CHECK ("pricePerUnit" > 0),
-    "totalCost"      NUMERIC(14,2) NOT NULL CHECK ("totalCost" > 0),
+    "fuelGrade"      VARCHAR(50)   NULL,
+    "proofPhotoUrl"  VARCHAR(255)  NULL,
+    "odometerBefore" INTEGER       NULL CHECK ("odometerBefore" IS NULL OR "odometerBefore" >= 0),
+    "odometerAfter"  INTEGER       NULL CHECK ("odometerAfter" IS NULL OR "odometerAfter" >= 0),
+    "distanceKm"     INTEGER       NULL CHECK ("distanceKm" IS NULL OR "distanceKm" >= 0),
+    quantity         NUMERIC(10,2) NULL CHECK (quantity IS NULL OR quantity > 0),
+    "pricePerUnit"   NUMERIC(12,2) NULL CHECK ("pricePerUnit" IS NULL OR "pricePerUnit" > 0),
+    "totalCost"      NUMERIC(14,2) NULL CHECK ("totalCost" IS NULL OR "totalCost" > 0),
     "batteryBefore"  NUMERIC(5,2)  NULL CHECK ("batteryBefore" IS NULL OR ("batteryBefore" >= 0 AND "batteryBefore" <= 100)),
     "batteryAfter"   NUMERIC(5,2)  NULL CHECK ("batteryAfter"  IS NULL OR ("batteryAfter"  >= 0 AND "batteryAfter"  <= 100)),
     location         VARCHAR(255)  NOT NULL,
@@ -308,12 +329,16 @@ CREATE TABLE maintenance_records (
     "vehicleId"         INTEGER       NOT NULL REFERENCES vehicles(id),
     "maintenanceTypeId" INTEGER       NULL REFERENCES maintenance_types(id),
     description         TEXT          NOT NULL,
-    odometer            INTEGER       NULL CHECK (odometer >= 0),
-    "totalCost"         NUMERIC(12,2) CHECK ("totalCost" >= 0),
+    type                VARCHAR(50)   NOT NULL,
+    status              VARCHAR(50)   NOT NULL DEFAULT 'ONGOING',
     "vendorName"        VARCHAR(255)  NULL,
+    "proofPhotos"       JSONB         NULL,
+    odometer            INTEGER       NULL CHECK (odometer >= 0),
+    "totalCost"         NUMERIC(12,2) CHECK ("totalCost" IS NULL OR "totalCost" >= 0),
     location            VARCHAR(255)  NOT NULL,
     "startDate"         TIMESTAMPTZ   NOT NULL,
     "endDate"           TIMESTAMPTZ   NULL,
+    "completedAt"       TIMESTAMPTZ   NULL,
     "recordedById"      INTEGER       NOT NULL REFERENCES users(id),
     "createdAt"         TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
     CONSTRAINT chk_maintenance_dates CHECK ("endDate" IS NULL OR "endDate" > "startDate")
@@ -415,13 +440,6 @@ CREATE INDEX idx_att_booking  ON attachments("bookingId");
 CREATE INDEX idx_att_uploader ON attachments("uploadedById");
 
 -- ─── TRIGGERS ─────────────────────────────────────────────────────────────────
-CREATE OR REPLACE FUNCTION trigger_set_updated_at()
-RETURNS TRIGGER AS $$
-BEGIN
-    NEW."updatedAt" = NOW();
-    RETURN NEW;
-END;
-$$ LANGUAGE plpgsql;
 
 CREATE TRIGGER set_updated_at_users
     BEFORE UPDATE ON users FOR EACH ROW EXECUTE FUNCTION trigger_set_updated_at();
@@ -574,8 +592,13 @@ INSERT INTO driver_assignments ("driverId", "vehicleId", "assignedAt") VALUES
     (2, 2, NOW() - INTERVAL '15 days');
 
 INSERT INTO master_settings (key, value, unit, description) VALUES
-    ('price_per_liter_bbm',   10000.0000, 'IDR/liter', 'Harga bensin Pertalite per liter (default driver bisa override)'),
-    ('price_per_kwh_listrik',  2466.0000, 'IDR/kWh',   'Tarif listrik PLN per kWh — tarif R-2 non-subsidi');
+    ('fuel_price_pertalite',   10000.0000, 'IDR/liter', 'Harga BBM Pertalite'),
+    ('fuel_price_pertamax',    12950.0000, 'IDR/liter', 'Harga BBM Pertamax'),
+    ('fuel_price_pertamax_turbo', 14400.0000, 'IDR/liter', 'Harga BBM Pertamax Turbo'),
+    ('fuel_price_solar',       6800.0000,  'IDR/liter', 'Harga BBM Solar Subsidi'),
+    ('fuel_price_dexlite',     14550.0000, 'IDR/liter', 'Harga BBM Dexlite'),
+    ('fuel_price_pertamina_dex', 15100.0000, 'IDR/liter', 'Harga BBM Pertamina Dex'),
+    ('fuel_price_listrik',     2466.0000,  'IDR/kWh',   'Tarif listrik PLN per kWh');
 
 -- ─── BOOKINGS ─────────────────────────────────────────────────────────────────
 INSERT INTO bookings (
@@ -658,12 +681,12 @@ INSERT INTO approval_logs ("bookingId", "approverId", action, note) VALUES
 -- ─── FUEL EXPENSES ────────────────────────────────────────────────────────────
 INSERT INTO fuel_expenses (
     "driverId", "vehicleId", "bookingId", "fuelTypeId", "recordedById",
-    odometer, quantity, "pricePerUnit", "totalCost",
+    "odometerBefore", "odometerAfter", "distanceKm", quantity, "pricePerUnit", "totalCost",
     location, "stationName", note
 ) VALUES
-    (1, 1, 1, 1, 1, 15000, 40.50, 10000.00, 405000.00, 'Jakarta', 'SPBU Pertamina Jl. Sudirman', 'Isi BBM full tank'),
-    (1, 1, 6, 1, 1, 15320, 35.00, 10000.00, 350000.00, 'Jakarta', 'SPBU Shell Jl. Gatot Subroto', 'Isi BBM perjalanan'),
-    (2, 2, 7, 1, 1, 28500, 50.00, 10200.00, 510000.00, 'Bekasi', 'SPBU Pertamina Bekasi', 'Isi BBM luar kota');
+    (1, 1, 1, 1, 1, 14900, 15000, 100, 40.50, 10000.00, 405000.00, 'Jakarta', 'SPBU Pertamina Jl. Sudirman', 'Isi BBM full tank'),
+    (1, 1, 6, 1, 1, 15200, 15320, 120, 35.00, 10000.00, 350000.00, 'Jakarta', 'SPBU Shell Jl. Gatot Subroto', 'Isi BBM perjalanan'),
+    (2, 2, 7, 1, 1, 28300, 28500, 200, 50.00, 10200.00, 510000.00, 'Bekasi', 'SPBU Pertamina Bekasi', 'Isi BBM luar kota');
 
 INSERT INTO fuel_expenses (
     "driverId", "vehicleId", "bookingId", "fuelTypeId", "recordedById",
@@ -680,11 +703,11 @@ INSERT INTO driver_ratings ("bookingId", "driverId", "ratedById", rating, review
 -- ─── MAINTENANCE RECORDS ──────────────────────────────────────────────────────
 INSERT INTO maintenance_types (name) VALUES ('Servis Berkala'), ('Ganti Ban'), ('Perbaikan AC');
 
-INSERT INTO maintenance_records ("vehicleId", "maintenanceTypeId", description, "startDate", "endDate", "totalCost", "recordedById", location, odometer, "vendorName") VALUES
-    (4, 1, 'Ganti oli mesin, filter oli, dan filter udara — servis berkala 70.000 km',
-     NOW() - INTERVAL '2 days', NULL, 850000.00, 1, 'Bengkel Resmi Mitsubishi', 72000, 'Bengkel A'),
-    (1, 2, 'Ganti ban depan 2 buah — ban aus',
-     NOW() - INTERVAL '20 days', NOW() - INTERVAL '20 days' + INTERVAL '4 hours', 1200000.00, 1, 'Toko Ban Jakarta', 14500, 'Toko Ban B');
+INSERT INTO maintenance_records ("vehicleId", "maintenanceTypeId", description, type, status, "startDate", "endDate", "completedAt", "totalCost", "recordedById", location, odometer, "vendorName") VALUES
+    (4, 1, 'Ganti oli mesin, filter oli, dan filter udara — servis berkala 70.000 km', 'RUTIN', 'ONGOING',
+     NOW() - INTERVAL '2 days', NULL, NULL, 850000.00, 1, 'Bengkel Resmi Mitsubishi', 72000, 'Bengkel A'),
+    (1, 2, 'Ganti ban depan 2 buah — ban aus', 'PENGGANTIAN', 'COMPLETED',
+     NOW() - INTERVAL '20 days', NOW() - INTERVAL '20 days' + INTERVAL '4 hours', NOW() - INTERVAL '20 days' + INTERVAL '4 hours', 1200000.00, 1, 'Toko Ban Jakarta', 14500, 'Toko Ban B');
     -- Room 10 AC repair is removed because maintenance is now vehicle-only
 
 -- ─── AUDIT LOGS ───────────────────────────────────────────────────────────────

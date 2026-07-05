@@ -16,11 +16,17 @@ const (
 func Auth() fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		header := c.Get("Authorization")
-		if !strings.HasPrefix(header, "Bearer ") {
-			return fiber.NewError(fiber.StatusUnauthorized, "missing authorization header")
+		token := strings.TrimPrefix(header, "Bearer ")
+		
+		if token == "" {
+			token = c.Query("token")
 		}
 
-		claims, err := util.ParseToken(strings.TrimPrefix(header, "Bearer "))
+		if token == "" {
+			return fiber.NewError(fiber.StatusUnauthorized, "missing authorization token")
+		}
+
+		claims, err := util.ParseToken(token)
 		if err != nil || claims.Type != "access" {
 			return fiber.NewError(fiber.StatusUnauthorized, "invalid or expired token")
 		}

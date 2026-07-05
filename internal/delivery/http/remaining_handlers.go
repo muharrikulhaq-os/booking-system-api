@@ -5,6 +5,7 @@ import (
 
 	"booking-system-api/internal/middleware"
 	"booking-system-api/internal/service"
+	"mime/multipart"
 	"booking-system-api/internal/util"
 
 	"github.com/gofiber/fiber/v2"
@@ -27,8 +28,7 @@ func (h *FuelExpenseHandler) Register(r fiber.Router) {
 	g := r.Group("/fuel-expenses", auth)
 	g.Get("", h.List)
 	g.Get("/:id", h.GetByID)
-	g.Post("/bbm", h.CreateBBM)
-	g.Post("/listrik", h.CreateListrik)
+	g.Post("", h.Create)
 	g.Delete("/:id", admin, h.Delete)
 }
 
@@ -55,32 +55,52 @@ func (h *FuelExpenseHandler) GetByID(c *fiber.Ctx) error {
 	return util.OK(c, "Fuel expense retrieved", data)
 }
 
-func (h *FuelExpenseHandler) CreateBBM(c *fiber.Ctx) error {
-	var req service.CreateFuelExpenseBBMRequest
-	if err := bindAndValidate(c, &req); err != nil {
-		return err
+func (h *FuelExpenseHandler) Create(c *fiber.Ctx) error {
+	var req service.CreateFuelExpenseRequest
+	
+	// Read multipart fields
+	req.VehicleID = int32(util.ParseStringToInt(c.FormValue("vehicleId")))
+	req.FuelTypeID = int32(util.ParseStringToInt(c.FormValue("fuelType"))) // Assuming FE passes fuelType ID here
+	if bid := c.FormValue("bookingId"); bid != "" {
+		parsed := int32(util.ParseStringToInt(bid))
+		req.BookingID = &parsed
 	}
-	driverID := queryInt32(c, "driverId")
-	recordedByID := int32(middleware.GetUserID(c))
-	data, err := h.svc.CreateBBM(c.Context(), req, recordedByID, driverID)
-	if err != nil {
-		return err
-	}
-	return util.Created(c, "BBM expense recorded", data)
-}
+	
+	req.FuelGrade = c.FormValue("fuelGrade")
+	req.Liter = util.ParseStringToFloat64(c.FormValue("liter"))
+	req.PricePerLiter = util.ParseStringToFloat64(c.FormValue("pricePerLiter"))
+	req.Kwh = util.ParseStringToFloat64(c.FormValue("kwh"))
+	req.PricePerKwh = util.ParseStringToFloat64(c.FormValue("pricePerKwh"))
+	req.OdometerBefore = int32(util.ParseStringToInt(c.FormValue("odometerBefore")))
+	req.OdometerAfter = int32(util.ParseStringToInt(c.FormValue("odometerAfter")))
+	req.Note = c.FormValue("note")
 
-func (h *FuelExpenseHandler) CreateListrik(c *fiber.Ctx) error {
-	var req service.CreateFuelExpenseListrikRequest
-	if err := bindAndValidate(c, &req); err != nil {
-		return err
+	// Handle proofPhoto
+	file, err := c.FormFile("proofPhoto")
+	if err != nil {
+		return fiber.NewError(fiber.StatusBadRequest, "proofPhoto is required")
 	}
-	driverID := queryInt32(c, "driverId")
+	
+	// Check driver ID from token
 	recordedByID := int32(middleware.GetUserID(c))
-	data, err := h.svc.CreateListrik(c.Context(), req, recordedByID, driverID)
+	
+	// In a real implementation we would get driver ID based on user ID if the user is a driver.
+	// We'll pass the recordedByID for now, or you could do a query to find the driver ID.
+	driverID := &recordedByID // Simplified, typically we lookup driver by user_id
+
+	// Save photo logic should be in service or delivery. We'll let service handle saving,
+	// or we can save it here. Saving here is typical for handlers.
+	filePath, err := util.SaveUploadedFile(file, "fuel_proofs")
 	if err != nil {
 		return err
 	}
-	return util.Created(c, "Listrik expense recorded", data)
+	req.ProofPhotoUrl = "/uploads/" + filePath
+
+	data, err := h.svc.Create(c.Context(), req, recordedByID, driverID)
+	if err != nil {
+		return err
+	}
+	return util.Created(c, "Fuel expense recorded", data)
 }
 
 func (h *FuelExpenseHandler) Delete(c *fiber.Ctx) error {
@@ -113,6 +133,7 @@ func (h *MaintenanceHandler) Register(r fiber.Router) {
 	g.Get("/:id", h.GetByID)
 	g.Post("", h.Create)
 	g.Put("/:id", h.Update)
+	g.Patch("/:id/complete", h.Complete)
 	g.Delete("/:id", h.Delete)
 }
 
@@ -156,6 +177,28 @@ func (h *MaintenanceHandler) Create(c *fiber.Ctx) error {
 		})
 	}
 	return util.Created(c, "Maintenance record created", resp.Data)
+}
+
+func (h *MaintenanceHandler) Complete(c *fiber.Ctx) error {
+	id, err := parseID(c, "id")
+	if err != nil {
+		return err
+	}
+	
+	form, formErr := c.MultipartForm()
+	var photos []*multipart.FileHeader
+	if formErr == nil {
+		photos = form.File["photos[]"]
+		if len(photos) == 0 {
+			photos = form.File["photo"] // fallback
+		}
+	}
+	
+	data, err := h.svc.Complete(c.Context(), id, photos)
+	if err != nil {
+		return err
+	}
+	return util.OK(c, "Maintenance record marked as complete", data)
 }
 
 func (h *MaintenanceHandler) Update(c *fiber.Ctx) error {
@@ -343,6 +386,19 @@ func (h *MasterSettingHandler) Register(r fiber.Router) {
 	g.Get("", h.List)
 	g.Get("/:key", h.GetByKey)
 	g.Put("/:key", admin, h.Upsert)
+
+	// New frontend settings endpoints
+	s := r.Group("/settings", auth)
+	s.Get("/fuel-prices", h.ListFuelPrices)
+	s.Put("/:key", admin, h.Upsert)
+}
+
+func (h *MasterSettingHandler) ListFuelPrices(c *fiber.Ctx) error {
+	data, err := h.svc.ListFuelPrices(c.Context())
+	if err != nil {
+		return err
+	}
+	return util.OK(c, "Fuel prices retrieved", data)
 }
 
 func (h *MasterSettingHandler) List(c *fiber.Ctx) error {

@@ -10,7 +10,7 @@ import (
 )
 
 type MasterSettingService struct {
-	q *repository.Queries
+	q repository.ExtendedQuerier
 }
 
 func NewMasterSettingService(db *sql.DB) *MasterSettingService {
@@ -18,13 +18,43 @@ func NewMasterSettingService(db *sql.DB) *MasterSettingService {
 }
 
 type UpsertSettingRequest struct {
-	Value       float64 `json:"value"       validate:"required"`
+	Value       any    `json:"value"       validate:"required"` // changed to any to accept string or float
 	Unit        string  `json:"unit"`
 	Description string  `json:"description"`
 }
 
 func (s *MasterSettingService) List(ctx context.Context) (any, error) {
 	return s.q.ListMasterSettings(ctx)
+}
+
+func (s *MasterSettingService) ListFuelPrices(ctx context.Context) (any, error) {
+	rows, err := s.q.ListMasterSettings(ctx)
+	if err != nil {
+		return nil, err
+	}
+	
+	type FuelPriceResponse struct {
+		Grade        string  `json:"grade"`
+		PricePerUnit float64 `json:"pricePerUnit"`
+		Unit         string  `json:"unit"`
+		UpdatedAt    string  `json:"updatedAt"`
+	}
+
+	var results []FuelPriceResponse
+	for _, r := range rows {
+		// Only include fuel_price_*
+		if len(r.Key) > 11 && r.Key[:11] == "fuel_price_" {
+			grade := r.Key[11:]
+			price := util.ParseStringToFloat64(r.Value)
+			results = append(results, FuelPriceResponse{
+				Grade:        grade,
+				PricePerUnit: price,
+				Unit:         r.Unit.String,
+				UpdatedAt:    r.UpdatedAt.Format("2006-01-02T15:04:05Z"),
+			})
+		}
+	}
+	return results, nil
 }
 
 func (s *MasterSettingService) GetByKey(ctx context.Context, key string) (any, error) {
@@ -36,9 +66,11 @@ func (s *MasterSettingService) GetByKey(ctx context.Context, key string) (any, e
 }
 
 func (s *MasterSettingService) Upsert(ctx context.Context, key string, req UpsertSettingRequest) (any, error) {
+	valStr := fmt.Sprintf("%v", req.Value)
+	
 	return s.q.UpsertMasterSetting(ctx, repository.UpsertMasterSettingParams{
 		Key:         key,
-		Value:       fmt.Sprintf("%g", req.Value),
+		Value:       valStr,
 		Unit:        sql.NullString{String: req.Unit, Valid: req.Unit != ""},
 		Description: sql.NullString{String: req.Description, Valid: req.Description != ""},
 	})

@@ -9,6 +9,8 @@ import (
 	"context"
 	"database/sql"
 	"time"
+
+	"github.com/sqlc-dev/pqtype"
 )
 
 const countMaintenance = `-- name: CountMaintenance :one
@@ -25,22 +27,26 @@ func (q *Queries) CountMaintenance(ctx context.Context, vehicleID sql.NullInt32)
 
 const createMaintenance = `-- name: CreateMaintenance :one
 INSERT INTO maintenance_records (
-    "vehicleId", "maintenanceTypeId", description, odometer,
-    "totalCost", "vendorName", location, "startDate", "endDate", "recordedById"
-) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING id, "vehicleId", "maintenanceTypeId", description, odometer, "totalCost", "vendorName", location, "startDate", "endDate", "recordedById", "createdAt"
+    "vehicleId", "maintenanceTypeId", description, type, status,
+    odometer, "totalCost", "vendorName", location, "startDate", "endDate", "completedAt", "proofPhotos", "recordedById"
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14) RETURNING id, "vehicleId", "maintenanceTypeId", description, type, status, "vendorName", "proofPhotos", odometer, "totalCost", location, "startDate", "endDate", "completedAt", "recordedById", "createdAt"
 `
 
 type CreateMaintenanceParams struct {
-	VehicleId         int32          `json:"vehicleId"`
-	MaintenanceTypeId sql.NullInt32  `json:"maintenanceTypeId"`
-	Description       string         `json:"description"`
-	Odometer          sql.NullInt32  `json:"odometer"`
-	TotalCost         sql.NullString `json:"totalCost"`
-	VendorName        sql.NullString `json:"vendorName"`
-	Location          string         `json:"location"`
-	StartDate         time.Time      `json:"startDate"`
-	EndDate           sql.NullTime   `json:"endDate"`
-	RecordedById      int32          `json:"recordedById"`
+	VehicleId         int32                 `json:"vehicleId"`
+	MaintenanceTypeId sql.NullInt32         `json:"maintenanceTypeId"`
+	Description       string                `json:"description"`
+	Type              string                `json:"type"`
+	Status            string                `json:"status"`
+	Odometer          sql.NullInt32         `json:"odometer"`
+	TotalCost         sql.NullString        `json:"totalCost"`
+	VendorName        sql.NullString        `json:"vendorName"`
+	Location          string                `json:"location"`
+	StartDate         time.Time             `json:"startDate"`
+	EndDate           sql.NullTime          `json:"endDate"`
+	CompletedAt       sql.NullTime          `json:"completedAt"`
+	ProofPhotos       pqtype.NullRawMessage `json:"proofPhotos"`
+	RecordedById      int32                 `json:"recordedById"`
 }
 
 func (q *Queries) CreateMaintenance(ctx context.Context, arg CreateMaintenanceParams) (MaintenanceRecord, error) {
@@ -48,12 +54,16 @@ func (q *Queries) CreateMaintenance(ctx context.Context, arg CreateMaintenancePa
 		arg.VehicleId,
 		arg.MaintenanceTypeId,
 		arg.Description,
+		arg.Type,
+		arg.Status,
 		arg.Odometer,
 		arg.TotalCost,
 		arg.VendorName,
 		arg.Location,
 		arg.StartDate,
 		arg.EndDate,
+		arg.CompletedAt,
+		arg.ProofPhotos,
 		arg.RecordedById,
 	)
 	var i MaintenanceRecord
@@ -62,12 +72,16 @@ func (q *Queries) CreateMaintenance(ctx context.Context, arg CreateMaintenancePa
 		&i.VehicleId,
 		&i.MaintenanceTypeId,
 		&i.Description,
+		&i.Type,
+		&i.Status,
+		&i.VendorName,
+		&i.ProofPhotos,
 		&i.Odometer,
 		&i.TotalCost,
-		&i.VendorName,
 		&i.Location,
 		&i.StartDate,
 		&i.EndDate,
+		&i.CompletedAt,
 		&i.RecordedById,
 		&i.CreatedAt,
 	)
@@ -84,7 +98,7 @@ func (q *Queries) DeleteMaintenance(ctx context.Context, id int32) error {
 }
 
 const getMaintenanceByID = `-- name: GetMaintenanceByID :one
-SELECT mr.id, mr."vehicleId", mr."maintenanceTypeId", mr.description, mr.odometer, mr."totalCost", mr."vendorName", mr.location, mr."startDate", mr."endDate", mr."recordedById", mr."createdAt", r.name AS vehicle_name, v."plateNumber",
+SELECT mr.id, mr."vehicleId", mr."maintenanceTypeId", mr.description, mr.type, mr.status, mr."vendorName", mr."proofPhotos", mr.odometer, mr."totalCost", mr.location, mr."startDate", mr."endDate", mr."completedAt", mr."recordedById", mr."createdAt", r.name AS vehicle_name, v."plateNumber",
        u.name AS created_by_name
 FROM maintenance_records mr
 JOIN vehicles v ON v.id = mr."vehicleId"
@@ -94,21 +108,25 @@ WHERE mr.id = $1 LIMIT 1
 `
 
 type GetMaintenanceByIDRow struct {
-	ID                int32          `json:"id"`
-	VehicleId         int32          `json:"vehicleId"`
-	MaintenanceTypeId sql.NullInt32  `json:"maintenanceTypeId"`
-	Description       string         `json:"description"`
-	Odometer          sql.NullInt32  `json:"odometer"`
-	TotalCost         sql.NullString `json:"totalCost"`
-	VendorName        sql.NullString `json:"vendorName"`
-	Location          string         `json:"location"`
-	StartDate         time.Time      `json:"startDate"`
-	EndDate           sql.NullTime   `json:"endDate"`
-	RecordedById      int32          `json:"recordedById"`
-	CreatedAt         time.Time      `json:"createdAt"`
-	VehicleName       string         `json:"vehicle_name"`
-	PlateNumber       string         `json:"plateNumber"`
-	CreatedByName     string         `json:"created_by_name"`
+	ID                int32                 `json:"id"`
+	VehicleId         int32                 `json:"vehicleId"`
+	MaintenanceTypeId sql.NullInt32         `json:"maintenanceTypeId"`
+	Description       string                `json:"description"`
+	Type              string                `json:"type"`
+	Status            string                `json:"status"`
+	VendorName        sql.NullString        `json:"vendorName"`
+	ProofPhotos       pqtype.NullRawMessage `json:"proofPhotos"`
+	Odometer          sql.NullInt32         `json:"odometer"`
+	TotalCost         sql.NullString        `json:"totalCost"`
+	Location          string                `json:"location"`
+	StartDate         time.Time             `json:"startDate"`
+	EndDate           sql.NullTime          `json:"endDate"`
+	CompletedAt       sql.NullTime          `json:"completedAt"`
+	RecordedById      int32                 `json:"recordedById"`
+	CreatedAt         time.Time             `json:"createdAt"`
+	VehicleName       string                `json:"vehicle_name"`
+	PlateNumber       string                `json:"plateNumber"`
+	CreatedByName     string                `json:"created_by_name"`
 }
 
 func (q *Queries) GetMaintenanceByID(ctx context.Context, id int32) (GetMaintenanceByIDRow, error) {
@@ -119,12 +137,16 @@ func (q *Queries) GetMaintenanceByID(ctx context.Context, id int32) (GetMaintena
 		&i.VehicleId,
 		&i.MaintenanceTypeId,
 		&i.Description,
+		&i.Type,
+		&i.Status,
+		&i.VendorName,
+		&i.ProofPhotos,
 		&i.Odometer,
 		&i.TotalCost,
-		&i.VendorName,
 		&i.Location,
 		&i.StartDate,
 		&i.EndDate,
+		&i.CompletedAt,
 		&i.RecordedById,
 		&i.CreatedAt,
 		&i.VehicleName,
@@ -135,7 +157,7 @@ func (q *Queries) GetMaintenanceByID(ctx context.Context, id int32) (GetMaintena
 }
 
 const listMaintenance = `-- name: ListMaintenance :many
-SELECT mr.id, mr."vehicleId", mr."maintenanceTypeId", mr.description, mr.odometer, mr."totalCost", mr."vendorName", mr.location, mr."startDate", mr."endDate", mr."recordedById", mr."createdAt", r.name AS vehicle_name, v."plateNumber",
+SELECT mr.id, mr."vehicleId", mr."maintenanceTypeId", mr.description, mr.type, mr.status, mr."vendorName", mr."proofPhotos", mr.odometer, mr."totalCost", mr.location, mr."startDate", mr."endDate", mr."completedAt", mr."recordedById", mr."createdAt", r.name AS vehicle_name, v."plateNumber",
        u.name AS created_by_name
 FROM maintenance_records mr
 JOIN vehicles v ON v.id = mr."vehicleId"
@@ -153,21 +175,25 @@ type ListMaintenanceParams struct {
 }
 
 type ListMaintenanceRow struct {
-	ID                int32          `json:"id"`
-	VehicleId         int32          `json:"vehicleId"`
-	MaintenanceTypeId sql.NullInt32  `json:"maintenanceTypeId"`
-	Description       string         `json:"description"`
-	Odometer          sql.NullInt32  `json:"odometer"`
-	TotalCost         sql.NullString `json:"totalCost"`
-	VendorName        sql.NullString `json:"vendorName"`
-	Location          string         `json:"location"`
-	StartDate         time.Time      `json:"startDate"`
-	EndDate           sql.NullTime   `json:"endDate"`
-	RecordedById      int32          `json:"recordedById"`
-	CreatedAt         time.Time      `json:"createdAt"`
-	VehicleName       string         `json:"vehicle_name"`
-	PlateNumber       string         `json:"plateNumber"`
-	CreatedByName     string         `json:"created_by_name"`
+	ID                int32                 `json:"id"`
+	VehicleId         int32                 `json:"vehicleId"`
+	MaintenanceTypeId sql.NullInt32         `json:"maintenanceTypeId"`
+	Description       string                `json:"description"`
+	Type              string                `json:"type"`
+	Status            string                `json:"status"`
+	VendorName        sql.NullString        `json:"vendorName"`
+	ProofPhotos       pqtype.NullRawMessage `json:"proofPhotos"`
+	Odometer          sql.NullInt32         `json:"odometer"`
+	TotalCost         sql.NullString        `json:"totalCost"`
+	Location          string                `json:"location"`
+	StartDate         time.Time             `json:"startDate"`
+	EndDate           sql.NullTime          `json:"endDate"`
+	CompletedAt       sql.NullTime          `json:"completedAt"`
+	RecordedById      int32                 `json:"recordedById"`
+	CreatedAt         time.Time             `json:"createdAt"`
+	VehicleName       string                `json:"vehicle_name"`
+	PlateNumber       string                `json:"plateNumber"`
+	CreatedByName     string                `json:"created_by_name"`
 }
 
 func (q *Queries) ListMaintenance(ctx context.Context, arg ListMaintenanceParams) ([]ListMaintenanceRow, error) {
@@ -184,12 +210,16 @@ func (q *Queries) ListMaintenance(ctx context.Context, arg ListMaintenanceParams
 			&i.VehicleId,
 			&i.MaintenanceTypeId,
 			&i.Description,
+			&i.Type,
+			&i.Status,
+			&i.VendorName,
+			&i.ProofPhotos,
 			&i.Odometer,
 			&i.TotalCost,
-			&i.VendorName,
 			&i.Location,
 			&i.StartDate,
 			&i.EndDate,
+			&i.CompletedAt,
 			&i.RecordedById,
 			&i.CreatedAt,
 			&i.VehicleName,
@@ -211,22 +241,27 @@ func (q *Queries) ListMaintenance(ctx context.Context, arg ListMaintenanceParams
 
 const updateMaintenance = `-- name: UpdateMaintenance :one
 UPDATE maintenance_records
-SET "vehicleId" = $2, "maintenanceTypeId" = $3, description = $4, odometer = $5,
-    "totalCost" = $6, "vendorName" = $7, location = $8, "startDate" = $9, "endDate" = $10
-WHERE id = $1 RETURNING id, "vehicleId", "maintenanceTypeId", description, odometer, "totalCost", "vendorName", location, "startDate", "endDate", "recordedById", "createdAt"
+SET "vehicleId" = $2, "maintenanceTypeId" = $3, description = $4, type = $5, status = $6,
+    odometer = $7, "totalCost" = $8, "vendorName" = $9, location = $10,
+    "startDate" = $11, "endDate" = $12, "completedAt" = $13, "proofPhotos" = $14
+WHERE id = $1 RETURNING id, "vehicleId", "maintenanceTypeId", description, type, status, "vendorName", "proofPhotos", odometer, "totalCost", location, "startDate", "endDate", "completedAt", "recordedById", "createdAt"
 `
 
 type UpdateMaintenanceParams struct {
-	ID                int32          `json:"id"`
-	VehicleId         int32          `json:"vehicleId"`
-	MaintenanceTypeId sql.NullInt32  `json:"maintenanceTypeId"`
-	Description       string         `json:"description"`
-	Odometer          sql.NullInt32  `json:"odometer"`
-	TotalCost         sql.NullString `json:"totalCost"`
-	VendorName        sql.NullString `json:"vendorName"`
-	Location          string         `json:"location"`
-	StartDate         time.Time      `json:"startDate"`
-	EndDate           sql.NullTime   `json:"endDate"`
+	ID                int32                 `json:"id"`
+	VehicleId         int32                 `json:"vehicleId"`
+	MaintenanceTypeId sql.NullInt32         `json:"maintenanceTypeId"`
+	Description       string                `json:"description"`
+	Type              string                `json:"type"`
+	Status            string                `json:"status"`
+	Odometer          sql.NullInt32         `json:"odometer"`
+	TotalCost         sql.NullString        `json:"totalCost"`
+	VendorName        sql.NullString        `json:"vendorName"`
+	Location          string                `json:"location"`
+	StartDate         time.Time             `json:"startDate"`
+	EndDate           sql.NullTime          `json:"endDate"`
+	CompletedAt       sql.NullTime          `json:"completedAt"`
+	ProofPhotos       pqtype.NullRawMessage `json:"proofPhotos"`
 }
 
 func (q *Queries) UpdateMaintenance(ctx context.Context, arg UpdateMaintenanceParams) (MaintenanceRecord, error) {
@@ -235,12 +270,16 @@ func (q *Queries) UpdateMaintenance(ctx context.Context, arg UpdateMaintenancePa
 		arg.VehicleId,
 		arg.MaintenanceTypeId,
 		arg.Description,
+		arg.Type,
+		arg.Status,
 		arg.Odometer,
 		arg.TotalCost,
 		arg.VendorName,
 		arg.Location,
 		arg.StartDate,
 		arg.EndDate,
+		arg.CompletedAt,
+		arg.ProofPhotos,
 	)
 	var i MaintenanceRecord
 	err := row.Scan(
@@ -248,12 +287,16 @@ func (q *Queries) UpdateMaintenance(ctx context.Context, arg UpdateMaintenancePa
 		&i.VehicleId,
 		&i.MaintenanceTypeId,
 		&i.Description,
+		&i.Type,
+		&i.Status,
+		&i.VendorName,
+		&i.ProofPhotos,
 		&i.Odometer,
 		&i.TotalCost,
-		&i.VendorName,
 		&i.Location,
 		&i.StartDate,
 		&i.EndDate,
+		&i.CompletedAt,
 		&i.RecordedById,
 		&i.CreatedAt,
 	)
