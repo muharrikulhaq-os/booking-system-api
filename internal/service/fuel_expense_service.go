@@ -144,6 +144,15 @@ func (s *FuelExpenseService) Create(ctx context.Context, req CreateFuelExpenseRe
 		quantity = req.Kwh
 		pricePerUnit = req.PricePerKwh
 	}
+
+	// Jika frontend tidak mengirim harga (0), ambil dari default_price di master fuel_types
+	if pricePerUnit <= 0 {
+		fuelType, err := s.q.GetFuelTypeByID(ctx, req.FuelTypeID)
+		if err == nil && fuelType.DefaultPrice.Valid {
+			pricePerUnit = util.ParseStringToFloat64(fuelType.DefaultPrice.String)
+		}
+	}
+
 	totalCost = quantity * pricePerUnit
 	
 	distanceKm := int32(0)

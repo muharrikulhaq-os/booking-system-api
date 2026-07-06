@@ -40,6 +40,7 @@ type Querier interface {
 	CreateDriver(ctx context.Context, arg CreateDriverParams) (Driver, error)
 	CreateDriverRating(ctx context.Context, arg CreateDriverRatingParams) (DriverRating, error)
 	CreateFuelExpense(ctx context.Context, arg CreateFuelExpenseParams) (FuelExpense, error)
+	CreateFuelType(ctx context.Context, arg CreateFuelTypeParams) (FuelType, error)
 	CreateGuestBooking(ctx context.Context, arg CreateGuestBookingParams) (GuestBooking, error)
 	CreateMaintenance(ctx context.Context, arg CreateMaintenanceParams) (MaintenanceRecord, error)
 	CreateNotification(ctx context.Context, arg CreateNotificationParams) (Notification, error)
@@ -54,6 +55,7 @@ type Querier interface {
 	DeleteAttachment(ctx context.Context, id int32) error
 	DeleteDepartment(ctx context.Context, id int32) error
 	DeleteFuelExpense(ctx context.Context, id int32) error
+	DeleteFuelType(ctx context.Context, id int32) error
 	DeleteMaintenance(ctx context.Context, id int32) error
 	DeleteProfilePhoto(ctx context.Context, id int32) (User, error)
 	DeleteResource(ctx context.Context, id int32) error
@@ -70,6 +72,7 @@ type Querier interface {
 	GetDriverRatingByBooking(ctx context.Context, bookingid int32) (DriverRating, error)
 	GetDriverRatings(ctx context.Context, driverid int32) ([]GetDriverRatingsRow, error)
 	GetFuelExpenseByID(ctx context.Context, id int32) (GetFuelExpenseByIDRow, error)
+	GetFuelType(ctx context.Context, id int32) (FuelType, error)
 	GetFuelTypeByID(ctx context.Context, id int32) (FuelType, error)
 	GetGuestBookingByID(ctx context.Context, id int32) (GetGuestBookingByIDRow, error)
 	GetGuestBookingByToken(ctx context.Context, accesstoken string) (GetGuestBookingByTokenRow, error)
@@ -95,6 +98,7 @@ type Querier interface {
 	ListDepartments(ctx context.Context) ([]Department, error)
 	ListDrivers(ctx context.Context, arg ListDriversParams) ([]ListDriversRow, error)
 	ListFuelExpenses(ctx context.Context, arg ListFuelExpensesParams) ([]ListFuelExpensesRow, error)
+	ListFuelTypes(ctx context.Context) ([]FuelType, error)
 	ListGuestBookings(ctx context.Context, arg ListGuestBookingsParams) ([]ListGuestBookingsRow, error)
 	ListMaintenance(ctx context.Context, arg ListMaintenanceParams) ([]ListMaintenanceRow, error)
 	ListMasterSettings(ctx context.Context) ([]MasterSetting, error)
@@ -134,6 +138,7 @@ type Querier interface {
 	UpdateDepartment(ctx context.Context, arg UpdateDepartmentParams) (Department, error)
 	UpdateDriver(ctx context.Context, arg UpdateDriverParams) (Driver, error)
 	UpdateFuelExpense(ctx context.Context, arg UpdateFuelExpenseParams) (FuelExpense, error)
+	UpdateFuelType(ctx context.Context, arg UpdateFuelTypeParams) (FuelType, error)
 	UpdateGuestBookingStatus(ctx context.Context, arg UpdateGuestBookingStatusParams) (GuestBooking, error)
 	UpdateMaintenance(ctx context.Context, arg UpdateMaintenanceParams) (MaintenanceRecord, error)
 	UpdateMergedBooking(ctx context.Context, arg UpdateMergedBookingParams) (Booking, error)

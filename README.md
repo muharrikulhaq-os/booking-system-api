@@ -1947,6 +1947,78 @@ Riwayat kendaraan yang pernah dikemudikan driver.
 
 ---
 
+## ⛽ Modul Master Data — Fuel Types (`/api/v1/fuel-types`)
+Manajemen master data jenis bahan bakar yang digunakan sebagai *reference* (acuan harga) saat pelaporan *Fuel Expenses*.
+
+### `GET /api/v1/fuel-types`
+Melihat daftar bahan bakar.
+
+**Akses:** User / Driver / Admin (Auth required)
+
+**Response `200`:**
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "id": 1,
+      "name": "Pertamax",
+      "type": "BBM",
+      "unit": "LITER",
+      "defaultPrice": 12900.0,
+      "isActive": true
+    },
+    {
+      "id": 4,
+      "name": "SPKLU PLN",
+      "type": "LISTRIK",
+      "unit": "KWH",
+      "defaultPrice": 2466.0,
+      "isActive": true
+    }
+  ]
+}
+```
+
+---
+
+### `POST /api/v1/fuel-types`
+Menambahkan jenis bahan bakar baru.
+
+**Akses:** Admin (Auth required)
+
+**Request Body:**
+```json
+{
+  "name": "Dexlite",
+  "type": "BBM",
+  "unit": "LITER",
+  "defaultPrice": 14550.0,
+  "isActive": true
+}
+```
+
+**Response `201`:** *(data fuel type baru)*
+
+---
+
+### `PUT /api/v1/fuel-types/:id`
+Mengubah data bahan bakar (misalnya update harga *defaultPrice* terbaru).
+
+**Akses:** Admin (Auth required)
+
+**Request Body:** Sama dengan POST.
+
+**Response `200`:** *(data fuel type terupdate)*
+
+---
+
+### `DELETE /api/v1/fuel-types/:id`
+Menghapus master data bahan bakar.
+
+**Akses:** Admin (Auth required)
+
+---
 ## ⛽ Modul 7 — Pengeluaran BBM & Listrik (`/api/v1/fuel-expenses`)
 
 ### `GET /api/v1/fuel-expenses`
@@ -3125,20 +3197,47 @@ File disimpan berdasarkan kategori dan bulan upload:
 
 ## 💾 Database Migration Guide (Update Terbaru)
 
-Sehubungan dengan pembaruan fitur (Fuel Expense Unified, Maintenance Vehicle Bind, Passenger Count & Capacity Validation), berikut perintah SQL yang perlu dijalankan untuk memperbarui schema lama:
+Sehubungan dengan pembaruan fitur, berikut perintah SQL yang perlu dijalankan untuk memperbarui schema lama:
 
 ```sql
 -- 1. Tambahkan passengerCount ke bookings
 ALTER TABLE bookings ADD COLUMN passenger_count INT NOT NULL DEFAULT 1;
 
--- 2. Modifikasi Fuel Expenses
+-- 2. Buat tabel Fuel Types sebagai master data bahan bakar
+CREATE TYPE fuel_category AS ENUM ('BBM', 'LISTRIK');
+CREATE TYPE fuel_unit AS ENUM ('LITER', 'KWH');
+CREATE TABLE fuel_types (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(100) NOT NULL,
+    type fuel_category NOT NULL,
+    unit fuel_unit NOT NULL,
+    default_price NUMERIC(12,2) NULL,
+    is_active BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- 3. Modifikasi Fuel Expenses
 ALTER TABLE fuel_expenses RENAME COLUMN resource_id TO vehicle_id;
 ALTER TABLE fuel_expenses DROP COLUMN resource_type;
+ALTER TABLE fuel_expenses ADD COLUMN fuel_type_id INT NOT NULL REFERENCES fuel_types(id);
 ALTER TABLE fuel_expenses ALTER COLUMN price_per_unit DROP NOT NULL;
 ALTER TABLE fuel_expenses ALTER COLUMN total_cost DROP NOT NULL;
 
--- 3. Modifikasi Maintenance Records
+-- 4. Modifikasi Maintenance Records
 ALTER TABLE maintenance_records RENAME COLUMN resource_id TO vehicle_id;
 ALTER TABLE maintenance_records DROP COLUMN resource_type;
+
+-- 5. Buat Tabel Notifikasi
+CREATE TABLE notifications (
+    id SERIAL PRIMARY KEY,
+    user_id INT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    title VARCHAR(255) NOT NULL,
+    body TEXT NOT NULL,
+    type VARCHAR(50) NOT NULL,
+    related_entity_id INT,
+    is_read BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
 ```
-*(Catatan: Schema utama baru sudah di-bundle pada `000001_init.up.sql` jika melakukan inisialisasi dari awal).*
+*(Catatan: Schema utama baru sudah di-bundle pada `000001_init.up.sql` secara utuh jika melakukan inisialisasi awal database yang fresh).*
