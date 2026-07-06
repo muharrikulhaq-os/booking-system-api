@@ -4,11 +4,12 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"mime/multipart"
 	"strings"
-	"github.com/sqlc-dev/pqtype"
-	"fmt"
 	"time"
+
+	"github.com/sqlc-dev/pqtype"
 
 	"booking-system-api/internal/repository"
 	"booking-system-api/internal/util"
@@ -212,7 +213,7 @@ func (s *MaintenanceService) Create(ctx context.Context, req CreateMaintenanceRe
 		ID:     vehicle.ResourceId,
 		Status: repository.ResourceStatusMAINTENANCE,
 	})
-	
+
 	// if end date is filled and is in the past, immediately unlock (just in case)
 	if req.EndDate != nil && req.EndDate.Before(time.Now()) {
 		_, _ = s.q.UpdateResourceStatus(ctx, repository.UpdateResourceStatusParams{
@@ -233,7 +234,7 @@ func (s *MaintenanceService) Update(ctx context.Context, id int32, req UpdateMai
 	if err != nil {
 		return nil, util.ErrNotFound
 	}
-	
+
 	vehicle, err := s.q.GetVehicleByID(ctx, req.VehicleID)
 	if err != nil {
 		return nil, util.NewError(404, "Vehicle not found", util.ErrNotFound)
@@ -248,8 +249,6 @@ func (s *MaintenanceService) Update(ctx context.Context, id int32, req UpdateMai
 	if req.Status == "completed" {
 		completedAt = sql.NullTime{Time: time.Now(), Valid: true}
 	} else {
-		// if not completed, retain existing completedAt? or clear it?
-		// Usually if changing back to pending, we clear it.
 		completedAt = sql.NullTime{}
 	}
 	if req.Status == existing.Status {
@@ -282,7 +281,7 @@ func (s *MaintenanceService) Update(ctx context.Context, id int32, req UpdateMai
 			Status: repository.ResourceStatusAVAILABLE,
 		})
 	} else if req.EndDate == nil || req.EndDate.After(time.Now()) {
-	    _, _ = s.q.UpdateResourceStatus(ctx, repository.UpdateResourceStatusParams{
+		_, _ = s.q.UpdateResourceStatus(ctx, repository.UpdateResourceStatusParams{
 			ID:     vehicle.ResourceId,
 			Status: repository.ResourceStatusMAINTENANCE,
 		})
@@ -296,12 +295,11 @@ func (s *MaintenanceService) Delete(ctx context.Context, id int32) error {
 	if err != nil {
 		return util.ErrNotFound
 	}
-	
+
 	vehicle, err := s.q.GetVehicleByID(ctx, m.VehicleId)
-	
+
 	err = s.q.DeleteMaintenance(ctx, id)
-	
-	// Recover to AVAILABLE if deleted
+
 	if err == nil && vehicle.ID != 0 {
 		_, _ = s.q.UpdateResourceStatus(ctx, repository.UpdateResourceStatusParams{
 			ID:     vehicle.ResourceId,

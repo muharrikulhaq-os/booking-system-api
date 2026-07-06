@@ -554,6 +554,17 @@ type MasterSetting struct {
 	UpdatedAt   time.Time      `json:"updatedAt"`
 }
 
+type Notification struct {
+	ID              int32         `json:"id"`
+	UserID          int32         `json:"user_id"`
+	Title           string        `json:"title"`
+	Body            string        `json:"body"`
+	Type            string        `json:"type"`
+	RelatedEntityID sql.NullInt32 `json:"related_entity_id"`
+	IsRead          bool          `json:"is_read"`
+	CreatedAt       time.Time     `json:"created_at"`
+}
+
 type PasswordResetOtp struct {
 	ID        int32     `json:"id"`
 	UserId    int32     `json:"userId"`

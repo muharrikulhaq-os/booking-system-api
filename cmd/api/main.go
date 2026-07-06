@@ -61,7 +61,7 @@ func main() {
 	userSvc := service.NewUserService(db)
 	vehicleSvc := service.NewVehicleService(db)
 	roomSvc := service.NewRoomService(db)
-	notifSvc := service.NewNotificationService(wsHub)
+	notifSvc := service.NewNotificationService(db, wsHub)
 	driverSvc := service.NewDriverService(db)
 	bookingSvc := service.NewBookingService(db, notifSvc)
 	fuelSvc := service.NewFuelExpenseService(db)
@@ -89,6 +89,7 @@ func main() {
 	httph.NewMasterSettingHandler(settingSvc).Register(v1)
 	httph.NewReportHandler(reportSvc).Register(v1)
 	httph.NewExcelHandler(reportSvc).Register(v1)
+	httph.NewNotificationHandler(notifSvc).Register(v1)
 
 	log.Printf("server starting on :%s", config.C.AppPort)
 	log.Fatal(app.Listen(":" + config.C.AppPort))

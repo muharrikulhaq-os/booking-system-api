@@ -1999,69 +1999,29 @@ Detail satu entri pengeluaran.
 
 ---
 
-### `POST /api/v1/fuel-expenses/bbm`
-Input pengeluaran BBM baru.
+### `POST /api/v1/fuel-expenses`
+Input pengeluaran BBM atau pengisian listrik (EV) baru (mendukung _multipart/form-data_ untuk _upload_ bukti foto).
 
 **Akses:** Driver (Auth required)
 
-**Query Parameters:** `?driverId=1` (wajib)
+**Content-Type:** `multipart/form-data`
 
-**Request Body:**
-```json
-{
-  "vehicleId": 1,
-  "bookingId": 5,
-  "liter": 30.5,
-  "pricePerLiter": 10000,
-  "odometerBefore": 15000,
-  "odometerAfter": 15350,
-  "note": "Pengisian di SPBU Cibubur"
-}
-```
+**Form-Data Fields:**
 
 | Field | Type | Required | Keterangan |
 |-------|------|----------|-----------|
 | `vehicleId` | integer | ✅ | ID kendaraan |
 | `bookingId` | integer | ❌ | ID booking terkait |
-| `liter` | float | ✅ | Jumlah liter (> 0) |
-| `pricePerLiter` | float | ✅ | Harga per liter (> 0) |
-| `odometerBefore` | integer | ✅ | Odometer sebelum |
-| `odometerAfter` | integer | ✅ | Odometer sesudah |
+| `fuelTypeId`| integer | ✅ | ID jenis bahan bakar |
+| `fuelGrade` | string | ❌ | RON/Grade bahan bakar |
+| `liter` | float | ❌ | Jumlah liter (jika BBM) |
+| `pricePerLiter` | float | ❌ | Harga per liter |
+| `kwh` | float | ❌ | Jumlah kWh (jika EV) |
+| `pricePerKwh` | float | ❌ | Harga per kWh |
+| `odometerBefore` | integer | ❌ | Odometer sebelum |
+| `odometerAfter` | integer | ❌ | Odometer sesudah |
 | `note` | string | ❌ | Catatan tambahan |
-
-**Response `201`:** *(data fuel expense)*
-
----
-
-### `POST /api/v1/fuel-expenses/listrik`
-Input pengeluaran pengisian listrik (EV) baru.
-
-**Akses:** Driver (Auth required)
-
-**Query Parameters:** `?driverId=1` (wajib)
-
-**Request Body:**
-```json
-{
-  "vehicleId": 2,
-  "bookingId": 6,
-  "kwh": 25.5,
-  "pricePerKwh": 2500,
-  "batteryBefore": 20.0,
-  "batteryAfter": 85.0,
-  "note": "Pengisian di SPKLU Sudirman"
-}
-```
-
-| Field | Type | Required | Keterangan |
-|-------|------|----------|-----------|
-| `vehicleId` | integer | ✅ | ID kendaraan EV |
-| `bookingId` | integer | ❌ | ID booking terkait |
-| `kwh` | float | ✅ | Jumlah kWh (> 0) |
-| `pricePerKwh` | float | ✅ | Harga per kWh (> 0) |
-| `batteryBefore` | float | ❌ | % baterai sebelum (0-100) |
-| `batteryAfter` | float | ❌ | % baterai sesudah (0-100) |
-| `note` | string | ❌ | Catatan |
+| `proofPhoto` | file | ✅ | Bukti foto nota/struk |
 
 **Response `201`:** *(data fuel expense)*
 
@@ -2173,6 +2133,28 @@ Update record pemeliharaan. Jika `endDate` diisi, status resource otomatis kemba
 ```
 
 **Response `200`:** *(data maintenance record yang diperbarui)*
+
+---
+
+### `PATCH /api/v1/maintenance/:id/complete`
+Menyelesaikan *maintenance* dan mengunggah foto bukti (akan mengubah status `resource` menjadi `AVAILABLE`).
+
+**Akses:** Admin
+
+**Content-Type:** `multipart/form-data`
+
+| Field | Type | Required | Keterangan |
+|-------|------|----------|-----------|
+| `photos` | file (array) | ❌ | Beberapa file foto bukti |
+
+**Response `200`:**
+```json
+{
+  "success": true,
+  "message": "Maintenance completed",
+  "data": { "id": 1, "status": "COMPLETED", "completedAt": "2026-07-06T..." }
+}
+```
 
 ---
 
@@ -2931,6 +2913,97 @@ Ringkasan booking dan biaya per departemen dalam satu tabel.
   ]
 }
 ```
+
+---
+
+## 📊 Modul Dashboard (`/api/v1/dashboard`)
+
+### `GET /api/v1/dashboard/summary`
+Mengambil data ringkasan dashboard (total booking, kendaraan aktif, dll).
+
+**Akses:** User (Auth required)
+
+**Response `200`:**
+```json
+{
+  "success": true,
+  "data": {
+    "totalBookings": 150,
+    "activeVehicles": 10,
+    "pendingApprovals": 5
+  }
+}
+```
+
+---
+
+## 🔔 Modul Notifications (`/api/v1/users/me/notifications`)
+
+### `GET /api/v1/users/me/notifications`
+Melihat history notifikasi pengguna saat ini (termasuk pagination).
+
+**Akses:** User / Driver (Auth required)
+
+**Query Parameters:** `?page=1&limit=20`
+
+**Response `200`:**
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "id": 1,
+      "title": "Booking Update",
+      "body": "Your booking has been approved",
+      "type": "BOOKING_APPROVED",
+      "is_read": false,
+      "created_at": "2026-07-06T10:00:00Z"
+    }
+  ]
+}
+```
+
+---
+
+### `PATCH /api/v1/users/me/notifications/:id/read`
+Menandai satu notifikasi sebagai sudah dibaca.
+
+**Akses:** User (Auth required)
+
+**Response `200`:**
+```json
+{
+  "success": true,
+  "message": "Notification marked as read"
+}
+```
+
+---
+
+### `PATCH /api/v1/users/me/notifications/read-all`
+Menandai seluruh notifikasi milik pengguna sebagai sudah dibaca.
+
+**Akses:** User (Auth required)
+
+**Response `200`:**
+```json
+{
+  "success": true,
+  "message": "All notifications marked as read"
+}
+```
+
+---
+
+## 📥 Laporan & Ekspor File
+
+### `GET /api/v1/reports/export/excel`
+Mengunduh (*download*) seluruh laporan secara komprehensif ke dalam format `.xlsx`. File Excel ini memuat 18 *sheets* beserta *chart* (grafik) otomatis.
+
+**Akses:** Admin / Manager
+
+**Response:**
+*File Download (`application/vnd.openxmlformats-officedocument.spreadsheetml.sheet`)*
 
 ---
 

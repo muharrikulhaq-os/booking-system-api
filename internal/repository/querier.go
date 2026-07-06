@@ -26,6 +26,7 @@ type Querier interface {
 	CountFuelExpenses(ctx context.Context, arg CountFuelExpensesParams) (int64, error)
 	CountGuestBookings(ctx context.Context, status NullBookingStatus) (int64, error)
 	CountMaintenance(ctx context.Context, vehicleID sql.NullInt32) (int64, error)
+	CountNotificationsByUserID(ctx context.Context, userID int32) (int64, error)
 	CountRooms(ctx context.Context, arg CountRoomsParams) (int64, error)
 	CountUsers(ctx context.Context, arg CountUsersParams) (int64, error)
 	CountVehicles(ctx context.Context, arg CountVehiclesParams) (int64, error)
@@ -41,6 +42,7 @@ type Querier interface {
 	CreateFuelExpense(ctx context.Context, arg CreateFuelExpenseParams) (FuelExpense, error)
 	CreateGuestBooking(ctx context.Context, arg CreateGuestBookingParams) (GuestBooking, error)
 	CreateMaintenance(ctx context.Context, arg CreateMaintenanceParams) (MaintenanceRecord, error)
+	CreateNotification(ctx context.Context, arg CreateNotificationParams) (Notification, error)
 	CreateOTP(ctx context.Context, arg CreateOTPParams) (PasswordResetOtp, error)
 	CreateRefreshToken(ctx context.Context, arg CreateRefreshTokenParams) (RefreshToken, error)
 	CreateResource(ctx context.Context, arg CreateResourceParams) (Resource, error)
@@ -96,15 +98,18 @@ type Querier interface {
 	ListGuestBookings(ctx context.Context, arg ListGuestBookingsParams) ([]ListGuestBookingsRow, error)
 	ListMaintenance(ctx context.Context, arg ListMaintenanceParams) ([]ListMaintenanceRow, error)
 	ListMasterSettings(ctx context.Context) ([]MasterSetting, error)
+	ListNotificationsByUserID(ctx context.Context, arg ListNotificationsByUserIDParams) ([]Notification, error)
 	ListRoles(ctx context.Context) ([]Role, error)
 	ListRooms(ctx context.Context, arg ListRoomsParams) ([]ListRoomsRow, error)
 	ListUsers(ctx context.Context, arg ListUsersParams) ([]ListUsersRow, error)
 	ListVehicleCategories(ctx context.Context) ([]VehicleCategory, error)
 	ListVehicles(ctx context.Context, arg ListVehiclesParams) ([]ListVehiclesRow, error)
+	MarkAllNotificationsAsRead(ctx context.Context, userID int32) error
 	// Booking APPROVED tapi tidak pernah dimulai (tidak jadi ONGOING) selama masa bookingnya → EXPIRED
 	MarkExpiredBookings(ctx context.Context) ([]Booking, error)
 	// Booking PENDING tapi admin tidak merespons sampai masa bookingnya habis → IGNORED
 	MarkIgnoredBookings(ctx context.Context) ([]Booking, error)
+	MarkNotificationAsRead(ctx context.Context, arg MarkNotificationAsReadParams) error
 	MarkOTPUsed(ctx context.Context, id int32) error
 	// Booking ONGOING tapi lewat endDate → OVERDUE (sudah mulai tapi belum selesai tepat waktu)
 	MarkOverdueBookings(ctx context.Context) ([]Booking, error)

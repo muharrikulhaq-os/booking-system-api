@@ -726,3 +726,15 @@ INSERT INTO audit_logs ("userId", action, "entityType", "entityId", description)
     (1, 'APPROVE',     'Booking',           9, 'Admin menyetujui booking #9 — Ioniq 5 pameran EV'),
     (1, 'ASSIGN',      'Booking',           9, 'Admin assign Pak Supir Satu + Ioniq 5 ke booking #9'),
     (2, 'RATE_DRIVER', 'DriverRating',      1, 'John Doe rating 5/5 untuk Pak Supir Satu (booking #1)');
+
+-- Notifications
+CREATE TABLE notifications (
+    id SERIAL PRIMARY KEY,
+    user_id INT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    title VARCHAR(255) NOT NULL,
+    body TEXT NOT NULL,
+    type VARCHAR(50) NOT NULL,
+    related_entity_id INT,
+    is_read BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
