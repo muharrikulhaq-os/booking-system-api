@@ -36,7 +36,8 @@ func (h *FuelExpenseHandler) List(c *fiber.Ctx) error {
 	page := queryInt(c, "page", 1)
 	limit := queryInt(c, "limit", 20)
 	data, total, err := h.svc.List(c.Context(), page, limit,
-		queryInt32(c, "driverId"), queryInt32(c, "vehicleId"), queryString(c, "fuelType"))
+		queryInt32(c, "driverId"), queryInt32(c, "vehicleId"), queryString(c, "fuelType"),
+		queryInt32(c, "bookingId"))
 	if err != nil {
 		return err
 	}
@@ -60,7 +61,7 @@ func (h *FuelExpenseHandler) Create(c *fiber.Ctx) error {
 	
 	// Read multipart fields
 	req.VehicleID = int32(util.ParseStringToInt(c.FormValue("vehicleId")))
-	req.FuelTypeID = int32(util.ParseStringToInt(c.FormValue("fuelType"))) // Assuming FE passes fuelType ID here
+	req.FuelTypeID = int32(util.ParseStringToInt(c.FormValue("fuelTypeId")))
 	if bid := c.FormValue("bookingId"); bid != "" {
 		parsed := int32(util.ParseStringToInt(bid))
 		req.BookingID = &parsed

@@ -9,6 +9,7 @@ JOIN fuel_types ft ON ft.id = fe."fuelTypeId"
 WHERE (sqlc.narg(driver_id)::int IS NULL OR fe."driverId" = sqlc.narg(driver_id)::int)
   AND (sqlc.narg(vehicle_id)::int IS NULL OR fe."vehicleId" = sqlc.narg(vehicle_id)::int)
   AND (sqlc.narg(fuel_category)::fuel_category IS NULL OR ft.type = sqlc.narg(fuel_category)::fuel_category)
+  AND (sqlc.narg(booking_id)::int IS NULL OR fe."bookingId" = sqlc.narg(booking_id)::int)
 ORDER BY fe."createdAt" DESC
 LIMIT $1 OFFSET $2;
 

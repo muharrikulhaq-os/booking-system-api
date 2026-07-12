@@ -12,8 +12,12 @@ type ExtendedQuerier interface {
 	CreateBookingMerge(ctx context.Context, primaryBookingID, mergedBookingID, mergedByID int32, reason string) (BookingMerge, error)
 	GetBookingMerges(ctx context.Context, bookingID int32) ([]BookingMergeInfoRow, error)
 	InheritMergeDriverVehicle(ctx context.Context, mergedBookingID, driverID, vehicleID int32, driverValid, vehicleValid bool) error
+	InheritMergeResourceDriverVehicle(ctx context.Context, mergedBookingID, primaryResourceID, driverID, vehicleID int32, driverValid, vehicleValid bool) error
 	UpdateBookingDates(ctx context.Context, bookingID int32, startDate, endDate time.Time) error
 	CheckBookingAlreadyMerged(ctx context.Context, bookingA, bookingB int32) (bool, error)
+	CountActiveBookingsByDriver(ctx context.Context, driverID, excludeBookingID int32) (int64, error)
+	GetVehicleIDByResourceID(ctx context.Context, resourceID int32) (int32, error)
+	GetFreeDriver(ctx context.Context) (int32, error)
 	CreateReturnReport(ctx context.Context, bookingID, submittedByID int32, note, location string) (BookingReturnReport, error)
 	GetReturnReport(ctx context.Context, bookingID int32) (BookingReturnReportRow, error)
 	GetRoomKeeperByUserID(ctx context.Context, userID int32) (RoomKeeper, error)

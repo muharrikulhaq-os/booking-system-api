@@ -19,10 +19,10 @@ func (q *Queries) ReportOverview(ctx context.Context, start, end time.Time) (Ove
 	query := `
 		SELECT
 		    COUNT(b.id)                                                   AS total_bookings,
-		    COALESCE((SELECT SUM(fe."totalAmount")::float8 FROM fuel_expenses fe
+		    COALESCE((SELECT SUM(fe."totalCost")::float8 FROM fuel_expenses fe
 		              JOIN bookings fb ON fb.id = fe."bookingId"
 		              WHERE fb."startDate" >= $1 AND fb."endDate" <= $2), 0) +
-		    COALESCE((SELECT SUM(mr.cost)::float8 FROM maintenance_records mr
+		    COALESCE((SELECT SUM(mr."totalCost")::float8 FROM maintenance_records mr
 		              WHERE mr."startDate" >= $1 AND mr."startDate" <= $2), 0) AS total_cost,
 		    COALESCE(
 		        (COUNT(CASE WHEN b.status IN ('ONGOING','COMPLETED') THEN 1 END)::float8 /
@@ -214,10 +214,10 @@ type CostSummaryRow struct {
 func (q *Queries) ReportCostSummary(ctx context.Context, start, end sql.NullTime) (CostSummaryRow, error) {
 	query := `
 		SELECT
-		    COALESCE((SELECT SUM(fe."totalAmount")::float8 FROM fuel_expenses fe
+		    COALESCE((SELECT SUM(fe."totalCost")::float8 FROM fuel_expenses fe
 		              WHERE ($1::timestamptz IS NULL OR fe."createdAt" >= $1::timestamptz)
 		                AND ($2::timestamptz IS NULL OR fe."createdAt" <= $2::timestamptz)), 0) AS fuel_cost,
-		    COALESCE((SELECT SUM(mr.cost)::float8 FROM maintenance_records mr
+		    COALESCE((SELECT SUM(mr."totalCost")::float8 FROM maintenance_records mr
 		              WHERE ($1::timestamptz IS NULL OR mr."startDate" >= $1::timestamptz)
 		                AND ($2::timestamptz IS NULL OR mr."startDate" <= $2::timestamptz)), 0) AS maint_cost`
 	var fuelCost, maintCost float64
@@ -250,12 +250,12 @@ func (q *Queries) ReportCostByVehicle(ctx context.Context, start, end sql.NullTi
 		    v.id,
 		    r.name,
 		    v."plateNumber",
-		    COALESCE(SUM(fe."totalAmount")::float8, 0)                       AS fuel_cost,
-		    COALESCE((SELECT SUM(mr.cost)::float8 FROM maintenance_records mr
-		              WHERE mr."resourceId" = v."resourceId"
+		    COALESCE(SUM(fe."totalCost")::float8, 0)                       AS fuel_cost,
+		    COALESCE((SELECT SUM(mr."totalCost")::float8 FROM maintenance_records mr
+		              WHERE mr."vehicleId" = v.id
 		                AND ($1::timestamptz IS NULL OR mr."startDate" >= $1::timestamptz)
 		                AND ($2::timestamptz IS NULL OR mr."startDate" <= $2::timestamptz)), 0) AS maint_cost,
-		    COALESCE(SUM(CASE WHEN fe."fuelType" = 'BBM'
+		    COALESCE(SUM(CASE WHEN fe."odometerAfter" IS NOT NULL AND fe."odometerBefore" IS NOT NULL
 		                  THEN (fe."odometerAfter" - fe."odometerBefore")::float8 ELSE 0 END), 0) AS total_km
 		FROM vehicles v
 		JOIN resources r ON r.id = v."resourceId"
@@ -301,7 +301,7 @@ func (q *Queries) ReportCostByDepartment(ctx context.Context, start, end sql.Nul
 		    d.id,
 		    d.name,
 		    COUNT(DISTINCT b.id)                                           AS booking_count,
-		    COALESCE(SUM(fe."totalAmount")::float8, 0)                    AS fuel_cost,
+		    COALESCE(SUM(fe."totalCost")::float8, 0)                    AS fuel_cost,
 		    0::float8                                                      AS maint_cost
 		FROM departments d
 		LEFT JOIN users u ON u."departmentId" = d.id
@@ -360,9 +360,9 @@ func (q *Queries) ReportCostTrend(ctx context.Context, groupBy string, periods i
 		)
 		SELECT
 		    TO_CHAR(p, $2) AS period,
-		    COALESCE((SELECT SUM(fe."totalAmount")::float8 FROM fuel_expenses fe
+		    COALESCE((SELECT SUM(fe."totalCost")::float8 FROM fuel_expenses fe
 		              WHERE DATE_TRUNC($1, fe."createdAt") = p), 0) AS fuel_cost,
-		    COALESCE((SELECT SUM(mr.cost)::float8 FROM maintenance_records mr
+		    COALESCE((SELECT SUM(mr."totalCost")::float8 FROM maintenance_records mr
 		              WHERE DATE_TRUNC($1, mr."startDate") = p), 0) AS maint_cost
 		FROM periods
 		ORDER BY p ASC`
@@ -404,9 +404,9 @@ func (q *Queries) ReportDriverPerformance(ctx context.Context, start, end sql.Nu
 		    d.id,
 		    u.name,
 		    COUNT(DISTINCT b.id)                                                AS total_trips,
-		    COALESCE(SUM(CASE WHEN fe."fuelType"='BBM'
+		    COALESCE(SUM(CASE WHEN fe."odometerAfter" IS NOT NULL AND fe."odometerBefore" IS NOT NULL
 		                  THEN (fe."odometerAfter" - fe."odometerBefore")::float8 ELSE 0 END), 0) AS total_km,
-		    COALESCE(SUM(fe."totalAmount")::float8, 0)                         AS total_fuel_cost,
+		    COALESCE(SUM(fe."totalCost")::float8, 0)                         AS total_fuel_cost,
 		    COALESCE(AVG(dr.rating::float8), 0)                                AS avg_rating,
 		    COUNT(DISTINCT dr.id)                                               AS total_reviews,
 		    COUNT(CASE WHEN b.status = 'OVERDUE' THEN 1 END)                   AS late_count
@@ -467,7 +467,7 @@ func (q *Queries) ReportDepartmentSummary(ctx context.Context, start, end sql.Nu
 		        d.id AS dept_id,
 		        d.name AS dept_name,
 		        COUNT(DISTINCT b.id)                                 AS booking_count,
-		        COALESCE(SUM(fe."totalAmount")::float8, 0)           AS fuel_cost
+		        COALESCE(SUM(fe."totalCost")::float8, 0)           AS fuel_cost
 		    FROM departments d
 		    LEFT JOIN users u ON u."departmentId" = d.id
 		    LEFT JOIN bookings b ON b."userId" = u.id

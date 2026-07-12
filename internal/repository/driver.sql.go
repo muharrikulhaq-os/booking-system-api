@@ -227,11 +227,18 @@ SELECT d.id AS driver_id, u.name AS driver_name, u."employeeId",
               AND b."startDate" < $1::timestamptz
               AND b."endDate" > $2::timestamptz
            ), 0
-       )::int AS overlapping_passengers
+       )::int AS overlapping_passengers,
+       (SELECT b.purpose
+        FROM bookings b
+        WHERE b."assignedDriverId" = d.id
+          AND b.status IN ('APPROVED', 'ONGOING')
+          AND b."startDate" < $1::timestamptz
+          AND b."endDate" > $2::timestamptz
+        ORDER BY b."startDate" ASC LIMIT 1) AS overlapping_purpose
 FROM drivers d
 JOIN users u ON u.id = d."userId"
-JOIN driver_assignments da ON da."driverId" = d.id AND da."releasedAt" IS NULL
-JOIN vehicles v ON v.id = da."vehicleId"
+LEFT JOIN driver_assignments da ON da."driverId" = d.id AND da."releasedAt" IS NULL
+LEFT JOIN vehicles v ON v.id = da."vehicleId"
 WHERE d."isActive" = TRUE
 ORDER BY overlapping_passengers ASC
 `
@@ -242,13 +249,14 @@ type ListAvailableDriversParams struct {
 }
 
 type ListAvailableDriversRow struct {
-	DriverID              int32  `json:"driver_id"`
-	DriverName            string `json:"driver_name"`
-	EmployeeId            string `json:"employeeId"`
-	VehicleID             int32  `json:"vehicle_id"`
-	PlateNumber           string `json:"plateNumber"`
-	Capacity              int16  `json:"capacity"`
-	OverlappingPassengers int32  `json:"overlapping_passengers"`
+	DriverID              int32          `json:"driver_id"`
+	DriverName            string         `json:"driver_name"`
+	EmployeeId            string         `json:"employeeId"`
+	VehicleID             sql.NullInt32  `json:"vehicle_id"`
+	PlateNumber           sql.NullString `json:"plateNumber"`
+	Capacity              sql.NullInt16  `json:"capacity"`
+	OverlappingPassengers int32          `json:"overlapping_passengers"`
+	OverlappingPurpose    sql.NullString `json:"overlapping_purpose"`
 }
 
 func (q *Queries) ListAvailableDrivers(ctx context.Context, arg ListAvailableDriversParams) ([]ListAvailableDriversRow, error) {
@@ -268,6 +276,7 @@ func (q *Queries) ListAvailableDrivers(ctx context.Context, arg ListAvailableDri
 			&i.PlateNumber,
 			&i.Capacity,
 			&i.OverlappingPassengers,
+			&i.OverlappingPurpose,
 		); err != nil {
 			return nil, err
 		}

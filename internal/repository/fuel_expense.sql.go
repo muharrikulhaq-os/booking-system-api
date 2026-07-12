@@ -219,6 +219,7 @@ JOIN fuel_types ft ON ft.id = fe."fuelTypeId"
 WHERE ($3::int IS NULL OR fe."driverId" = $3::int)
   AND ($4::int IS NULL OR fe."vehicleId" = $4::int)
   AND ($5::fuel_category IS NULL OR ft.type = $5::fuel_category)
+  AND ($6::int IS NULL OR fe."bookingId" = $6::int)
 ORDER BY fe."createdAt" DESC
 LIMIT $1 OFFSET $2
 `
@@ -229,6 +230,7 @@ type ListFuelExpensesParams struct {
 	DriverID     sql.NullInt32    `json:"driver_id"`
 	VehicleID    sql.NullInt32    `json:"vehicle_id"`
 	FuelCategory NullFuelCategory `json:"fuel_category"`
+	BookingID    sql.NullInt32    `json:"booking_id"`
 }
 
 type ListFuelExpensesRow struct {
@@ -265,6 +267,7 @@ func (q *Queries) ListFuelExpenses(ctx context.Context, arg ListFuelExpensesPara
 		arg.DriverID,
 		arg.VehicleID,
 		arg.FuelCategory,
+		arg.BookingID,
 	)
 	if err != nil {
 		return nil, err

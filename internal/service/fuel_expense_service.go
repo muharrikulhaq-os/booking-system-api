@@ -95,7 +95,7 @@ func serializeFuelExpenseRow(fe repository.ListFuelExpensesRow) map[string]any {
 	}
 }
 
-func (s *FuelExpenseService) List(ctx context.Context, page, limit int, driverID, vehicleID *int32, fuelType *string) ([]map[string]any, int64, error) {
+func (s *FuelExpenseService) List(ctx context.Context, page, limit int, driverID, vehicleID *int32, fuelType *string, bookingID *int32) ([]map[string]any, int64, error) {
 	params := repository.ListFuelExpensesParams{
 		Limit:  int32(limit),
 		Offset: int32((page - 1) * limit),
@@ -108,6 +108,9 @@ func (s *FuelExpenseService) List(ctx context.Context, page, limit int, driverID
 	}
 	if fuelType != nil {
 		params.FuelCategory = repository.NullFuelCategory{FuelCategory: repository.FuelCategory(*fuelType), Valid: true}
+	}
+	if bookingID != nil {
+		params.BookingID = sql.NullInt32{Int32: *bookingID, Valid: true}
 	}
 
 	rows, err := s.q.ListFuelExpenses(ctx, params)
@@ -164,9 +167,11 @@ func (s *FuelExpenseService) Create(ctx context.Context, req CreateFuelExpenseRe
 	if req.BookingID != nil {
 		bookingID = sql.NullInt32{Int32: *req.BookingID, Valid: true}
 	}
+	// driverId mereferensi drivers.id (BUKAN users.id). Resolve dari user yang login.
+	// Jika user bukan driver (mis. admin), driverId dibiarkan NULL.
 	var dID sql.NullInt32
-	if driverID != nil {
-		dID = sql.NullInt32{Int32: *driverID, Valid: true}
+	if driver, derr := s.q.GetDriverByUserID(ctx, recordedByID); derr == nil {
+		dID = sql.NullInt32{Int32: driver.ID, Valid: true}
 	}
 
 	fe, err := s.q.CreateFuelExpense(ctx, repository.CreateFuelExpenseParams{

@@ -175,15 +175,29 @@ func (s *DriverService) GetAvailableDrivers(ctx context.Context, start, end time
 	
 	out := make([]map[string]any, len(rows))
 	for i, r := range rows {
+		// Supir "kosong" (belum pegang kendaraan) → vehicle null; kapasitas &
+		// remainingSeats mengikuti kendaraan yang dibooking (dihitung di FE).
+		var vehicleID, plateNumber, vehicleCapacity, remainingSeats any
+		if r.VehicleID.Valid {
+			vehicleID = r.VehicleID.Int32
+		}
+		if r.PlateNumber.Valid {
+			plateNumber = r.PlateNumber.String
+		}
+		if r.Capacity.Valid {
+			vehicleCapacity = r.Capacity.Int16
+			remainingSeats = int(r.Capacity.Int16) - int(r.OverlappingPassengers)
+		}
 		out[i] = map[string]any{
 			"driverId":              r.DriverID,
 			"driverName":            r.DriverName,
 			"employeeId":            r.EmployeeId,
-			"vehicleId":             r.VehicleID,
-			"plateNumber":           r.PlateNumber,
-			"vehicleCapacity":       r.Capacity,
+			"vehicleId":             vehicleID,
+			"plateNumber":           plateNumber,
+			"vehicleCapacity":       vehicleCapacity,
 			"overlappingPassengers": r.OverlappingPassengers,
-			"remainingSeats":        int(r.Capacity) - int(r.OverlappingPassengers),
+			"remainingSeats":        remainingSeats,
+			"overlappingPurpose":    r.OverlappingPurpose.String,
 		}
 	}
 	return out, nil

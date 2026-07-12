@@ -84,7 +84,19 @@ func serializeBookingRow(b repository.ListBookingsRow) map[string]any {
 		"assignedDriver":  nil,
 		"assignedVehicle": nil,
 		"isReassigned":    b.OriginalResourceId.Valid,
+		"originalResource": nil,
 		"hasMergeSuggestion": b.HasMergeSuggestion,
+		"mergedIntoId":    nil,               // booking ini digabung KE booking mana (sekunder)
+		"mergeCount":      b.MergeCount,       // jumlah booking yang digabung ke booking ini (primary)
+		"isMerged":        b.MergedIntoId.Valid || b.MergeCount > 0,
+	}
+	if b.OriginalResourceId.Valid && b.OriginalResourceName.Valid {
+		out["originalResource"] = map[string]any{
+			"id": b.OriginalResourceId.Int32, "name": b.OriginalResourceName.String,
+		}
+	}
+	if b.MergedIntoId.Valid {
+		out["mergedIntoId"] = b.MergedIntoId.Int32
 	}
 	if b.ApproverName.Valid {
 		out["approvedBy"] = map[string]any{"id": b.ApprovedById.Int32, "name": b.ApproverName.String}
@@ -281,12 +293,31 @@ func (s *BookingService) Create(ctx context.Context, req CreateBookingRequest, u
 	var driverID sql.NullInt32
 	var vehicleID sql.NullInt32
 
+	// Kendaraan yang dibooking (error → resource adalah ruangan, bukan kendaraan).
+	bookedVehicleID, isVehicle := int32(0), false
+	if vid, verr := s.q.GetVehicleIDByResourceID(ctx, req.ResourceID); verr == nil {
+		bookedVehicleID, isVehicle = vid, true
+	}
+
 	if req.DriverID != nil {
 		driverID = sql.NullInt32{Int32: *req.DriverID, Valid: true}
-		da, err := s.q.GetDriverCurrentAssignment(ctx, *req.DriverID)
-		if err == nil {
+		// Supir yang sudah "memegang" kendaraan (aktif di booking lain) → pakai
+		// kendaraannya (jalur merge). Supir kosong → nanti pakai kendaraan yang dibooking.
+		if da, err := s.q.GetDriverCurrentAssignment(ctx, *req.DriverID); err == nil {
 			vehicleID = sql.NullInt32{Int32: da.VehicleId, Valid: true}
 		}
+	} else if isVehicle {
+		// Booking kendaraan tanpa memilih supir → tempel supir "kosong" yang senggang.
+		// Bila tak ada → booking tetap PENDING tanpa supir (admin bisa menolak).
+		if free, ferr := s.q.GetFreeDriver(ctx); ferr == nil {
+			driverID = sql.NullInt32{Int32: free, Valid: true}
+		}
+	}
+
+	// Booking kendaraan: bila kendaraan belum ditentukan (supir kosong / tanpa supir),
+	// default ke kendaraan yang dibooking, supaya supir "memegangnya" saat disetujui.
+	if !vehicleID.Valid && isVehicle {
+		vehicleID = sql.NullInt32{Int32: bookedVehicleID, Valid: true}
 	}
 
 	// NOTE: PENDING booking conflict is no longer strictly blocking other PENDING bookings here,
@@ -378,6 +409,19 @@ func (s *BookingService) Approve(ctx context.Context, id int32, req ApproveBooki
 	})
 	if err != nil {
 		return ApproveBookingResponse{}, err
+	}
+
+	// Kepemilikan kendaraan mengikuti siklus booking: begitu booking disetujui,
+	// supir "memegang" kendaraan booking ini bila belum punya penugasan aktif.
+	// (Supir yang sudah punya kendaraan = sedang aktif di booking lain / hasil merge,
+	// jadi jangan ditimpa.) Penugasan ini dilepas lagi saat booking selesai.
+	if b.AssignedDriverId.Valid && b.AssignedVehicleId.Valid {
+		if _, aerr := s.q.GetDriverCurrentAssignment(ctx, b.AssignedDriverId.Int32); aerr != nil {
+			_, _ = s.q.AssignDriverToVehicle(ctx, repository.AssignDriverToVehicleParams{
+				DriverId:  b.AssignedDriverId.Int32,
+				VehicleId: b.AssignedVehicleId.Int32,
+			})
+		}
 	}
 
 	_, _ = s.q.CreateApprovalLog(ctx, repository.CreateApprovalLogParams{
@@ -585,6 +629,17 @@ func (s *BookingService) Complete(ctx context.Context, id int32, userID int, rol
 	if _, err = s.q.CompleteBooking(ctx, id); err != nil {
 		return nil, err
 	}
+
+	// Lepas kepemilikan kendaraan supir bila ia tak punya booking aktif lain.
+	// (Kalau masih ada booking APPROVED/ONGOING lain — mis. hasil merge di
+	// kendaraan yang sama — kepemilikan dipertahankan.)
+	if b.AssignedDriverId.Valid {
+		other, _ := s.q.CountActiveBookingsByDriver(ctx, b.AssignedDriverId.Int32, b.ID)
+		if other == 0 {
+			_ = s.q.ReleaseDriver(ctx, b.AssignedDriverId.Int32)
+		}
+	}
+
 	_, _ = s.q.CreateAuditLog(ctx, repository.CreateAuditLogParams{
 		UserId:      sql.NullInt32{Int32: int32(userID), Valid: true},
 		Action:      "COMPLETE",
@@ -664,6 +719,24 @@ func (s *BookingService) GetDriverRatings(ctx context.Context, driverID int32) (
 		"totalRatings":  len(ratings),
 		"averageRating": avg,
 		"ratings":       items,
+	}, nil
+}
+
+// GetBookingDriverRating returns the rating submitted for a single booking, or a 404
+// error when the booking has not been rated. Kept lightweight so the FE can poll it
+// to decide between "beri rating" prompt and showing the submitted rating.
+func (s *BookingService) GetBookingDriverRating(ctx context.Context, bookingID int32) (map[string]any, error) {
+	r, err := s.q.GetDriverRatingByBooking(ctx, bookingID)
+	if err != nil {
+		return nil, util.NewError(404, "booking has not been rated", util.ErrNotFound)
+	}
+	return map[string]any{
+		"id":        r.ID,
+		"bookingId": r.BookingId,
+		"driverId":  r.DriverId,
+		"rating":    r.Rating,
+		"review":    nullStr(r.Review),
+		"createdAt": r.CreatedAt,
 	}, nil
 }
 
@@ -758,8 +831,17 @@ func (s *BookingService) GetActivity(ctx context.Context, id int32, callerID int
 	if err != nil {
 		return nil, util.ErrNotFound
 	}
-	if callerRole != "ADMIN" && int(b.UserId) != callerID {
+	// Akses disamakan dengan GetByID: admin/room-keeper bebas, employee hanya
+	// pemilik, driver hanya yang ditugaskan. (Sebelumnya cuma admin/pemilik →
+	// driver kena 403 dan timeline hilang di detail booking.)
+	if callerRole == "EMPLOYEE" && int(b.UserId) != callerID {
 		return nil, util.ErrForbidden
+	}
+	if callerRole == "DRIVER" {
+		d, dErr := s.q.GetDriverByUserID(ctx, int32(callerID))
+		if dErr != nil || !b.AssignedDriverId.Valid || b.AssignedDriverId.Int32 != d.ID {
+			return nil, util.ErrForbidden
+		}
 	}
 	rows, err := s.q.GetBookingActivity(ctx, id)
 	if err != nil {
@@ -842,6 +924,15 @@ func (s *BookingService) MergeBookings(ctx context.Context, primaryID int32, req
 		EndDate:    effectiveEnd,
 		ExcludeID:  sql.NullInt32{Int32: primaryID, Valid: true},
 	})
+	// The TARGET booking is the merge partner, not a real conflict. When target and
+	// primary share the same resource (merging into the same vehicle) the target is
+	// counted by CheckBookingConflict (which only excludes the primary) — discount it.
+	if conflictCount > 0 &&
+		target.ResourceId == primary.ResourceId &&
+		target.StartDate.Before(effectiveEnd) &&
+		target.EndDate.After(effectiveStart) {
+		conflictCount--
+	}
 	if conflictCount > 0 {
 		return nil, util.NewError(409, "the merged time window conflicts with another booking on this resource", util.ErrConflict)
 	}
@@ -873,26 +964,32 @@ func (s *BookingService) MergeBookings(ctx context.Context, primaryID int32, req
 		primary.AssignedVehicleId = vehicleID
 	}
 
-	merge, err := s.q.CreateBookingMerge(ctx, primaryID, req.TargetBookingID, int32(adminID), req.Reason)
-	if err != nil {
+	// Move the merged (target) booking onto the PRIMARY's vehicle/resource so both
+	// bookings ride ONE vehicle (hemat kendaraan): resourceId follows the primary
+	// (target's original vehicle is freed on the calendar) and driver/vehicle are
+	// inherited from the primary when it has them. Done BEFORE creating the merge
+	// record so a failure here doesn't leave an "already merged" state; the update
+	// is idempotent (re-running keeps resourceId + originalResourceId stable).
+	driverID := int32(0)
+	vehicleID := int32(0)
+	if primary.AssignedDriverId.Valid {
+		driverID = primary.AssignedDriverId.Int32
+	}
+	if primary.AssignedVehicleId.Valid {
+		vehicleID = primary.AssignedVehicleId.Int32
+	}
+	if err = s.q.InheritMergeResourceDriverVehicle(ctx,
+		req.TargetBookingID,
+		primary.ResourceId,
+		driverID, vehicleID,
+		primary.AssignedDriverId.Valid, primary.AssignedVehicleId.Valid,
+	); err != nil {
 		return nil, err
 	}
 
-	// Inherit primary's driver/vehicle onto the merged booking
-	if primary.AssignedDriverId.Valid || primary.AssignedVehicleId.Valid {
-		driverID := int32(0)
-		vehicleID := int32(0)
-		if primary.AssignedDriverId.Valid {
-			driverID = primary.AssignedDriverId.Int32
-		}
-		if primary.AssignedVehicleId.Valid {
-			vehicleID = primary.AssignedVehicleId.Int32
-		}
-		_ = s.q.InheritMergeDriverVehicle(ctx,
-			req.TargetBookingID,
-			driverID, vehicleID,
-			primary.AssignedDriverId.Valid, primary.AssignedVehicleId.Valid,
-		)
+	merge, err := s.q.CreateBookingMerge(ctx, primaryID, req.TargetBookingID, int32(adminID), req.Reason)
+	if err != nil {
+		return nil, err
 	}
 
 	desc := "Booking merged with #" + itoa(req.TargetBookingID)

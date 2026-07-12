@@ -631,11 +631,15 @@ SELECT b.id, b."userId", b."resourceId", b."startDate", b."endDate", b.purpose, 
                      (b2."startDate" <= b."endDate" AND b2."endDate" >= b."startDate")
                  )
            )
-       ) AS has_merge_suggestion
+       ) AS has_merge_suggestion,
+       orig.name AS original_resource_name,
+       (SELECT bm."primaryBookingId" FROM booking_merges bm WHERE bm."mergedBookingId" = b.id LIMIT 1) AS merged_into_id,
+       (SELECT COUNT(*) FROM booking_merges bm WHERE bm."primaryBookingId" = b.id) AS merge_count
 FROM bookings b
 JOIN users u ON u.id = b."userId"
 JOIN departments dept ON dept.id = u."departmentId"
 JOIN resources r ON r.id = b."resourceId"
+LEFT JOIN resources orig ON orig.id = b."originalResourceId"
 LEFT JOIN users ab ON ab.id = b."approvedById"
 LEFT JOIN drivers drv ON drv.id = b."assignedDriverId"
 LEFT JOIN users du ON du.id = drv."userId"
@@ -698,7 +702,10 @@ type ListBookingsRow struct {
 	Brand              sql.NullString `json:"brand"`
 	Model              sql.NullString `json:"model"`
 	Capacity           sql.NullInt16  `json:"capacity"`
-	HasMergeSuggestion bool           `json:"has_merge_suggestion"`
+	HasMergeSuggestion   bool           `json:"has_merge_suggestion"`
+	OriginalResourceName sql.NullString `json:"original_resource_name"`
+	MergedIntoId         sql.NullInt32  `json:"merged_into_id"`
+	MergeCount           int64          `json:"merge_count"`
 }
 
 func (q *Queries) ListBookings(ctx context.Context, arg ListBookingsParams) ([]ListBookingsRow, error) {
@@ -755,6 +762,9 @@ func (q *Queries) ListBookings(ctx context.Context, arg ListBookingsParams) ([]L
 			&i.Model,
 			&i.Capacity,
 			&i.HasMergeSuggestion,
+			&i.OriginalResourceName,
+			&i.MergedIntoId,
+			&i.MergeCount,
 		); err != nil {
 			return nil, err
 		}

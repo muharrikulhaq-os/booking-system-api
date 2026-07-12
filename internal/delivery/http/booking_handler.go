@@ -40,6 +40,7 @@ func (h *BookingHandler) Register(r fiber.Router) {
 	g.Post("/:id/merge", admin, h.MergeBooking)
 	g.Get("/:id/merge-info", auth, h.MergeInfo)
 	g.Post("/:id/rate-driver", h.RateDriver)
+	g.Get("/:id/driver-rating", auth, h.GetBookingDriverRating)
 	g.Get("/:id/approval-log", admin, h.ApprovalLog)
 	g.Get("/:id/activity", auth, h.Activity)
 	g.Get("/:id/attachments", h.ListAttachments)
@@ -261,6 +262,21 @@ func (h *BookingHandler) GetDriverRatings(c *fiber.Ctx) error {
 		return err
 	}
 	return util.OK(c, "Driver ratings retrieved", data)
+}
+
+// GetBookingDriverRating returns the driver rating for a single booking (or 404 if
+// the booking has not been rated yet). Used by the FE to decide whether to show the
+// rating prompt or the already-submitted rating.
+func (h *BookingHandler) GetBookingDriverRating(c *fiber.Ctx) error {
+	id, err := parseID(c, "id")
+	if err != nil {
+		return err
+	}
+	data, err := h.svc.GetBookingDriverRating(c.Context(), id)
+	if err != nil {
+		return err
+	}
+	return util.OK(c, "Booking rating retrieved", data)
 }
 
 func (h *BookingHandler) ApprovalLog(c *fiber.Ctx) error {

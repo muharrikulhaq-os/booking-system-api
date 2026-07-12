@@ -133,11 +133,71 @@ func (q *Queries) InheritMergeDriverVehicle(
 	return err
 }
 
+// InheritMergeResourceDriverVehicle moves the merged (target) booking ONTO the primary
+// booking's resource (vehicle slot) and copies its driver/vehicle assignment, so both
+// bookings share ONE vehicle (hemat kendaraan). The target's original resource is saved
+// in originalResourceId — freeing that vehicle on the calendar and marking the booking as
+// reassigned. Driver/vehicle are only overwritten when the primary actually has them.
+func (q *Queries) InheritMergeResourceDriverVehicle(
+	ctx context.Context,
+	mergedBookingID, primaryResourceID, driverID, vehicleID int32,
+	driverValid, vehicleValid bool,
+) error {
+	query := `
+		UPDATE bookings
+		SET "originalResourceId" = CASE
+		        WHEN "resourceId" != $2 AND "originalResourceId" IS NULL
+		        THEN "resourceId"
+		        ELSE "originalResourceId"
+		    END,
+		    "resourceId"        = $2,
+		    "assignedDriverId"  = CASE WHEN $3 THEN $4::int ELSE "assignedDriverId" END,
+		    "assignedVehicleId" = CASE WHEN $5 THEN $6::int ELSE "assignedVehicleId" END,
+		    "assignedAt"        = NOW(),
+		    "updatedAt"         = NOW()
+		WHERE id = $1`
+	_, err := q.db.ExecContext(ctx, query,
+		mergedBookingID, primaryResourceID, driverValid, driverID, vehicleValid, vehicleID)
+	return err
+}
+
 // UpdateBookingDates updates the startDate and endDate of a booking (used when merging).
 func (q *Queries) UpdateBookingDates(ctx context.Context, bookingID int32, startDate, endDate time.Time) error {
 	query := `UPDATE bookings SET "startDate" = $2, "endDate" = $3, "updatedAt" = NOW() WHERE id = $1`
 	_, err := q.db.ExecContext(ctx, query, bookingID, startDate, endDate)
 	return err
+}
+
+// GetVehicleIDByResourceID returns the vehicle id backing a resource (error if the
+// resource is not a vehicle, e.g. a room).
+func (q *Queries) GetVehicleIDByResourceID(ctx context.Context, resourceID int32) (int32, error) {
+	var id int32
+	err := q.db.QueryRowContext(ctx,
+		`SELECT id FROM vehicles WHERE "resourceId" = $1 LIMIT 1`, resourceID).Scan(&id)
+	return id, err
+}
+
+// GetFreeDriver returns one active driver with no current vehicle assignment (i.e. not
+// tied to an active booking = "kosong/senggang"). Error if none available.
+func (q *Queries) GetFreeDriver(ctx context.Context) (int32, error) {
+	var id int32
+	err := q.db.QueryRowContext(ctx, `
+		SELECT d.id FROM drivers d
+		LEFT JOIN driver_assignments da ON da."driverId" = d.id AND da."releasedAt" IS NULL
+		WHERE d."isActive" = TRUE AND da.id IS NULL
+		ORDER BY d.id ASC LIMIT 1`).Scan(&id)
+	return id, err
+}
+
+// CountActiveBookingsByDriver counts APPROVED/ONGOING bookings assigned to a driver,
+// excluding one booking id. Used to decide whether to release the driver's vehicle
+// ownership when a booking completes (release only when no other active booking).
+func (q *Queries) CountActiveBookingsByDriver(ctx context.Context, driverID, excludeBookingID int32) (int64, error) {
+	query := `SELECT COUNT(*) FROM bookings
+		WHERE "assignedDriverId" = $1 AND status IN ('APPROVED','ONGOING') AND id != $2`
+	var n int64
+	err := q.db.QueryRowContext(ctx, query, driverID, excludeBookingID).Scan(&n)
+	return n, err
 }
 
 // CheckBookingAlreadyMerged returns true if both booking IDs are already in the same merge group.
