@@ -14,7 +14,7 @@ import (
 const approveBooking = `-- name: ApproveBooking :one
 UPDATE bookings
 SET status = 'APPROVED', "approvedById" = $2, "approvedAt" = NOW(), "updatedAt" = NOW()
-WHERE id = $1 RETURNING id, "userId", "resourceId", "startDate", "endDate", purpose, "passengerCount", status, "approvedById", "approvedAt", "assignedDriverId", "assignedVehicleId", "assignedAt", "returnedAt", "createdAt", "updatedAt", "originalResourceId"
+WHERE id = $1 RETURNING id, "userId", "resourceId", "startDate", "endDate", purpose, "passengerCount", status, "approvedById", "approvedAt", "assignedDriverId", "assignedVehicleId", "assignedAt", "returnedAt", "createdAt", "updatedAt", "originalResourceId", "bookingType"
 `
 
 type ApproveBookingParams struct {
@@ -43,6 +43,7 @@ func (q *Queries) ApproveBooking(ctx context.Context, arg ApproveBookingParams) 
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.OriginalResourceId,
+		&i.BookingType,
 	)
 	return i, err
 }
@@ -50,7 +51,7 @@ func (q *Queries) ApproveBooking(ctx context.Context, arg ApproveBookingParams) 
 const assignVehicleToBooking = `-- name: AssignVehicleToBooking :one
 UPDATE bookings
 SET "assignedDriverId" = $2, "assignedVehicleId" = $3, "assignedAt" = NOW(), "updatedAt" = NOW()
-WHERE id = $1 RETURNING id, "userId", "resourceId", "startDate", "endDate", purpose, "passengerCount", status, "approvedById", "approvedAt", "assignedDriverId", "assignedVehicleId", "assignedAt", "returnedAt", "createdAt", "updatedAt", "originalResourceId"
+WHERE id = $1 RETURNING id, "userId", "resourceId", "startDate", "endDate", purpose, "passengerCount", status, "approvedById", "approvedAt", "assignedDriverId", "assignedVehicleId", "assignedAt", "returnedAt", "createdAt", "updatedAt", "originalResourceId", "bookingType"
 `
 
 type AssignVehicleToBookingParams struct {
@@ -80,12 +81,13 @@ func (q *Queries) AssignVehicleToBooking(ctx context.Context, arg AssignVehicleT
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.OriginalResourceId,
+		&i.BookingType,
 	)
 	return i, err
 }
 
 const cancelBooking = `-- name: CancelBooking :one
-UPDATE bookings SET status = 'CANCELLED', "updatedAt" = NOW() WHERE id = $1 RETURNING id, "userId", "resourceId", "startDate", "endDate", purpose, "passengerCount", status, "approvedById", "approvedAt", "assignedDriverId", "assignedVehicleId", "assignedAt", "returnedAt", "createdAt", "updatedAt", "originalResourceId"
+UPDATE bookings SET status = 'CANCELLED', "updatedAt" = NOW() WHERE id = $1 RETURNING id, "userId", "resourceId", "startDate", "endDate", purpose, "passengerCount", status, "approvedById", "approvedAt", "assignedDriverId", "assignedVehicleId", "assignedAt", "returnedAt", "createdAt", "updatedAt", "originalResourceId", "bookingType"
 `
 
 func (q *Queries) CancelBooking(ctx context.Context, id int32) (Booking, error) {
@@ -109,6 +111,7 @@ func (q *Queries) CancelBooking(ctx context.Context, id int32) (Booking, error) 
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.OriginalResourceId,
+		&i.BookingType,
 	)
 	return i, err
 }
@@ -172,7 +175,7 @@ func (q *Queries) CheckVehicleConflict(ctx context.Context, arg CheckVehicleConf
 const completeBooking = `-- name: CompleteBooking :one
 UPDATE bookings
 SET status = 'COMPLETED', "returnedAt" = NOW(), "updatedAt" = NOW()
-WHERE id = $1 RETURNING id, "userId", "resourceId", "startDate", "endDate", purpose, "passengerCount", status, "approvedById", "approvedAt", "assignedDriverId", "assignedVehicleId", "assignedAt", "returnedAt", "createdAt", "updatedAt", "originalResourceId"
+WHERE id = $1 RETURNING id, "userId", "resourceId", "startDate", "endDate", purpose, "passengerCount", status, "approvedById", "approvedAt", "assignedDriverId", "assignedVehicleId", "assignedAt", "returnedAt", "createdAt", "updatedAt", "originalResourceId", "bookingType"
 `
 
 func (q *Queries) CompleteBooking(ctx context.Context, id int32) (Booking, error) {
@@ -196,6 +199,7 @@ func (q *Queries) CompleteBooking(ctx context.Context, id int32) (Booking, error
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.OriginalResourceId,
+		&i.BookingType,
 	)
 	return i, err
 }
@@ -274,10 +278,10 @@ func (q *Queries) CreateApprovalLog(ctx context.Context, arg CreateApprovalLogPa
 
 const createBooking = `-- name: CreateBooking :one
 INSERT INTO bookings (
-    "userId", "resourceId", "startDate", "endDate", purpose, 
-    "passengerCount", "assignedDriverId", "assignedVehicleId", status
+    "userId", "resourceId", "startDate", "endDate", purpose,
+    "passengerCount", "assignedDriverId", "assignedVehicleId", status, "bookingType"
 )
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'PENDING') RETURNING id, "userId", "resourceId", "startDate", "endDate", purpose, "passengerCount", status, "approvedById", "approvedAt", "assignedDriverId", "assignedVehicleId", "assignedAt", "returnedAt", "createdAt", "updatedAt", "originalResourceId"
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'PENDING', $9) RETURNING id, "userId", "resourceId", "startDate", "endDate", purpose, "passengerCount", status, "approvedById", "approvedAt", "assignedDriverId", "assignedVehicleId", "assignedAt", "returnedAt", "createdAt", "updatedAt", "originalResourceId", "bookingType"
 `
 
 type CreateBookingParams struct {
@@ -289,6 +293,7 @@ type CreateBookingParams struct {
 	PassengerCount    int32         `json:"passengerCount"`
 	AssignedDriverId  sql.NullInt32 `json:"assignedDriverId"`
 	AssignedVehicleId sql.NullInt32 `json:"assignedVehicleId"`
+	BookingType       BookingType   `json:"bookingType"`
 }
 
 func (q *Queries) CreateBooking(ctx context.Context, arg CreateBookingParams) (Booking, error) {
@@ -301,6 +306,7 @@ func (q *Queries) CreateBooking(ctx context.Context, arg CreateBookingParams) (B
 		arg.PassengerCount,
 		arg.AssignedDriverId,
 		arg.AssignedVehicleId,
+		arg.BookingType,
 	)
 	var i Booking
 	err := row.Scan(
@@ -321,6 +327,7 @@ func (q *Queries) CreateBooking(ctx context.Context, arg CreateBookingParams) (B
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.OriginalResourceId,
+		&i.BookingType,
 	)
 	return i, err
 }
@@ -409,7 +416,7 @@ func (q *Queries) GetApprovalLogs(ctx context.Context, bookingid int32) ([]GetAp
 }
 
 const getBookingByID = `-- name: GetBookingByID :one
-SELECT b.id, b."userId", b."resourceId", b."startDate", b."endDate", b.purpose, b."passengerCount", b.status, b."approvedById", b."approvedAt", b."assignedDriverId", b."assignedVehicleId", b."assignedAt", b."returnedAt", b."createdAt", b."updatedAt", b."originalResourceId",
+SELECT b.id, b."userId", b."resourceId", b."startDate", b."endDate", b.purpose, b."passengerCount", b.status, b."approvedById", b."approvedAt", b."assignedDriverId", b."assignedVehicleId", b."assignedAt", b."returnedAt", b."createdAt", b."updatedAt", b."originalResourceId", b."bookingType",
        u.name AS user_name, u."employeeId", dept.name AS department_name,
        r.name AS resource_name, r.type AS resource_type, r.status AS resource_status,
        ab.name AS approver_name,
@@ -456,6 +463,7 @@ type GetBookingByIDRow struct {
 	CreatedAt          time.Time      `json:"createdAt"`
 	UpdatedAt          time.Time      `json:"updatedAt"`
 	OriginalResourceId sql.NullInt32  `json:"originalResourceId"`
+	BookingType        BookingType    `json:"bookingType"`
 	UserName           string         `json:"user_name"`
 	EmployeeId         string         `json:"employeeId"`
 	DepartmentName     string         `json:"department_name"`
@@ -495,6 +503,7 @@ func (q *Queries) GetBookingByID(ctx context.Context, id int32) (GetBookingByIDR
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.OriginalResourceId,
+		&i.BookingType,
 		&i.UserName,
 		&i.EmployeeId,
 		&i.DepartmentName,
@@ -614,7 +623,7 @@ func (q *Queries) GetOverlappingPassengerCount(ctx context.Context, arg GetOverl
 }
 
 const listBookings = `-- name: ListBookings :many
-SELECT b.id, b."userId", b."resourceId", b."startDate", b."endDate", b.purpose, b."passengerCount", b.status, b."approvedById", b."approvedAt", b."assignedDriverId", b."assignedVehicleId", b."assignedAt", b."returnedAt", b."createdAt", b."updatedAt", b."originalResourceId",
+SELECT b.id, b."userId", b."resourceId", b."startDate", b."endDate", b.purpose, b."passengerCount", b.status, b."approvedById", b."approvedAt", b."assignedDriverId", b."assignedVehicleId", b."assignedAt", b."returnedAt", b."createdAt", b."updatedAt", b."originalResourceId", b."bookingType",
        u.name AS user_name, u."employeeId", dept.name AS department_name,
        r.name AS resource_name, r.type AS resource_type, r.status AS resource_status,
        ab.name AS approver_name,
@@ -633,7 +642,7 @@ SELECT b.id, b."userId", b."resourceId", b."startDate", b."endDate", b.purpose, 
            )
        ) AS has_merge_suggestion,
        orig.name AS original_resource_name,
-       (SELECT bm."primaryBookingId" FROM booking_merges bm WHERE bm."mergedBookingId" = b.id LIMIT 1) AS merged_into_id,
+       merged_by."primaryBookingId" AS merged_into_id,
        (SELECT COUNT(*) FROM booking_merges bm WHERE bm."primaryBookingId" = b.id) AS merge_count
 FROM bookings b
 JOIN users u ON u.id = b."userId"
@@ -644,6 +653,7 @@ LEFT JOIN users ab ON ab.id = b."approvedById"
 LEFT JOIN drivers drv ON drv.id = b."assignedDriverId"
 LEFT JOIN users du ON du.id = drv."userId"
 LEFT JOIN vehicles v ON v.id = b."assignedVehicleId"
+LEFT JOIN booking_merges merged_by ON merged_by."mergedBookingId" = b.id
 WHERE ($3::int IS NULL OR b."userId" = $3::int)
   AND ($4::booking_status IS NULL OR b.status = $4::booking_status)
   AND ($5::int IS NULL OR b."resourceId" = $5::int)
@@ -670,41 +680,42 @@ type ListBookingsParams struct {
 }
 
 type ListBookingsRow struct {
-	ID                 int32          `json:"id"`
-	UserId             int32          `json:"userId"`
-	ResourceId         int32          `json:"resourceId"`
-	StartDate          time.Time      `json:"startDate"`
-	EndDate            time.Time      `json:"endDate"`
-	Purpose            string         `json:"purpose"`
-	PassengerCount     int32          `json:"passengerCount"`
-	Status             BookingStatus  `json:"status"`
-	ApprovedById       sql.NullInt32  `json:"approvedById"`
-	ApprovedAt         sql.NullTime   `json:"approvedAt"`
-	AssignedDriverId   sql.NullInt32  `json:"assignedDriverId"`
-	AssignedVehicleId  sql.NullInt32  `json:"assignedVehicleId"`
-	AssignedAt         sql.NullTime   `json:"assignedAt"`
-	ReturnedAt         sql.NullTime   `json:"returnedAt"`
-	CreatedAt          time.Time      `json:"createdAt"`
-	UpdatedAt          time.Time      `json:"updatedAt"`
-	OriginalResourceId sql.NullInt32  `json:"originalResourceId"`
-	UserName           string         `json:"user_name"`
-	EmployeeId         string         `json:"employeeId"`
-	DepartmentName     string         `json:"department_name"`
-	ResourceName       string         `json:"resource_name"`
-	ResourceType       ResourceType   `json:"resource_type"`
-	ResourceStatus     ResourceStatus `json:"resource_status"`
-	ApproverName       sql.NullString `json:"approver_name"`
-	DriverID           sql.NullInt32  `json:"driver_id"`
-	DriverName         sql.NullString `json:"driver_name"`
-	DriverPhone        sql.NullString `json:"driver_phone"`
-	VehicleID          sql.NullInt32  `json:"vehicle_id"`
-	PlateNumber        sql.NullString `json:"plateNumber"`
-	Brand              sql.NullString `json:"brand"`
-	Model              sql.NullString `json:"model"`
-	Capacity           sql.NullInt16  `json:"capacity"`
+	ID                   int32          `json:"id"`
+	UserId               int32          `json:"userId"`
+	ResourceId           int32          `json:"resourceId"`
+	StartDate            time.Time      `json:"startDate"`
+	EndDate              time.Time      `json:"endDate"`
+	Purpose              string         `json:"purpose"`
+	PassengerCount       int32          `json:"passengerCount"`
+	Status               BookingStatus  `json:"status"`
+	ApprovedById         sql.NullInt32  `json:"approvedById"`
+	ApprovedAt           sql.NullTime   `json:"approvedAt"`
+	AssignedDriverId     sql.NullInt32  `json:"assignedDriverId"`
+	AssignedVehicleId    sql.NullInt32  `json:"assignedVehicleId"`
+	AssignedAt           sql.NullTime   `json:"assignedAt"`
+	ReturnedAt           sql.NullTime   `json:"returnedAt"`
+	CreatedAt            time.Time      `json:"createdAt"`
+	UpdatedAt            time.Time      `json:"updatedAt"`
+	OriginalResourceId   sql.NullInt32  `json:"originalResourceId"`
+	BookingType          BookingType    `json:"bookingType"`
+	UserName             string         `json:"user_name"`
+	EmployeeId           string         `json:"employeeId"`
+	DepartmentName       string         `json:"department_name"`
+	ResourceName         string         `json:"resource_name"`
+	ResourceType         ResourceType   `json:"resource_type"`
+	ResourceStatus       ResourceStatus `json:"resource_status"`
+	ApproverName         sql.NullString `json:"approver_name"`
+	DriverID             sql.NullInt32  `json:"driver_id"`
+	DriverName           sql.NullString `json:"driver_name"`
+	DriverPhone          sql.NullString `json:"driver_phone"`
+	VehicleID            sql.NullInt32  `json:"vehicle_id"`
+	PlateNumber          sql.NullString `json:"plateNumber"`
+	Brand                sql.NullString `json:"brand"`
+	Model                sql.NullString `json:"model"`
+	Capacity             sql.NullInt16  `json:"capacity"`
 	HasMergeSuggestion   bool           `json:"has_merge_suggestion"`
 	OriginalResourceName sql.NullString `json:"original_resource_name"`
-	MergedIntoId         sql.NullInt32  `json:"merged_into_id"`
+	MergedIntoID         sql.NullInt32  `json:"merged_into_id"`
 	MergeCount           int64          `json:"merge_count"`
 }
 
@@ -746,6 +757,7 @@ func (q *Queries) ListBookings(ctx context.Context, arg ListBookingsParams) ([]L
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.OriginalResourceId,
+			&i.BookingType,
 			&i.UserName,
 			&i.EmployeeId,
 			&i.DepartmentName,
@@ -763,7 +775,7 @@ func (q *Queries) ListBookings(ctx context.Context, arg ListBookingsParams) ([]L
 			&i.Capacity,
 			&i.HasMergeSuggestion,
 			&i.OriginalResourceName,
-			&i.MergedIntoId,
+			&i.MergedIntoID,
 			&i.MergeCount,
 		); err != nil {
 			return nil, err
@@ -782,7 +794,7 @@ func (q *Queries) ListBookings(ctx context.Context, arg ListBookingsParams) ([]L
 const markExpiredBookings = `-- name: MarkExpiredBookings :many
 UPDATE bookings SET status = 'EXPIRED', "updatedAt" = NOW()
 WHERE status = 'APPROVED' AND "endDate" < NOW()
-RETURNING id, "userId", "resourceId", "startDate", "endDate", purpose, "passengerCount", status, "approvedById", "approvedAt", "assignedDriverId", "assignedVehicleId", "assignedAt", "returnedAt", "createdAt", "updatedAt", "originalResourceId"
+RETURNING id, "userId", "resourceId", "startDate", "endDate", purpose, "passengerCount", status, "approvedById", "approvedAt", "assignedDriverId", "assignedVehicleId", "assignedAt", "returnedAt", "createdAt", "updatedAt", "originalResourceId", "bookingType"
 `
 
 // Booking APPROVED tapi tidak pernah dimulai (tidak jadi ONGOING) selama masa bookingnya → EXPIRED
@@ -813,6 +825,7 @@ func (q *Queries) MarkExpiredBookings(ctx context.Context) ([]Booking, error) {
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.OriginalResourceId,
+			&i.BookingType,
 		); err != nil {
 			return nil, err
 		}
@@ -830,7 +843,7 @@ func (q *Queries) MarkExpiredBookings(ctx context.Context) ([]Booking, error) {
 const markIgnoredBookings = `-- name: MarkIgnoredBookings :many
 UPDATE bookings SET status = 'IGNORED', "updatedAt" = NOW()
 WHERE status = 'PENDING' AND "endDate" < NOW()
-RETURNING id, "userId", "resourceId", "startDate", "endDate", purpose, "passengerCount", status, "approvedById", "approvedAt", "assignedDriverId", "assignedVehicleId", "assignedAt", "returnedAt", "createdAt", "updatedAt", "originalResourceId"
+RETURNING id, "userId", "resourceId", "startDate", "endDate", purpose, "passengerCount", status, "approvedById", "approvedAt", "assignedDriverId", "assignedVehicleId", "assignedAt", "returnedAt", "createdAt", "updatedAt", "originalResourceId", "bookingType"
 `
 
 // Booking PENDING tapi admin tidak merespons sampai masa bookingnya habis → IGNORED
@@ -861,6 +874,7 @@ func (q *Queries) MarkIgnoredBookings(ctx context.Context) ([]Booking, error) {
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.OriginalResourceId,
+			&i.BookingType,
 		); err != nil {
 			return nil, err
 		}
@@ -878,7 +892,7 @@ func (q *Queries) MarkIgnoredBookings(ctx context.Context) ([]Booking, error) {
 const markOverdueBookings = `-- name: MarkOverdueBookings :many
 UPDATE bookings SET status = 'OVERDUE', "updatedAt" = NOW()
 WHERE status = 'ONGOING' AND "endDate" < NOW()
-RETURNING id, "userId", "resourceId", "startDate", "endDate", purpose, "passengerCount", status, "approvedById", "approvedAt", "assignedDriverId", "assignedVehicleId", "assignedAt", "returnedAt", "createdAt", "updatedAt", "originalResourceId"
+RETURNING id, "userId", "resourceId", "startDate", "endDate", purpose, "passengerCount", status, "approvedById", "approvedAt", "assignedDriverId", "assignedVehicleId", "assignedAt", "returnedAt", "createdAt", "updatedAt", "originalResourceId", "bookingType"
 `
 
 // Booking ONGOING tapi lewat endDate → OVERDUE (sudah mulai tapi belum selesai tepat waktu)
@@ -909,6 +923,7 @@ func (q *Queries) MarkOverdueBookings(ctx context.Context) ([]Booking, error) {
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.OriginalResourceId,
+			&i.BookingType,
 		); err != nil {
 			return nil, err
 		}
@@ -926,7 +941,7 @@ func (q *Queries) MarkOverdueBookings(ctx context.Context) ([]Booking, error) {
 const rejectBooking = `-- name: RejectBooking :one
 UPDATE bookings
 SET status = 'REJECTED', "approvedById" = $2, "approvedAt" = NOW(), "updatedAt" = NOW()
-WHERE id = $1 RETURNING id, "userId", "resourceId", "startDate", "endDate", purpose, "passengerCount", status, "approvedById", "approvedAt", "assignedDriverId", "assignedVehicleId", "assignedAt", "returnedAt", "createdAt", "updatedAt", "originalResourceId"
+WHERE id = $1 RETURNING id, "userId", "resourceId", "startDate", "endDate", purpose, "passengerCount", status, "approvedById", "approvedAt", "assignedDriverId", "assignedVehicleId", "assignedAt", "returnedAt", "createdAt", "updatedAt", "originalResourceId", "bookingType"
 `
 
 type RejectBookingParams struct {
@@ -955,12 +970,13 @@ func (q *Queries) RejectBooking(ctx context.Context, arg RejectBookingParams) (B
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.OriginalResourceId,
+		&i.BookingType,
 	)
 	return i, err
 }
 
 const startBooking = `-- name: StartBooking :one
-UPDATE bookings SET status = 'ONGOING', "updatedAt" = NOW() WHERE id = $1 RETURNING id, "userId", "resourceId", "startDate", "endDate", purpose, "passengerCount", status, "approvedById", "approvedAt", "assignedDriverId", "assignedVehicleId", "assignedAt", "returnedAt", "createdAt", "updatedAt", "originalResourceId"
+UPDATE bookings SET status = 'ONGOING', "updatedAt" = NOW() WHERE id = $1 RETURNING id, "userId", "resourceId", "startDate", "endDate", purpose, "passengerCount", status, "approvedById", "approvedAt", "assignedDriverId", "assignedVehicleId", "assignedAt", "returnedAt", "createdAt", "updatedAt", "originalResourceId", "bookingType"
 `
 
 func (q *Queries) StartBooking(ctx context.Context, id int32) (Booking, error) {
@@ -984,12 +1000,13 @@ func (q *Queries) StartBooking(ctx context.Context, id int32) (Booking, error) {
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.OriginalResourceId,
+		&i.BookingType,
 	)
 	return i, err
 }
 
 const updateBookingResource = `-- name: UpdateBookingResource :one
-UPDATE bookings SET "resourceId" = $2, "updatedAt" = NOW() WHERE id = $1 RETURNING id, "userId", "resourceId", "startDate", "endDate", purpose, "passengerCount", status, "approvedById", "approvedAt", "assignedDriverId", "assignedVehicleId", "assignedAt", "returnedAt", "createdAt", "updatedAt", "originalResourceId"
+UPDATE bookings SET "resourceId" = $2, "updatedAt" = NOW() WHERE id = $1 RETURNING id, "userId", "resourceId", "startDate", "endDate", purpose, "passengerCount", status, "approvedById", "approvedAt", "assignedDriverId", "assignedVehicleId", "assignedAt", "returnedAt", "createdAt", "updatedAt", "originalResourceId", "bookingType"
 `
 
 type UpdateBookingResourceParams struct {
@@ -1018,12 +1035,13 @@ func (q *Queries) UpdateBookingResource(ctx context.Context, arg UpdateBookingRe
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.OriginalResourceId,
+		&i.BookingType,
 	)
 	return i, err
 }
 
 const updateBookingStatus = `-- name: UpdateBookingStatus :one
-UPDATE bookings SET status = $2, "updatedAt" = NOW() WHERE id = $1 RETURNING id, "userId", "resourceId", "startDate", "endDate", purpose, "passengerCount", status, "approvedById", "approvedAt", "assignedDriverId", "assignedVehicleId", "assignedAt", "returnedAt", "createdAt", "updatedAt", "originalResourceId"
+UPDATE bookings SET status = $2, "updatedAt" = NOW() WHERE id = $1 RETURNING id, "userId", "resourceId", "startDate", "endDate", purpose, "passengerCount", status, "approvedById", "approvedAt", "assignedDriverId", "assignedVehicleId", "assignedAt", "returnedAt", "createdAt", "updatedAt", "originalResourceId", "bookingType"
 `
 
 type UpdateBookingStatusParams struct {
@@ -1052,6 +1070,7 @@ func (q *Queries) UpdateBookingStatus(ctx context.Context, arg UpdateBookingStat
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.OriginalResourceId,
+		&i.BookingType,
 	)
 	return i, err
 }
@@ -1061,7 +1080,7 @@ UPDATE bookings
 SET "startDate" = $2, "endDate" = $3, "purpose" = $4,
     "assignedDriverId" = $5, "assignedVehicleId" = $6,
     "resourceId" = $7, "updatedAt" = NOW()
-WHERE id = $1 RETURNING id, "userId", "resourceId", "startDate", "endDate", purpose, "passengerCount", status, "approvedById", "approvedAt", "assignedDriverId", "assignedVehicleId", "assignedAt", "returnedAt", "createdAt", "updatedAt", "originalResourceId"
+WHERE id = $1 RETURNING id, "userId", "resourceId", "startDate", "endDate", purpose, "passengerCount", status, "approvedById", "approvedAt", "assignedDriverId", "assignedVehicleId", "assignedAt", "returnedAt", "createdAt", "updatedAt", "originalResourceId", "bookingType"
 `
 
 type UpdateMergedBookingParams struct {
@@ -1103,6 +1122,7 @@ func (q *Queries) UpdateMergedBooking(ctx context.Context, arg UpdateMergedBooki
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.OriginalResourceId,
+		&i.BookingType,
 	)
 	return i, err
 }

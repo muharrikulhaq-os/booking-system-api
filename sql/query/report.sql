@@ -66,3 +66,21 @@ LIMIT $1 OFFSET $2;
 SELECT COUNT(*) FROM audit_logs
 WHERE (sqlc.narg(entity_type)::text IS NULL OR "entityType" = sqlc.narg(entity_type)::text)
   AND (sqlc.narg(user_id)::int IS NULL OR "userId" = sqlc.narg(user_id)::int);
+
+-- name: ReportDriverTrips :many
+-- Rekap jumlah trip SPD vs Non-SPD dan total overtime per driver.
+SELECT
+    d.id AS driver_id, u.name AS driver_name, u."employeeId",
+    COUNT(DISTINCT b.id) FILTER (WHERE b."bookingType" = 'SPD')     AS spd_trips,
+    COUNT(DISTINCT b.id) FILTER (WHERE b."bookingType" = 'NON_SPD') AS non_spd_trips,
+    COUNT(DISTINCT ot.id)                                           AS overtime_trips,
+    COALESCE(SUM(ot."overtimeMinutes"), 0)::int                     AS total_overtime_minutes
+FROM drivers d
+JOIN users u ON u.id = d."userId"
+LEFT JOIN bookings b ON b."assignedDriverId" = d.id
+    AND b.status = 'COMPLETED'
+    AND (sqlc.narg(start_from)::timestamptz IS NULL OR b."startDate" >= sqlc.narg(start_from)::timestamptz)
+    AND (sqlc.narg(end_to)::timestamptz IS NULL OR b."endDate" <= sqlc.narg(end_to)::timestamptz)
+LEFT JOIN driver_overtimes ot ON ot."bookingId" = b.id
+GROUP BY d.id, u.name, u."employeeId"
+ORDER BY (spd_trips + non_spd_trips) DESC;

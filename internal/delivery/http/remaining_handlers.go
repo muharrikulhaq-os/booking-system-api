@@ -466,6 +466,7 @@ func (h *ReportHandler) Register(r fiber.Router) {
 	g.Get("/cost/trend", h.CostTrend)
 	g.Get("/driver-performance", h.DriverPerformance)
 	g.Get("/department-summary", h.DepartmentSummary)
+	g.Get("/driver-trips", h.DriverTrips)
 }
 
 func (h *ReportHandler) BookingSummary(c *fiber.Ctx) error {
@@ -649,4 +650,12 @@ func (h *ReportHandler) DepartmentSummary(c *fiber.Ctx) error {
 		return err
 	}
 	return util.OK(c, "Department summary", data)
+}
+
+func (h *ReportHandler) DriverTrips(c *fiber.Ctx) error {
+	data, err := h.svc.DriverTrips(c.Context(), parseDate(c, "startDate"), parseDate(c, "endDate"))
+	if err != nil {
+		return err
+	}
+	return util.OK(c, "Driver trips report retrieved", data)
 }

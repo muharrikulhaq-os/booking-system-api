@@ -59,7 +59,7 @@ func (q *Queries) CreateResource(ctx context.Context, arg CreateResourceParams) 
 const createVehicle = `-- name: CreateVehicle :one
 INSERT INTO vehicles ("resourceId", "plateNumber", brand, model, year,
                        "currentOdometer", "categoryId", capacity)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id, "resourceId", "plateNumber", brand, model, year, "currentOdometer", "categoryId", capacity, "photoUrl", energy_type
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id, "resourceId", "plateNumber", brand, model, year, "currentOdometer", "categoryId", capacity, "photoUrl", energy_type, "maintenanceIntervalKm", "lastMaintenanceOdometer"
 `
 
 type CreateVehicleParams struct {
@@ -97,6 +97,8 @@ func (q *Queries) CreateVehicle(ctx context.Context, arg CreateVehicleParams) (V
 		&i.Capacity,
 		&i.PhotoUrl,
 		&i.EnergyType,
+		&i.MaintenanceIntervalKm,
+		&i.LastMaintenanceOdometer,
 	)
 	return i, err
 }
@@ -149,7 +151,7 @@ func (q *Queries) GetResourceByID(ctx context.Context, id int32) (Resource, erro
 }
 
 const getVehicleByID = `-- name: GetVehicleByID :one
-SELECT v.id, v."resourceId", v."plateNumber", v.brand, v.model, v.year, v."currentOdometer", v."categoryId", v.capacity, v."photoUrl", v.energy_type, r.name AS resource_name, r.status AS resource_status,
+SELECT v.id, v."resourceId", v."plateNumber", v.brand, v.model, v.year, v."currentOdometer", v."categoryId", v.capacity, v."photoUrl", v.energy_type, v."maintenanceIntervalKm", v."lastMaintenanceOdometer", r.name AS resource_name, r.status AS resource_status,
        vc.name AS category_name
 FROM vehicles v
 JOIN resources r ON r.id = v."resourceId"
@@ -158,20 +160,22 @@ WHERE v.id = $1 LIMIT 1
 `
 
 type GetVehicleByIDRow struct {
-	ID              int32          `json:"id"`
-	ResourceId      int32          `json:"resourceId"`
-	PlateNumber     string         `json:"plateNumber"`
-	Brand           string         `json:"brand"`
-	Model           string         `json:"model"`
-	Year            int16          `json:"year"`
-	CurrentOdometer int32          `json:"currentOdometer"`
-	CategoryId      int32          `json:"categoryId"`
-	Capacity        int16          `json:"capacity"`
-	PhotoUrl        sql.NullString `json:"photoUrl"`
-	EnergyType      EnergyType     `json:"energy_type"`
-	ResourceName    string         `json:"resource_name"`
-	ResourceStatus  ResourceStatus `json:"resource_status"`
-	CategoryName    string         `json:"category_name"`
+	ID                      int32          `json:"id"`
+	ResourceId              int32          `json:"resourceId"`
+	PlateNumber             string         `json:"plateNumber"`
+	Brand                   string         `json:"brand"`
+	Model                   string         `json:"model"`
+	Year                    int16          `json:"year"`
+	CurrentOdometer         int32          `json:"currentOdometer"`
+	CategoryId              int32          `json:"categoryId"`
+	Capacity                int16          `json:"capacity"`
+	PhotoUrl                sql.NullString `json:"photoUrl"`
+	EnergyType              EnergyType     `json:"energy_type"`
+	MaintenanceIntervalKm   int32          `json:"maintenanceIntervalKm"`
+	LastMaintenanceOdometer int32          `json:"lastMaintenanceOdometer"`
+	ResourceName            string         `json:"resource_name"`
+	ResourceStatus          ResourceStatus `json:"resource_status"`
+	CategoryName            string         `json:"category_name"`
 }
 
 func (q *Queries) GetVehicleByID(ctx context.Context, id int32) (GetVehicleByIDRow, error) {
@@ -189,6 +193,8 @@ func (q *Queries) GetVehicleByID(ctx context.Context, id int32) (GetVehicleByIDR
 		&i.Capacity,
 		&i.PhotoUrl,
 		&i.EnergyType,
+		&i.MaintenanceIntervalKm,
+		&i.LastMaintenanceOdometer,
 		&i.ResourceName,
 		&i.ResourceStatus,
 		&i.CategoryName,
@@ -197,7 +203,7 @@ func (q *Queries) GetVehicleByID(ctx context.Context, id int32) (GetVehicleByIDR
 }
 
 const getVehicleByPlate = `-- name: GetVehicleByPlate :one
-SELECT id, "resourceId", "plateNumber", brand, model, year, "currentOdometer", "categoryId", capacity, "photoUrl", energy_type FROM vehicles WHERE "plateNumber" = $1 LIMIT 1
+SELECT id, "resourceId", "plateNumber", brand, model, year, "currentOdometer", "categoryId", capacity, "photoUrl", energy_type, "maintenanceIntervalKm", "lastMaintenanceOdometer" FROM vehicles WHERE "plateNumber" = $1 LIMIT 1
 `
 
 func (q *Queries) GetVehicleByPlate(ctx context.Context, platenumber string) (Vehicle, error) {
@@ -215,6 +221,8 @@ func (q *Queries) GetVehicleByPlate(ctx context.Context, platenumber string) (Ve
 		&i.Capacity,
 		&i.PhotoUrl,
 		&i.EnergyType,
+		&i.MaintenanceIntervalKm,
+		&i.LastMaintenanceOdometer,
 	)
 	return i, err
 }
@@ -258,7 +266,7 @@ func (q *Queries) ListVehicleCategories(ctx context.Context) ([]VehicleCategory,
 }
 
 const listVehicles = `-- name: ListVehicles :many
-SELECT v.id, v."resourceId", v."plateNumber", v.brand, v.model, v.year, v."currentOdometer", v."categoryId", v.capacity, v."photoUrl", v.energy_type, r.name AS resource_name, r.status AS resource_status,
+SELECT v.id, v."resourceId", v."plateNumber", v.brand, v.model, v.year, v."currentOdometer", v."categoryId", v.capacity, v."photoUrl", v.energy_type, v."maintenanceIntervalKm", v."lastMaintenanceOdometer", r.name AS resource_name, r.status AS resource_status,
        vc.name AS category_name
 FROM vehicles v
 JOIN resources r ON r.id = v."resourceId"
@@ -282,20 +290,22 @@ type ListVehiclesParams struct {
 }
 
 type ListVehiclesRow struct {
-	ID              int32          `json:"id"`
-	ResourceId      int32          `json:"resourceId"`
-	PlateNumber     string         `json:"plateNumber"`
-	Brand           string         `json:"brand"`
-	Model           string         `json:"model"`
-	Year            int16          `json:"year"`
-	CurrentOdometer int32          `json:"currentOdometer"`
-	CategoryId      int32          `json:"categoryId"`
-	Capacity        int16          `json:"capacity"`
-	PhotoUrl        sql.NullString `json:"photoUrl"`
-	EnergyType      EnergyType     `json:"energy_type"`
-	ResourceName    string         `json:"resource_name"`
-	ResourceStatus  ResourceStatus `json:"resource_status"`
-	CategoryName    string         `json:"category_name"`
+	ID                      int32          `json:"id"`
+	ResourceId              int32          `json:"resourceId"`
+	PlateNumber             string         `json:"plateNumber"`
+	Brand                   string         `json:"brand"`
+	Model                   string         `json:"model"`
+	Year                    int16          `json:"year"`
+	CurrentOdometer         int32          `json:"currentOdometer"`
+	CategoryId              int32          `json:"categoryId"`
+	Capacity                int16          `json:"capacity"`
+	PhotoUrl                sql.NullString `json:"photoUrl"`
+	EnergyType              EnergyType     `json:"energy_type"`
+	MaintenanceIntervalKm   int32          `json:"maintenanceIntervalKm"`
+	LastMaintenanceOdometer int32          `json:"lastMaintenanceOdometer"`
+	ResourceName            string         `json:"resource_name"`
+	ResourceStatus          ResourceStatus `json:"resource_status"`
+	CategoryName            string         `json:"category_name"`
 }
 
 func (q *Queries) ListVehicles(ctx context.Context, arg ListVehiclesParams) ([]ListVehiclesRow, error) {
@@ -325,6 +335,8 @@ func (q *Queries) ListVehicles(ctx context.Context, arg ListVehiclesParams) ([]L
 			&i.Capacity,
 			&i.PhotoUrl,
 			&i.EnergyType,
+			&i.MaintenanceIntervalKm,
+			&i.LastMaintenanceOdometer,
 			&i.ResourceName,
 			&i.ResourceStatus,
 			&i.CategoryName,
@@ -383,7 +395,7 @@ const updateVehicle = `-- name: UpdateVehicle :one
 UPDATE vehicles
 SET "plateNumber" = $2, brand = $3, model = $4, year = $5,
     "currentOdometer" = $6, "categoryId" = $7, capacity = $8
-WHERE id = $1 RETURNING id, "resourceId", "plateNumber", brand, model, year, "currentOdometer", "categoryId", capacity, "photoUrl", energy_type
+WHERE id = $1 RETURNING id, "resourceId", "plateNumber", brand, model, year, "currentOdometer", "categoryId", capacity, "photoUrl", energy_type, "maintenanceIntervalKm", "lastMaintenanceOdometer"
 `
 
 type UpdateVehicleParams struct {
@@ -421,12 +433,61 @@ func (q *Queries) UpdateVehicle(ctx context.Context, arg UpdateVehicleParams) (V
 		&i.Capacity,
 		&i.PhotoUrl,
 		&i.EnergyType,
+		&i.MaintenanceIntervalKm,
+		&i.LastMaintenanceOdometer,
+	)
+	return i, err
+}
+
+const updateVehicleLastMaintenanceOdometer = `-- name: UpdateVehicleLastMaintenanceOdometer :exec
+UPDATE vehicles SET "lastMaintenanceOdometer" = $2 WHERE id = $1
+`
+
+type UpdateVehicleLastMaintenanceOdometerParams struct {
+	ID                      int32 `json:"id"`
+	LastMaintenanceOdometer int32 `json:"lastMaintenanceOdometer"`
+}
+
+func (q *Queries) UpdateVehicleLastMaintenanceOdometer(ctx context.Context, arg UpdateVehicleLastMaintenanceOdometerParams) error {
+	_, err := q.db.ExecContext(ctx, updateVehicleLastMaintenanceOdometer, arg.ID, arg.LastMaintenanceOdometer)
+	return err
+}
+
+const updateVehicleOdometer = `-- name: UpdateVehicleOdometer :one
+UPDATE vehicles
+SET "currentOdometer" = GREATEST("currentOdometer", $2)
+WHERE id = $1 RETURNING id, "resourceId", "plateNumber", brand, model, year, "currentOdometer", "categoryId", capacity, "photoUrl", energy_type, "maintenanceIntervalKm", "lastMaintenanceOdometer"
+`
+
+type UpdateVehicleOdometerParams struct {
+	ID              int32 `json:"id"`
+	CurrentOdometer int32 `json:"currentOdometer"`
+}
+
+// Only moves the odometer forward; ignores lower/stale readings.
+func (q *Queries) UpdateVehicleOdometer(ctx context.Context, arg UpdateVehicleOdometerParams) (Vehicle, error) {
+	row := q.db.QueryRowContext(ctx, updateVehicleOdometer, arg.ID, arg.CurrentOdometer)
+	var i Vehicle
+	err := row.Scan(
+		&i.ID,
+		&i.ResourceId,
+		&i.PlateNumber,
+		&i.Brand,
+		&i.Model,
+		&i.Year,
+		&i.CurrentOdometer,
+		&i.CategoryId,
+		&i.Capacity,
+		&i.PhotoUrl,
+		&i.EnergyType,
+		&i.MaintenanceIntervalKm,
+		&i.LastMaintenanceOdometer,
 	)
 	return i, err
 }
 
 const updateVehiclePhoto = `-- name: UpdateVehiclePhoto :one
-UPDATE vehicles SET "photoUrl" = $2 WHERE id = $1 RETURNING id, "resourceId", "plateNumber", brand, model, year, "currentOdometer", "categoryId", capacity, "photoUrl", energy_type
+UPDATE vehicles SET "photoUrl" = $2 WHERE id = $1 RETURNING id, "resourceId", "plateNumber", brand, model, year, "currentOdometer", "categoryId", capacity, "photoUrl", energy_type, "maintenanceIntervalKm", "lastMaintenanceOdometer"
 `
 
 type UpdateVehiclePhotoParams struct {
@@ -449,6 +510,8 @@ func (q *Queries) UpdateVehiclePhoto(ctx context.Context, arg UpdateVehiclePhoto
 		&i.Capacity,
 		&i.PhotoUrl,
 		&i.EnergyType,
+		&i.MaintenanceIntervalKm,
+		&i.LastMaintenanceOdometer,
 	)
 	return i, err
 }

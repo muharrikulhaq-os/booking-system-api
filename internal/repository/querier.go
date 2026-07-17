@@ -38,6 +38,7 @@ type Querier interface {
 	CreateBooking(ctx context.Context, arg CreateBookingParams) (Booking, error)
 	CreateDepartment(ctx context.Context, name string) (Department, error)
 	CreateDriver(ctx context.Context, arg CreateDriverParams) (Driver, error)
+	CreateDriverOvertime(ctx context.Context, arg CreateDriverOvertimeParams) (DriverOvertime, error)
 	CreateDriverRating(ctx context.Context, arg CreateDriverRatingParams) (DriverRating, error)
 	CreateFuelExpense(ctx context.Context, arg CreateFuelExpenseParams) (FuelExpense, error)
 	CreateFuelType(ctx context.Context, arg CreateFuelTypeParams) (FuelType, error)
@@ -78,7 +79,10 @@ type Querier interface {
 	GetGuestBookingByToken(ctx context.Context, accesstoken string) (GetGuestBookingByTokenRow, error)
 	GetMaintenanceByID(ctx context.Context, id int32) (GetMaintenanceByIDRow, error)
 	GetMasterSettingByKey(ctx context.Context, key string) (MasterSetting, error)
+	// Guards against creating duplicate auto-triggered maintenance records while one is still open.
+	GetOngoingAutoMaintenanceByVehicle(ctx context.Context, vehicleid int32) (MaintenanceRecord, error)
 	GetOverlappingPassengerCount(ctx context.Context, arg GetOverlappingPassengerCountParams) (int32, error)
+	GetOvertimeByBooking(ctx context.Context, bookingid int32) (DriverOvertime, error)
 	GetRefreshToken(ctx context.Context, arg GetRefreshTokenParams) (RefreshToken, error)
 	GetResourceByID(ctx context.Context, id int32) (Resource, error)
 	GetRoomByID(ctx context.Context, id int32) (GetRoomByIDRow, error)
@@ -103,6 +107,7 @@ type Querier interface {
 	ListMaintenance(ctx context.Context, arg ListMaintenanceParams) ([]ListMaintenanceRow, error)
 	ListMasterSettings(ctx context.Context) ([]MasterSetting, error)
 	ListNotificationsByUserID(ctx context.Context, arg ListNotificationsByUserIDParams) ([]Notification, error)
+	ListOvertimeByDriver(ctx context.Context, driverid int32) ([]ListOvertimeByDriverRow, error)
 	ListRoles(ctx context.Context) ([]Role, error)
 	ListRooms(ctx context.Context, arg ListRoomsParams) ([]ListRoomsRow, error)
 	ListUsers(ctx context.Context, arg ListUsersParams) ([]ListUsersRow, error)
@@ -124,6 +129,8 @@ type Querier interface {
 	ReportBookingSummary(ctx context.Context, arg ReportBookingSummaryParams) (ReportBookingSummaryRow, error)
 	ReportDriverActivity(ctx context.Context) ([]ReportDriverActivityRow, error)
 	ReportDriverRatings(ctx context.Context) ([]VDriverRatingsSummary, error)
+	// Rekap jumlah trip SPD vs Non-SPD dan total overtime per driver.
+	ReportDriverTrips(ctx context.Context, arg ReportDriverTripsParams) ([]ReportDriverTripsRow, error)
 	ReportFuelExpenses(ctx context.Context) ([]VFuelExpenseSummary, error)
 	ReportMaintenanceCost(ctx context.Context) ([]ReportMaintenanceCostRow, error)
 	ReportOverdueBookings(ctx context.Context) ([]ReportOverdueBookingsRow, error)
@@ -150,6 +157,9 @@ type Querier interface {
 	UpdateUser(ctx context.Context, arg UpdateUserParams) (User, error)
 	UpdateUserPassword(ctx context.Context, arg UpdateUserPasswordParams) error
 	UpdateVehicle(ctx context.Context, arg UpdateVehicleParams) (Vehicle, error)
+	UpdateVehicleLastMaintenanceOdometer(ctx context.Context, arg UpdateVehicleLastMaintenanceOdometerParams) error
+	// Only moves the odometer forward; ignores lower/stale readings.
+	UpdateVehicleOdometer(ctx context.Context, arg UpdateVehicleOdometerParams) (Vehicle, error)
 	UpdateVehiclePhoto(ctx context.Context, arg UpdateVehiclePhotoParams) (Vehicle, error)
 	UpsertMasterSetting(ctx context.Context, arg UpsertMasterSettingParams) (MasterSetting, error)
 }

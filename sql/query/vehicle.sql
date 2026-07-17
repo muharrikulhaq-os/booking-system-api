@@ -73,3 +73,12 @@ DELETE FROM vehicle_categories WHERE id = $1;
 
 -- name: GetResourceByID :one
 SELECT * FROM resources WHERE id = $1 LIMIT 1;
+
+-- name: UpdateVehicleOdometer :one
+-- Only moves the odometer forward; ignores lower/stale readings.
+UPDATE vehicles
+SET "currentOdometer" = GREATEST("currentOdometer", $2)
+WHERE id = $1 RETURNING *;
+
+-- name: UpdateVehicleLastMaintenanceOdometer :exec
+UPDATE vehicles SET "lastMaintenanceOdometer" = $2 WHERE id = $1;

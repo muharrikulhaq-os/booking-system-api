@@ -18,7 +18,7 @@ SELECT b.*,
            )
        ) AS has_merge_suggestion,
        orig.name AS original_resource_name,
-       (SELECT bm."primaryBookingId" FROM booking_merges bm WHERE bm."mergedBookingId" = b.id LIMIT 1) AS merged_into_id,
+       merged_by."primaryBookingId" AS merged_into_id,
        (SELECT COUNT(*) FROM booking_merges bm WHERE bm."primaryBookingId" = b.id) AS merge_count
 FROM bookings b
 JOIN users u ON u.id = b."userId"
@@ -29,6 +29,7 @@ LEFT JOIN users ab ON ab.id = b."approvedById"
 LEFT JOIN drivers drv ON drv.id = b."assignedDriverId"
 LEFT JOIN users du ON du.id = drv."userId"
 LEFT JOIN vehicles v ON v.id = b."assignedVehicleId"
+LEFT JOIN booking_merges merged_by ON merged_by."mergedBookingId" = b.id
 WHERE (sqlc.narg(user_id)::int IS NULL OR b."userId" = sqlc.narg(user_id)::int)
   AND (sqlc.narg(status)::booking_status IS NULL OR b.status = sqlc.narg(status)::booking_status)
   AND (sqlc.narg(resource_id)::int IS NULL OR b."resourceId" = sqlc.narg(resource_id)::int)
@@ -84,10 +85,10 @@ WHERE b.id = $1 LIMIT 1;
 
 -- name: CreateBooking :one
 INSERT INTO bookings (
-    "userId", "resourceId", "startDate", "endDate", purpose, 
-    "passengerCount", "assignedDriverId", "assignedVehicleId", status
+    "userId", "resourceId", "startDate", "endDate", purpose,
+    "passengerCount", "assignedDriverId", "assignedVehicleId", status, "bookingType"
 )
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'PENDING') RETURNING *;
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'PENDING', $9) RETURNING *;
 
 -- name: UpdateBookingStatus :one
 UPDATE bookings SET status = $2, "updatedAt" = NOW() WHERE id = $1 RETURNING *;

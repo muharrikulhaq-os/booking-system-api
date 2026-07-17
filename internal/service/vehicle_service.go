@@ -141,7 +141,7 @@ func (s *VehicleService) Create(ctx context.Context, req CreateVehicleRequest) (
 	return s.GetByID(ctx, v.ID)
 }
 
-func (s *VehicleService) Update(ctx context.Context, id int32, req UpdateVehicleRequest) (map[string]any, error) {
+func (s *VehicleService) Update(ctx context.Context, id int32, req UpdateVehicleRequest, actorID int32) (map[string]any, error) {
 	v, err := s.q.GetVehicleByID(ctx, id)
 	if err != nil {
 		return nil, util.ErrNotFound
@@ -158,7 +158,35 @@ func (s *VehicleService) Update(ctx context.Context, id int32, req UpdateVehicle
 	if err != nil {
 		return nil, err
 	}
+
+	if req.CurrentOdometer > v.CurrentOdometer {
+		checkAndTriggerAutoMaintenance(ctx, s.q, id, actorID)
+	}
+
 	return s.GetByID(ctx, id)
+}
+
+// GetMaintenanceStatus returns how many kilometers remain before this
+// vehicle's next scheduled (odometer-based) maintenance is auto-triggered.
+func (s *VehicleService) GetMaintenanceStatus(ctx context.Context, id int32) (map[string]any, error) {
+	v, err := s.q.GetVehicleByID(ctx, id)
+	if err != nil {
+		return nil, util.ErrNotFound
+	}
+	nextDueAt := v.LastMaintenanceOdometer + v.MaintenanceIntervalKm
+	remaining := nextDueAt - v.CurrentOdometer
+	if remaining < 0 {
+		remaining = 0
+	}
+	return map[string]any{
+		"vehicleId":               v.ID,
+		"currentOdometer":         v.CurrentOdometer,
+		"lastMaintenanceOdometer": v.LastMaintenanceOdometer,
+		"maintenanceIntervalKm":   v.MaintenanceIntervalKm,
+		"nextMaintenanceDueAt":    nextDueAt,
+		"kmUntilDue":              remaining,
+		"isDue":                   v.CurrentOdometer-v.LastMaintenanceOdometer >= v.MaintenanceIntervalKm,
+	}, nil
 }
 
 func (s *VehicleService) UpdateStatus(ctx context.Context, id int32, status string) (map[string]any, error) {

@@ -27,6 +27,10 @@ type CreateBookingRequest struct {
 	Purpose          string     `json:"purpose"    validate:"required"`
 	PassengerCount   int32      `json:"passengerCount" validate:"required,min=1"`
 	DriverID         *int32     `json:"driverId"`
+	// BookingType: SPD (Surat Perintah Dinas / dinas resmi) atau NON_SPD
+	// (pemakaian umum, dikenai perhitungan overtime bila melewati endDate).
+	// Opsional — default NON_SPD bila tidak dikirim, supaya backward compatible.
+	BookingType      string     `json:"bookingType" validate:"omitempty,oneof=SPD NON_SPD"`
 }
 
 type ApproveBookingRequest struct {
@@ -62,9 +66,10 @@ type MergeBookingRequest struct {
 
 func serializeBookingRow(b repository.ListBookingsRow) map[string]any {
 	out := map[string]any{
-		"id":      b.ID,
-		"status":  string(b.Status),
-		"purpose": b.Purpose,
+		"id":          b.ID,
+		"status":      string(b.Status),
+		"purpose":     b.Purpose,
+		"bookingType": string(b.BookingType),
 		"user": map[string]any{
 			"id": b.UserId, "name": b.UserName,
 			"employeeId": b.EmployeeId, "department": b.DepartmentName,
@@ -88,15 +93,15 @@ func serializeBookingRow(b repository.ListBookingsRow) map[string]any {
 		"hasMergeSuggestion": b.HasMergeSuggestion,
 		"mergedIntoId":    nil,               // booking ini digabung KE booking mana (sekunder)
 		"mergeCount":      b.MergeCount,       // jumlah booking yang digabung ke booking ini (primary)
-		"isMerged":        b.MergedIntoId.Valid || b.MergeCount > 0,
+		"isMerged":        b.MergedIntoID.Valid || b.MergeCount > 0,
 	}
 	if b.OriginalResourceId.Valid && b.OriginalResourceName.Valid {
 		out["originalResource"] = map[string]any{
 			"id": b.OriginalResourceId.Int32, "name": b.OriginalResourceName.String,
 		}
 	}
-	if b.MergedIntoId.Valid {
-		out["mergedIntoId"] = b.MergedIntoId.Int32
+	if b.MergedIntoID.Valid {
+		out["mergedIntoId"] = b.MergedIntoID.Int32
 	}
 	if b.ApproverName.Valid {
 		out["approvedBy"] = map[string]any{"id": b.ApprovedById.Int32, "name": b.ApproverName.String}
@@ -117,9 +122,10 @@ func serializeBookingRow(b repository.ListBookingsRow) map[string]any {
 
 func serializeBookingByID(b repository.GetBookingByIDRow) map[string]any {
 	out := map[string]any{
-		"id":      b.ID,
-		"status":  string(b.Status),
-		"purpose": b.Purpose,
+		"id":          b.ID,
+		"status":      string(b.Status),
+		"purpose":     b.Purpose,
+		"bookingType": string(b.BookingType),
 		"user": map[string]any{
 			"id": b.UserId, "name": b.UserName,
 			"employeeId": b.EmployeeId, "department": b.DepartmentName,
@@ -274,7 +280,25 @@ func (s *BookingService) GetByID(ctx context.Context, id int32, currentUserID in
 			return nil, util.ErrForbidden
 		}
 	}
-	return serializeBookingByID(b), nil
+	out := serializeBookingByID(b)
+	s.attachOvertime(ctx, out, id)
+	return out, nil
+}
+
+// attachOvertime merges the driver_overtimes record (if any) into a booking
+// response map under the "overtime" key. No-op when the booking was never
+// completed late (e.g. SPD bookings, or NON_SPD finished on time).
+func (s *BookingService) attachOvertime(ctx context.Context, out map[string]any, bookingID int32) {
+	ot, err := s.q.GetOvertimeByBooking(ctx, bookingID)
+	if err != nil {
+		out["overtime"] = nil
+		return
+	}
+	out["overtime"] = map[string]any{
+		"scheduledEndAt":  ot.ScheduledEndAt,
+		"actualEndAt":     ot.ActualEndAt,
+		"overtimeMinutes": ot.OvertimeMinutes,
+	}
 }
 
 func (s *BookingService) Create(ctx context.Context, req CreateBookingRequest, userID int) (map[string]any, error) {
@@ -327,6 +351,11 @@ func (s *BookingService) Create(ctx context.Context, req CreateBookingRequest, u
 	// The plan says: "Jika status booking masih PENDING, jadwal supir dan kendaraan tersebut TETAP TERBUKA."
 	// We should just not block it here. But CheckBookingConflict is resource-based (room/vehicle). We can just let it be for now since it's for resourceId (like room).
 
+	bookingType := repository.BookingTypeNONSPD
+	if req.BookingType == string(repository.BookingTypeSPD) {
+		bookingType = repository.BookingTypeSPD
+	}
+
 	b, err := s.q.CreateBooking(ctx, repository.CreateBookingParams{
 		UserId:            int32(userID),
 		ResourceId:        req.ResourceID,
@@ -336,6 +365,7 @@ func (s *BookingService) Create(ctx context.Context, req CreateBookingRequest, u
 		PassengerCount:    req.PassengerCount,
 		AssignedDriverId:  driverID,
 		AssignedVehicleId: vehicleID,
+		BookingType:       bookingType,
 	})
 	if err != nil {
 		return nil, err
@@ -630,6 +660,28 @@ func (s *BookingService) Complete(ctx context.Context, id int32, userID int, rol
 		return nil, err
 	}
 
+	// Overtime (Non-SPD only): jam kerja normal mengikuti jadwal booking
+	// (endDate). Kendaraan yang baru selesai dipakai setelah endDate dicatat
+	// sebagai overtime supir, mis. jadwal berakhir 16:30 tapi baru selesai
+	// 18:00 -> overtime 1 jam 30 menit. SPD (surat perintah dinas) dikecualikan.
+	if b.ResourceType == repository.ResourceTypeVEHICLE &&
+		b.BookingType == repository.BookingTypeNONSPD &&
+		b.AssignedDriverId.Valid {
+		now := time.Now().UTC()
+		if now.After(b.EndDate) {
+			overtimeMinutes := int32(now.Sub(b.EndDate).Minutes())
+			if overtimeMinutes > 0 {
+				_, _ = s.q.CreateDriverOvertime(ctx, repository.CreateDriverOvertimeParams{
+					BookingId:       b.ID,
+					DriverId:        b.AssignedDriverId.Int32,
+					ScheduledEndAt:  b.EndDate,
+					ActualEndAt:     now,
+					OvertimeMinutes: overtimeMinutes,
+				})
+			}
+		}
+	}
+
 	// Lepas kepemilikan kendaraan supir bila ia tak punya booking aktif lain.
 	// (Kalau masih ada booking APPROVED/ONGOING lain — mis. hasil merge di
 	// kendaraan yang sama — kepemilikan dipertahankan.)
@@ -649,7 +701,9 @@ func (s *BookingService) Complete(ctx context.Context, id int32, userID int, rol
 	})
 
 	full, _ := s.q.GetBookingByID(ctx, id)
-	return serializeBookingByID(full), nil
+	out := serializeBookingByID(full)
+	s.attachOvertime(ctx, out, id)
+	return out, nil
 }
 
 func (s *BookingService) RateDriver(ctx context.Context, bookingID int32, req RateDriverRequest, userID int) (map[string]any, error) {

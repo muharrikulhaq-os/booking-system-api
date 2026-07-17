@@ -197,7 +197,7 @@ func (s *DriverService) GetAvailableDrivers(ctx context.Context, start, end time
 			"vehicleCapacity":       vehicleCapacity,
 			"overlappingPassengers": r.OverlappingPassengers,
 			"remainingSeats":        remainingSeats,
-			"overlappingPurpose":    r.OverlappingPurpose.String,
+			"overlappingPurpose":    r.OverlappingPurpose,
 		}
 	}
 	return out, nil
