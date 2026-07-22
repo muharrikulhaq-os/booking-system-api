@@ -229,21 +229,17 @@ SELECT d.id AS driver_id, u.name AS driver_name, u."employeeId",
               AND b."endDate" > $2::timestamptz
            ), 0
        )::int AS overlapping_passengers,
-       (SELECT b.purpose
+       COALESCE((SELECT b.purpose
         FROM bookings b
-        WHERE b."assignedVehicleId" = v.id
+        WHERE b."assignedDriverId" = d.id
           AND b.status IN ('APPROVED', 'ONGOING')
           AND b."startDate" < $1::timestamptz
           AND b."endDate" > $2::timestamptz
-        ORDER BY b."startDate" ASC LIMIT 1) AS overlapping_purpose
+        ORDER BY b."startDate" ASC LIMIT 1), '') AS overlapping_purpose
 FROM drivers d
 JOIN users u ON u.id = d."userId"
-LEFT JOIN LATERAL (
-    SELECT ab."assignedVehicleId" AS vid FROM bookings ab
-    WHERE ab."assignedDriverId" = d.id AND ab.status IN ('APPROVED', 'ONGOING')
-    ORDER BY ab."startDate" DESC LIMIT 1
-) act ON TRUE
-LEFT JOIN vehicles v ON v.id = act.vid
+LEFT JOIN driver_assignments da ON da."driverId" = d.id AND da."releasedAt" IS NULL
+LEFT JOIN vehicles v ON v.id = da."vehicleId"
 WHERE d."isActive" = TRUE
 ORDER BY overlapping_passengers ASC
 `
@@ -261,7 +257,7 @@ type ListAvailableDriversRow struct {
 	PlateNumber           sql.NullString `json:"plateNumber"`
 	Capacity              sql.NullInt16  `json:"capacity"`
 	OverlappingPassengers int32          `json:"overlapping_passengers"`
-	OverlappingPurpose    sql.NullString `json:"overlapping_purpose"`
+	OverlappingPurpose    string         `json:"overlapping_purpose"`
 }
 
 func (q *Queries) ListAvailableDrivers(ctx context.Context, arg ListAvailableDriversParams) ([]ListAvailableDriversRow, error) {

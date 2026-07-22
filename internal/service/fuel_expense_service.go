@@ -195,6 +195,13 @@ func (s *FuelExpenseService) Create(ctx context.Context, req CreateFuelExpenseRe
 		return nil, err
 	}
 
+	if req.OdometerAfter > 0 {
+		_, _ = s.q.UpdateVehicleOdometer(ctx, repository.UpdateVehicleOdometerParams{
+			ID: req.VehicleID, CurrentOdometer: req.OdometerAfter,
+		})
+		checkAndTriggerAutoMaintenance(ctx, s.q, req.VehicleID, recordedByID)
+	}
+
 	return s.GetByID(ctx, fe.ID)
 }
 

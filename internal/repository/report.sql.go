@@ -232,6 +232,71 @@ func (q *Queries) ReportDriverRatings(ctx context.Context) ([]VDriverRatingsSumm
 	return items, nil
 }
 
+const reportDriverTrips = `-- name: ReportDriverTrips :many
+SELECT
+    d.id AS driver_id, u.name AS driver_name, u."employeeId",
+    COUNT(DISTINCT b.id) FILTER (WHERE b."bookingType" = 'SPD')     AS spd_trips,
+    COUNT(DISTINCT b.id) FILTER (WHERE b."bookingType" = 'NON_SPD') AS non_spd_trips,
+    COUNT(DISTINCT ot.id)                                           AS overtime_trips,
+    COALESCE(SUM(ot."overtimeMinutes"), 0)::int                     AS total_overtime_minutes
+FROM drivers d
+JOIN users u ON u.id = d."userId"
+LEFT JOIN bookings b ON b."assignedDriverId" = d.id
+    AND b.status = 'COMPLETED'
+    AND ($1::timestamptz IS NULL OR b."startDate" >= $1::timestamptz)
+    AND ($2::timestamptz IS NULL OR b."endDate" <= $2::timestamptz)
+LEFT JOIN driver_overtimes ot ON ot."bookingId" = b.id
+GROUP BY d.id, u.name, u."employeeId"
+ORDER BY (spd_trips + non_spd_trips) DESC
+`
+
+type ReportDriverTripsParams struct {
+	StartFrom sql.NullTime `json:"start_from"`
+	EndTo     sql.NullTime `json:"end_to"`
+}
+
+type ReportDriverTripsRow struct {
+	DriverID             int32  `json:"driver_id"`
+	DriverName           string `json:"driver_name"`
+	EmployeeId           string `json:"employeeId"`
+	SpdTrips             int64  `json:"spd_trips"`
+	NonSpdTrips          int64  `json:"non_spd_trips"`
+	OvertimeTrips        int64  `json:"overtime_trips"`
+	TotalOvertimeMinutes int32  `json:"total_overtime_minutes"`
+}
+
+// Rekap jumlah trip SPD vs Non-SPD dan total overtime per driver.
+func (q *Queries) ReportDriverTrips(ctx context.Context, arg ReportDriverTripsParams) ([]ReportDriverTripsRow, error) {
+	rows, err := q.db.QueryContext(ctx, reportDriverTrips, arg.StartFrom, arg.EndTo)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ReportDriverTripsRow
+	for rows.Next() {
+		var i ReportDriverTripsRow
+		if err := rows.Scan(
+			&i.DriverID,
+			&i.DriverName,
+			&i.EmployeeId,
+			&i.SpdTrips,
+			&i.NonSpdTrips,
+			&i.OvertimeTrips,
+			&i.TotalOvertimeMinutes,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const reportFuelExpenses = `-- name: ReportFuelExpenses :many
 SELECT vehicle_id, "plateNumber", vehicle_name, category, bbm_entries, total_liter, total_cost_bbm, listrik_entries, total_kwh, total_cost_listrik, grand_total FROM v_fuel_expense_summary ORDER BY grand_total DESC
 `
@@ -320,7 +385,7 @@ func (q *Queries) ReportMaintenanceCost(ctx context.Context) ([]ReportMaintenanc
 }
 
 const reportOverdueBookings = `-- name: ReportOverdueBookings :many
-SELECT b.id, b."userId", b."resourceId", b."startDate", b."endDate", b.purpose, b."passengerCount", b.status, b."approvedById", b."approvedAt", b."assignedDriverId", b."assignedVehicleId", b."assignedAt", b."returnedAt", b."createdAt", b."updatedAt", b."originalResourceId",
+SELECT b.id, b."userId", b."resourceId", b."startDate", b."endDate", b.purpose, b."passengerCount", b.status, b."approvedById", b."approvedAt", b."assignedDriverId", b."assignedVehicleId", b."assignedAt", b."returnedAt", b."createdAt", b."updatedAt", b."originalResourceId", b."bookingType",
        u.name AS user_name, u."employeeId",
        r.name AS resource_name, r.type AS resource_type
 FROM bookings b
@@ -348,6 +413,7 @@ type ReportOverdueBookingsRow struct {
 	CreatedAt          time.Time     `json:"createdAt"`
 	UpdatedAt          time.Time     `json:"updatedAt"`
 	OriginalResourceId sql.NullInt32 `json:"originalResourceId"`
+	BookingType        BookingType   `json:"bookingType"`
 	UserName           string        `json:"user_name"`
 	EmployeeId         string        `json:"employeeId"`
 	ResourceName       string        `json:"resource_name"`
@@ -381,6 +447,7 @@ func (q *Queries) ReportOverdueBookings(ctx context.Context) ([]ReportOverdueBoo
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.OriginalResourceId,
+			&i.BookingType,
 			&i.UserName,
 			&i.EmployeeId,
 			&i.ResourceName,

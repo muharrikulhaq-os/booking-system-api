@@ -235,6 +235,33 @@ func (s *ReportService) DepartmentSummary(ctx context.Context, start, end *time.
 	return s.q.ReportDepartmentSummary(ctx, nullableTime(start), nullableTime(end))
 }
 
+// DriverTrips reports, per driver, how many completed trips were SPD (surat
+// perintah dinas) vs NON_SPD, plus how many of those NON_SPD trips ran into
+// overtime and the total overtime accrued.
+func (s *ReportService) DriverTrips(ctx context.Context, start, end *time.Time) (any, error) {
+	rows, err := s.q.ReportDriverTrips(ctx, repository.ReportDriverTripsParams{
+		StartFrom: nullableTime(start), EndTo: nullableTime(end),
+	})
+	if err != nil {
+		return nil, err
+	}
+	out := make([]map[string]any, len(rows))
+	for i, r := range rows {
+		out[i] = map[string]any{
+			"driverId":             r.DriverID,
+			"driverName":           r.DriverName,
+			"employeeId":           r.EmployeeId,
+			"spdTrips":             r.SpdTrips,
+			"nonSpdTrips":          r.NonSpdTrips,
+			"totalTrips":           r.SpdTrips + r.NonSpdTrips,
+			"overtimeTrips":        r.OvertimeTrips,
+			"totalOvertimeMinutes": r.TotalOvertimeMinutes,
+			"totalOvertimeHours":   float64(r.TotalOvertimeMinutes) / 60,
+		}
+	}
+	return out, nil
+}
+
 func toAuditLogResponse(row repository.ReportAuditLogsRow) repository.AuditLogResponse {
 	var userID *int32
 	if row.UserId.Valid {

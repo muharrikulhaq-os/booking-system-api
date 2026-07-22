@@ -69,20 +69,16 @@ SELECT d.id AS driver_id, u.name AS driver_name, u."employeeId",
               AND b."endDate" > sqlc.arg(start_from)::timestamptz
            ), 0
        )::int AS overlapping_passengers,
-       (SELECT b.purpose
+       COALESCE((SELECT b.purpose
         FROM bookings b
-        WHERE b."assignedVehicleId" = v.id
+        WHERE b."assignedDriverId" = d.id
           AND b.status IN ('APPROVED', 'ONGOING')
           AND b."startDate" < sqlc.arg(end_to)::timestamptz
           AND b."endDate" > sqlc.arg(start_from)::timestamptz
-        ORDER BY b."startDate" ASC LIMIT 1) AS overlapping_purpose
+        ORDER BY b."startDate" ASC LIMIT 1), '') AS overlapping_purpose
 FROM drivers d
 JOIN users u ON u.id = d."userId"
-LEFT JOIN LATERAL (
-    SELECT ab."assignedVehicleId" AS vid FROM bookings ab
-    WHERE ab."assignedDriverId" = d.id AND ab.status IN ('APPROVED', 'ONGOING')
-    ORDER BY ab."startDate" DESC LIMIT 1
-) act ON TRUE
-LEFT JOIN vehicles v ON v.id = act.vid
+LEFT JOIN driver_assignments da ON da."driverId" = d.id AND da."releasedAt" IS NULL
+LEFT JOIN vehicles v ON v.id = da."vehicleId"
 WHERE d."isActive" = TRUE
 ORDER BY overlapping_passengers ASC;
