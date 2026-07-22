@@ -204,6 +204,7 @@ CREATE TABLE bookings (
     "originalResourceId"   INTEGER        REFERENCES resources(id),
     CONSTRAINT chk_booking_dates CHECK ("endDate" > "startDate")
 );
+-- Kolom odometer perjalanan ditambahkan di migration 000002 (additive).
 
 CREATE INDEX idx_bookings_user_id          ON bookings("userId");
 CREATE INDEX idx_bookings_resource_id      ON bookings("resourceId");
@@ -402,6 +403,7 @@ CREATE TABLE booking_return_reports (
     note             TEXT         NOT NULL,
     location         VARCHAR(500) NOT NULL,
     "submittedAt"    TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+    -- kolom odometer ditambahkan di migration 000002 (additive)
 );
 
 CREATE INDEX idx_return_reports_booking ON booking_return_reports("bookingId");

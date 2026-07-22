@@ -63,8 +63,9 @@ type MergeBookingRequest struct {
 func serializeBookingRow(b repository.ListBookingsRow) map[string]any {
 	out := map[string]any{
 		"id":      b.ID,
-		"status":  string(b.Status),
-		"purpose": b.Purpose,
+		"status":         string(b.Status),
+		"purpose":        b.Purpose,
+		"passengerCount": b.PassengerCount,
 		"user": map[string]any{
 			"id": b.UserId, "name": b.UserName,
 			"employeeId": b.EmployeeId, "department": b.DepartmentName,
@@ -118,8 +119,9 @@ func serializeBookingRow(b repository.ListBookingsRow) map[string]any {
 func serializeBookingByID(b repository.GetBookingByIDRow) map[string]any {
 	out := map[string]any{
 		"id":      b.ID,
-		"status":  string(b.Status),
-		"purpose": b.Purpose,
+		"status":         string(b.Status),
+		"purpose":        b.Purpose,
+		"passengerCount": b.PassengerCount,
 		"user": map[string]any{
 			"id": b.UserId, "name": b.UserName,
 			"employeeId": b.EmployeeId, "department": b.DepartmentName,
@@ -157,9 +159,27 @@ func serializeBookingByID(b repository.GetBookingByIDRow) map[string]any {
 		}
 	}
 	if b.OriginalResourceId.Valid {
-		out["originalResource"] = map[string]any{
-			"id": b.OriginalResourceId.Int32,
+		orig := map[string]any{"id": b.OriginalResourceId.Int32}
+		if b.OriginalResourceName.Valid {
+			orig["name"] = b.OriginalResourceName.String
 		}
+		if b.OriginalResourceType.Valid {
+			orig["type"] = string(b.OriginalResourceType.ResourceType)
+		}
+		out["originalResource"] = orig
+	}
+	// Odometer awal + lokasi + foto (diisi driver saat mulai perjalanan).
+	out["odometerStart"] = nil
+	out["startLocation"] = nil
+	out["startPhotoUrl"] = nil
+	if b.OdometerStart.Valid {
+		out["odometerStart"] = b.OdometerStart.Int32
+	}
+	if b.StartLocation.Valid {
+		out["startLocation"] = b.StartLocation.String
+	}
+	if b.StartPhotoUrl.Valid {
+		out["startPhotoUrl"] = b.StartPhotoUrl.String
 	}
 	return out
 }
@@ -301,10 +321,10 @@ func (s *BookingService) Create(ctx context.Context, req CreateBookingRequest, u
 
 	if req.DriverID != nil {
 		driverID = sql.NullInt32{Int32: *req.DriverID, Valid: true}
-		// Supir yang sudah "memegang" kendaraan (aktif di booking lain) → pakai
+		// Supir yang sudah "memegang" kendaraan (punya booking aktif) → pakai
 		// kendaraannya (jalur merge). Supir kosong → nanti pakai kendaraan yang dibooking.
-		if da, err := s.q.GetDriverCurrentAssignment(ctx, *req.DriverID); err == nil {
-			vehicleID = sql.NullInt32{Int32: da.VehicleId, Valid: true}
+		if vid, err := s.q.GetDriverActiveVehicleID(ctx, *req.DriverID); err == nil {
+			vehicleID = sql.NullInt32{Int32: vid, Valid: true}
 		}
 	} else if isVehicle {
 		// Booking kendaraan tanpa memilih supir → tempel supir "kosong" yang senggang.
@@ -553,7 +573,7 @@ func (s *BookingService) AssignVehicle(ctx context.Context, id int32, req Assign
 	return serializeBookingByID(full), nil
 }
 
-func (s *BookingService) Start(ctx context.Context, id int32, userID int, role string) (map[string]any, error) {
+func (s *BookingService) Start(ctx context.Context, id int32, odometer *int32, location, photoURL string, userID int, role string) (map[string]any, error) {
 	b, err := s.q.GetBookingByID(ctx, id)
 	if err != nil {
 		return nil, util.ErrNotFound
@@ -595,6 +615,17 @@ func (s *BookingService) Start(ctx context.Context, id int32, userID int, role s
 
 	if _, err = s.q.StartBooking(ctx, id); err != nil {
 		return nil, err
+	}
+	// Simpan odometer awal + lokasi + foto (khusus booking kendaraan).
+	if b.ResourceType == repository.ResourceTypeVEHICLE && (odometer != nil || location != "" || photoURL != "") {
+		var odo sql.NullInt32
+		if odometer != nil {
+			odo = sql.NullInt32{Int32: *odometer, Valid: true}
+		}
+		_ = s.q.SetBookingStartTrip(ctx, id, odo,
+			sql.NullString{String: location, Valid: location != ""},
+			sql.NullString{String: photoURL, Valid: photoURL != ""},
+		)
 	}
 	_, _ = s.q.CreateAuditLog(ctx, repository.CreateAuditLogParams{
 		UserId:      sql.NullInt32{Int32: int32(userID), Valid: true},
@@ -987,6 +1018,12 @@ func (s *BookingService) MergeBookings(ctx context.Context, primaryID int32, req
 		return nil, err
 	}
 
+	// Samakan jendela waktu TARGET dengan window gabungan, agar tidak tertinggal
+	// booking di tanggal lama (yang bikin kalender menampilkan dua jadwal).
+	if err = s.q.UpdateBookingDates(ctx, req.TargetBookingID, effectiveStart, effectiveEnd); err != nil {
+		return nil, err
+	}
+
 	merge, err := s.q.CreateBookingMerge(ctx, primaryID, req.TargetBookingID, int32(adminID), req.Reason)
 	if err != nil {
 		return nil, err
@@ -1069,6 +1106,7 @@ func (s *BookingService) SubmitReturnReport(
 	ctx context.Context,
 	bookingID int32,
 	note, location string,
+	odometer *int32,
 	userID int,
 ) error {
 	b, err := s.q.GetBookingByID(ctx, bookingID)
@@ -1091,7 +1129,11 @@ func (s *BookingService) SubmitReturnReport(
 		return util.NewError(409, "return report already submitted for this booking", util.ErrConflict)
 	}
 
-	if _, err = s.q.CreateReturnReport(ctx, bookingID, int32(userID), note, location); err != nil {
+	var odo sql.NullInt32
+	if odometer != nil {
+		odo = sql.NullInt32{Int32: *odometer, Valid: true}
+	}
+	if _, err = s.q.CreateReturnReport(ctx, bookingID, int32(userID), note, location, odo); err != nil {
 		return err
 	}
 
@@ -1142,15 +1184,20 @@ func (s *BookingService) GetReturnReport(ctx context.Context, bookingID int32, c
 		}
 	}
 
-	return map[string]any{
+	out := map[string]any{
 		"id":            report.ID,
 		"bookingId":     report.BookingId,
 		"submittedBy":   map[string]any{"id": report.SubmittedById, "name": report.SubmitterName},
 		"note":          report.Note,
 		"location":      report.Location,
+		"odometer":      nil,
 		"submittedAt":   report.SubmittedAt,
 		"photos":        photos,
-	}, nil
+	}
+	if report.Odometer.Valid {
+		out["odometer"] = report.Odometer.Int32
+	}
+	return out, nil
 }
 
 func itoa(n int32) string {

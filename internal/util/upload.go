@@ -72,9 +72,11 @@ func SaveUploadedFile(fh *multipart.FileHeader, category string) (filePath strin
 		}
 	}
 
-	// return relative path from uploads root
+	// return relative path from uploads root — SELALU pakai forward slash agar
+	// valid sebagai URL (di Windows filepath.Rel menghasilkan backslash yang
+	// merusak path foto: /uploads/maintenance\2025\07\x.jpg).
 	rel, _ := filepath.Rel(config.C.UploadDir, dst)
-	return rel, nil
+	return filepath.ToSlash(rel), nil
 }
 
 func DeleteUploadedFile(relPath string) {

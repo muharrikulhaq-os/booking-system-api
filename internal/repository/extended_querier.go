@@ -18,8 +18,10 @@ type ExtendedQuerier interface {
 	CountActiveBookingsByDriver(ctx context.Context, driverID, excludeBookingID int32) (int64, error)
 	GetVehicleIDByResourceID(ctx context.Context, resourceID int32) (int32, error)
 	GetFreeDriver(ctx context.Context) (int32, error)
-	CreateReturnReport(ctx context.Context, bookingID, submittedByID int32, note, location string) (BookingReturnReport, error)
+	GetDriverActiveVehicleID(ctx context.Context, driverID int32) (int32, error)
+	CreateReturnReport(ctx context.Context, bookingID, submittedByID int32, note, location string, odometer sql.NullInt32) (BookingReturnReport, error)
 	GetReturnReport(ctx context.Context, bookingID int32) (BookingReturnReportRow, error)
+	SetBookingStartTrip(ctx context.Context, bookingID int32, odometer sql.NullInt32, location, photoURL sql.NullString) error
 	GetRoomKeeperByUserID(ctx context.Context, userID int32) (RoomKeeper, error)
 	GetBookingActivity(ctx context.Context, bookingID int32) ([]BookingActivityRow, error)
 	ReportOverview(ctx context.Context, start, end time.Time) (OverviewRow, error)

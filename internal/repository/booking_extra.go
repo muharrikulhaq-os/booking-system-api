@@ -177,6 +177,20 @@ func (q *Queries) GetVehicleIDByResourceID(ctx context.Context, resourceID int32
 	return id, err
 }
 
+// GetDriverActiveVehicleID returns the vehicle of the driver's active (APPROVED/ONGOING)
+// booking — the vehicle they currently "hold". Error if they have no active booking (= kosong).
+// This is the truthful source of driver↔vehicle ownership (vs driver_assignments which can
+// go stale). Used to detect a "busy" driver at booking create.
+func (q *Queries) GetDriverActiveVehicleID(ctx context.Context, driverID int32) (int32, error) {
+	var id int32
+	err := q.db.QueryRowContext(ctx, `
+		SELECT ab."assignedVehicleId" FROM bookings ab
+		WHERE ab."assignedDriverId" = $1 AND ab.status IN ('APPROVED','ONGOING')
+		  AND ab."assignedVehicleId" IS NOT NULL
+		ORDER BY ab."startDate" DESC LIMIT 1`, driverID).Scan(&id)
+	return id, err
+}
+
 // GetFreeDriver returns one active driver with no current vehicle assignment (i.e. not
 // tied to an active booking = "kosong/senggang"). Error if none available.
 func (q *Queries) GetFreeDriver(ctx context.Context) (int32, error) {
@@ -215,30 +229,50 @@ func (q *Queries) CheckBookingAlreadyMerged(ctx context.Context, bookingA, booki
 
 type BookingReturnReportRow struct {
 	BookingReturnReport
-	SubmitterName string `json:"submitterName"`
+	SubmitterName string        `json:"submitterName"`
+	Odometer      sql.NullInt32 `json:"odometer"`
 }
 
-// EnsureReturnReportTable creates the booking_return_reports table if it doesn't exist.
+// EnsureReturnReportTable creates the booking_return_reports table if it doesn't exist,
+// and self-heals the odometer columns (return report + bookings start trip) so the
+// odometer feature works without running the migration manually.
 func EnsureReturnReportTable(ctx context.Context, db DBTX) error {
-	_, err := db.ExecContext(ctx, `
+	if _, err := db.ExecContext(ctx, `
 		CREATE TABLE IF NOT EXISTS booking_return_reports (
 			id               SERIAL       PRIMARY KEY,
 			"bookingId"      INTEGER      NOT NULL UNIQUE REFERENCES bookings(id) ON DELETE CASCADE,
 			"submittedById"  INTEGER      NOT NULL REFERENCES users(id),
 			note             TEXT         NOT NULL,
 			location         VARCHAR(500) NOT NULL,
+			odometer         INTEGER      NULL,
 			"submittedAt"    TIMESTAMPTZ  NOT NULL DEFAULT NOW()
-		)`)
+		)`); err != nil {
+		return err
+	}
+	// Kolom odometer perjalanan (idempoten — aman dijalankan berulang).
+	_, err := db.ExecContext(ctx, `
+		ALTER TABLE booking_return_reports ADD COLUMN IF NOT EXISTS odometer INTEGER;
+		ALTER TABLE bookings ADD COLUMN IF NOT EXISTS "odometerStart" INTEGER;
+		ALTER TABLE bookings ADD COLUMN IF NOT EXISTS "startLocation" VARCHAR(500);
+		ALTER TABLE bookings ADD COLUMN IF NOT EXISTS "startPhotoUrl" TEXT;`)
 	return err
 }
 
-func (q *Queries) CreateReturnReport(ctx context.Context, bookingID, submittedByID int32, note, location string) (BookingReturnReport, error) {
+// SetBookingStartTrip menyimpan odometer awal + lokasi + foto saat perjalanan dimulai.
+func (q *Queries) SetBookingStartTrip(ctx context.Context, bookingID int32, odometer sql.NullInt32, location, photoURL sql.NullString) error {
+	_, err := q.db.ExecContext(ctx, `
+		UPDATE bookings SET "odometerStart" = $2, "startLocation" = $3, "startPhotoUrl" = $4, "updatedAt" = NOW()
+		WHERE id = $1`, bookingID, odometer, location, photoURL)
+	return err
+}
+
+func (q *Queries) CreateReturnReport(ctx context.Context, bookingID, submittedByID int32, note, location string, odometer sql.NullInt32) (BookingReturnReport, error) {
 	query := `
-		INSERT INTO booking_return_reports ("bookingId", "submittedById", note, location)
-		VALUES ($1, $2, $3, $4)
+		INSERT INTO booking_return_reports ("bookingId", "submittedById", note, location, odometer)
+		VALUES ($1, $2, $3, $4, $5)
 		RETURNING id, "bookingId", "submittedById", note, location, "submittedAt"`
 	var r BookingReturnReport
-	err := q.db.QueryRowContext(ctx, query, bookingID, submittedByID, note, location).
+	err := q.db.QueryRowContext(ctx, query, bookingID, submittedByID, note, location, odometer).
 		Scan(&r.ID, &r.BookingId, &r.SubmittedById, &r.Note, &r.Location, &r.SubmittedAt)
 	return r, err
 }
@@ -246,13 +280,13 @@ func (q *Queries) CreateReturnReport(ctx context.Context, bookingID, submittedBy
 func (q *Queries) GetReturnReport(ctx context.Context, bookingID int32) (BookingReturnReportRow, error) {
 	query := `
 		SELECT r.id, r."bookingId", r."submittedById", r.note, r.location, r."submittedAt",
-		       u.name AS submitter_name
+		       u.name AS submitter_name, r.odometer
 		FROM booking_return_reports r
 		JOIN users u ON u.id = r."submittedById"
 		WHERE r."bookingId" = $1`
 	var r BookingReturnReportRow
 	err := q.db.QueryRowContext(ctx, query, bookingID).
-		Scan(&r.ID, &r.BookingId, &r.SubmittedById, &r.Note, &r.Location, &r.SubmittedAt, &r.SubmitterName)
+		Scan(&r.ID, &r.BookingId, &r.SubmittedById, &r.Note, &r.Location, &r.SubmittedAt, &r.SubmitterName, &r.Odometer)
 	return r, err
 }
 

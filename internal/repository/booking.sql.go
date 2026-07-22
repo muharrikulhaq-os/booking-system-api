@@ -426,11 +426,15 @@ SELECT b.id, b."userId", b."resourceId", b."startDate", b."endDate", b.purpose, 
                      (b2."startDate" <= b."endDate" AND b2."endDate" >= b."startDate")
                  )
            )
-       ) AS has_merge_suggestion
+       ) AS has_merge_suggestion,
+       orig.name AS original_resource_name,
+       orig.type AS original_resource_type,
+       b."odometerStart", b."startLocation", b."startPhotoUrl"
 FROM bookings b
 JOIN users u ON u.id = b."userId"
 JOIN departments dept ON dept.id = u."departmentId"
 JOIN resources r ON r.id = b."resourceId"
+LEFT JOIN resources orig ON orig.id = b."originalResourceId"
 LEFT JOIN users ab ON ab.id = b."approvedById"
 LEFT JOIN drivers drv ON drv.id = b."assignedDriverId"
 LEFT JOIN users du ON du.id = drv."userId"
@@ -471,7 +475,12 @@ type GetBookingByIDRow struct {
 	Brand              sql.NullString `json:"brand"`
 	Model              sql.NullString `json:"model"`
 	Capacity           sql.NullInt16  `json:"capacity"`
-	HasMergeSuggestion bool           `json:"has_merge_suggestion"`
+	HasMergeSuggestion   bool             `json:"has_merge_suggestion"`
+	OriginalResourceName sql.NullString   `json:"original_resource_name"`
+	OriginalResourceType NullResourceType `json:"original_resource_type"`
+	OdometerStart        sql.NullInt32    `json:"odometerStart"`
+	StartLocation        sql.NullString   `json:"startLocation"`
+	StartPhotoUrl        sql.NullString   `json:"startPhotoUrl"`
 }
 
 func (q *Queries) GetBookingByID(ctx context.Context, id int32) (GetBookingByIDRow, error) {
@@ -511,6 +520,11 @@ func (q *Queries) GetBookingByID(ctx context.Context, id int32) (GetBookingByIDR
 		&i.Model,
 		&i.Capacity,
 		&i.HasMergeSuggestion,
+		&i.OriginalResourceName,
+		&i.OriginalResourceType,
+		&i.OdometerStart,
+		&i.StartLocation,
+		&i.StartPhotoUrl,
 	)
 	return i, err
 }

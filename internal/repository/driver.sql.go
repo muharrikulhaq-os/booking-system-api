@@ -123,11 +123,12 @@ func (q *Queries) GetDriverAssignmentHistory(ctx context.Context, driverid int32
 
 const getDriverByID = `-- name: GetDriverByID :one
 SELECT d.id, d."userId", d."licenseNumber", d."phoneNumber", d."isActive", d."createdAt", u.name AS user_name, u."employeeId", u.email, u."profilePhoto",
-       v."plateNumber" AS assigned_plate
+       (SELECT v2."plateNumber" FROM bookings ab2
+          JOIN vehicles v2 ON v2.id = ab2."assignedVehicleId"
+          WHERE ab2."assignedDriverId" = d.id AND ab2.status IN ('APPROVED','ONGOING')
+          ORDER BY ab2."startDate" DESC LIMIT 1) AS assigned_plate
 FROM drivers d
 JOIN users u ON u.id = d."userId"
-LEFT JOIN driver_assignments da ON da."driverId" = d.id AND da."releasedAt" IS NULL
-LEFT JOIN vehicles v ON v.id = da."vehicleId"
 WHERE d.id = $1 LIMIT 1
 `
 
@@ -222,7 +223,7 @@ SELECT d.id AS driver_id, u.name AS driver_name, u."employeeId",
        COALESCE(
            (SELECT SUM(b."passengerCount")::int
             FROM bookings b
-            WHERE b."assignedDriverId" = d.id
+            WHERE b."assignedVehicleId" = v.id
               AND b.status IN ('APPROVED', 'ONGOING')
               AND b."startDate" < $1::timestamptz
               AND b."endDate" > $2::timestamptz
@@ -230,15 +231,19 @@ SELECT d.id AS driver_id, u.name AS driver_name, u."employeeId",
        )::int AS overlapping_passengers,
        (SELECT b.purpose
         FROM bookings b
-        WHERE b."assignedDriverId" = d.id
+        WHERE b."assignedVehicleId" = v.id
           AND b.status IN ('APPROVED', 'ONGOING')
           AND b."startDate" < $1::timestamptz
           AND b."endDate" > $2::timestamptz
         ORDER BY b."startDate" ASC LIMIT 1) AS overlapping_purpose
 FROM drivers d
 JOIN users u ON u.id = d."userId"
-LEFT JOIN driver_assignments da ON da."driverId" = d.id AND da."releasedAt" IS NULL
-LEFT JOIN vehicles v ON v.id = da."vehicleId"
+LEFT JOIN LATERAL (
+    SELECT ab."assignedVehicleId" AS vid FROM bookings ab
+    WHERE ab."assignedDriverId" = d.id AND ab.status IN ('APPROVED', 'ONGOING')
+    ORDER BY ab."startDate" DESC LIMIT 1
+) act ON TRUE
+LEFT JOIN vehicles v ON v.id = act.vid
 WHERE d."isActive" = TRUE
 ORDER BY overlapping_passengers ASC
 `
@@ -293,11 +298,12 @@ func (q *Queries) ListAvailableDrivers(ctx context.Context, arg ListAvailableDri
 
 const listDrivers = `-- name: ListDrivers :many
 SELECT d.id, d."userId", d."licenseNumber", d."phoneNumber", d."isActive", d."createdAt", u.name AS user_name, u."employeeId", u.email,
-       v."plateNumber" AS assigned_plate
+       (SELECT v2."plateNumber" FROM bookings ab2
+          JOIN vehicles v2 ON v2.id = ab2."assignedVehicleId"
+          WHERE ab2."assignedDriverId" = d.id AND ab2.status IN ('APPROVED','ONGOING')
+          ORDER BY ab2."startDate" DESC LIMIT 1) AS assigned_plate
 FROM drivers d
 JOIN users u ON u.id = d."userId"
-LEFT JOIN driver_assignments da ON da."driverId" = d.id AND da."releasedAt" IS NULL
-LEFT JOIN vehicles v ON v.id = da."vehicleId"
 WHERE ($3::boolean IS NULL OR d."isActive" = $3::boolean)
 ORDER BY d."createdAt" DESC
 LIMIT $1 OFFSET $2

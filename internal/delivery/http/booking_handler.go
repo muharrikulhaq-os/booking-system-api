@@ -1,6 +1,7 @@
 package http
 
 import (
+	"strconv"
 	"time"
 
 	"booking-system-api/internal/middleware"
@@ -9,6 +10,20 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 )
+
+// formInt32Ptr parses an optional int32 form value (nil jika kosong/invalid).
+func formInt32Ptr(c *fiber.Ctx, key string) *int32 {
+	s := c.FormValue(key)
+	if s == "" {
+		return nil
+	}
+	v, err := strconv.Atoi(s)
+	if err != nil {
+		return nil
+	}
+	n := int32(v)
+	return &n
+}
 
 type BookingHandler struct {
 	svc       *service.BookingService
@@ -189,7 +204,20 @@ func (h *BookingHandler) Start(c *fiber.Ctx) error {
 	if err != nil {
 		return err
 	}
-	data, err := h.svc.Start(c.Context(), id, middleware.GetUserID(c), middleware.GetUserRole(c))
+	// Odometer awal + lokasi + foto (multipart). Opsional — hanya untuk kendaraan.
+	odometer := formInt32Ptr(c, "odometerStart")
+	location := c.FormValue("startLocation")
+	var photoURL string
+	if file, ferr := c.FormFile("startPhoto"); ferr == nil && file != nil {
+		fp, serr := util.SaveUploadedFile(file, "trip_start")
+		if serr != nil {
+			return serr
+		}
+		photoURL = "/uploads/" + fp
+	}
+
+	data, err := h.svc.Start(c.Context(), id, odometer, location, photoURL,
+		middleware.GetUserID(c), middleware.GetUserRole(c))
 	if err != nil {
 		return err
 	}
@@ -348,8 +376,9 @@ func (h *BookingHandler) SubmitReturnReport(c *fiber.Ctx) error {
 		return fiber.NewError(fiber.StatusBadRequest, "location is required")
 	}
 
+	odometer := formInt32Ptr(c, "odometer")
 	uploaderID := int32(middleware.GetUserID(c))
-	if err = h.svc.SubmitReturnReport(c.Context(), id, note, location, middleware.GetUserID(c)); err != nil {
+	if err = h.svc.SubmitReturnReport(c.Context(), id, note, location, odometer, middleware.GetUserID(c)); err != nil {
 		return err
 	}
 

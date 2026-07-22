@@ -1,10 +1,11 @@
 -- name: ListDrivers :many
 SELECT d.*, u.name AS user_name, u."employeeId", u.email,
-       v."plateNumber" AS assigned_plate
+       (SELECT v2."plateNumber" FROM bookings ab2
+          JOIN vehicles v2 ON v2.id = ab2."assignedVehicleId"
+          WHERE ab2."assignedDriverId" = d.id AND ab2.status IN ('APPROVED','ONGOING')
+          ORDER BY ab2."startDate" DESC LIMIT 1) AS assigned_plate
 FROM drivers d
 JOIN users u ON u.id = d."userId"
-LEFT JOIN driver_assignments da ON da."driverId" = d.id AND da."releasedAt" IS NULL
-LEFT JOIN vehicles v ON v.id = da."vehicleId"
 WHERE (sqlc.narg(is_active)::boolean IS NULL OR d."isActive" = sqlc.narg(is_active)::boolean)
 ORDER BY d."createdAt" DESC
 LIMIT $1 OFFSET $2;
@@ -15,11 +16,12 @@ WHERE (sqlc.narg(is_active)::boolean IS NULL OR d."isActive" = sqlc.narg(is_acti
 
 -- name: GetDriverByID :one
 SELECT d.*, u.name AS user_name, u."employeeId", u.email, u."profilePhoto",
-       v."plateNumber" AS assigned_plate
+       (SELECT v2."plateNumber" FROM bookings ab2
+          JOIN vehicles v2 ON v2.id = ab2."assignedVehicleId"
+          WHERE ab2."assignedDriverId" = d.id AND ab2.status IN ('APPROVED','ONGOING')
+          ORDER BY ab2."startDate" DESC LIMIT 1) AS assigned_plate
 FROM drivers d
 JOIN users u ON u.id = d."userId"
-LEFT JOIN driver_assignments da ON da."driverId" = d.id AND da."releasedAt" IS NULL
-LEFT JOIN vehicles v ON v.id = da."vehicleId"
 WHERE d.id = $1 LIMIT 1;
 
 -- name: GetDriverByUserID :one
@@ -61,7 +63,7 @@ SELECT d.id AS driver_id, u.name AS driver_name, u."employeeId",
        COALESCE(
            (SELECT SUM(b."passengerCount")::int
             FROM bookings b
-            WHERE b."assignedDriverId" = d.id
+            WHERE b."assignedVehicleId" = v.id
               AND b.status IN ('APPROVED', 'ONGOING')
               AND b."startDate" < sqlc.arg(end_to)::timestamptz
               AND b."endDate" > sqlc.arg(start_from)::timestamptz
@@ -69,14 +71,18 @@ SELECT d.id AS driver_id, u.name AS driver_name, u."employeeId",
        )::int AS overlapping_passengers,
        (SELECT b.purpose
         FROM bookings b
-        WHERE b."assignedDriverId" = d.id
+        WHERE b."assignedVehicleId" = v.id
           AND b.status IN ('APPROVED', 'ONGOING')
           AND b."startDate" < sqlc.arg(end_to)::timestamptz
           AND b."endDate" > sqlc.arg(start_from)::timestamptz
         ORDER BY b."startDate" ASC LIMIT 1) AS overlapping_purpose
 FROM drivers d
 JOIN users u ON u.id = d."userId"
-LEFT JOIN driver_assignments da ON da."driverId" = d.id AND da."releasedAt" IS NULL
-LEFT JOIN vehicles v ON v.id = da."vehicleId"
+LEFT JOIN LATERAL (
+    SELECT ab."assignedVehicleId" AS vid FROM bookings ab
+    WHERE ab."assignedDriverId" = d.id AND ab.status IN ('APPROVED', 'ONGOING')
+    ORDER BY ab."startDate" DESC LIMIT 1
+) act ON TRUE
+LEFT JOIN vehicles v ON v.id = act.vid
 WHERE d."isActive" = TRUE
 ORDER BY overlapping_passengers ASC;

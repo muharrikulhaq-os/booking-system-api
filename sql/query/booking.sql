@@ -71,11 +71,15 @@ SELECT b.*,
                      (b2."startDate" <= b."endDate" AND b2."endDate" >= b."startDate")
                  )
            )
-       ) AS has_merge_suggestion
+       ) AS has_merge_suggestion,
+       orig.name AS original_resource_name,
+       orig.type AS original_resource_type,
+       b."odometerStart", b."startLocation", b."startPhotoUrl"
 FROM bookings b
 JOIN users u ON u.id = b."userId"
 JOIN departments dept ON dept.id = u."departmentId"
 JOIN resources r ON r.id = b."resourceId"
+LEFT JOIN resources orig ON orig.id = b."originalResourceId"
 LEFT JOIN users ab ON ab.id = b."approvedById"
 LEFT JOIN drivers drv ON drv.id = b."assignedDriverId"
 LEFT JOIN users du ON du.id = drv."userId"
