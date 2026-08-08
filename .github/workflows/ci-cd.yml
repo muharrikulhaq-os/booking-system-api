@@ -98,3 +98,4 @@ jobs:
           Start-Sleep -Seconds 2
           $health = Invoke-WebRequest -Uri http://localhost:8081/health -UseBasicParsing -TimeoutSec 5
           if ($health.StatusCode -ne 200) { throw "health check failed after deploy: $($health.StatusCode)" }
+# deploy verification 20260808-115336
