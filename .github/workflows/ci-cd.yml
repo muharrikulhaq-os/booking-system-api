@@ -1,0 +1,100 @@
+# CI/CD for booking-system-api (Go / Fiber) — native Windows Server deploy.
+#
+# Split by trust level to keep the self-hosted runner (which lives on the
+# production box) away from unreviewed code:
+#   - build/test on PRs and pushes -> ubuntu-latest (GitHub-hosted, free,
+#     isolated — 1x minute rate, unlike windows-latest which is 2x)
+#   - deploy -> self-hosted Windows runner registered on the deploy server,
+#     only for pushes to develop/master (i.e. already merged, reviewed code).
+#     Self-hosted runner minutes are NOT counted against the free quota.
+
+name: CI/CD
+
+on:
+  pull_request:
+    branches: [develop, master]
+  push:
+    branches: [develop, master]
+    paths-ignore:
+      - "**.md"
+      - "DOKUMENTASI.md"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  GO_VERSION: "1.26"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+      - run: go build -o bin/api ./cmd/api
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+      - run: go vet ./...
+      - run: go test ./... -v -cover
+
+  # Applies any new sql/schema/*.up.sql files. DATABASE_URL is read from the
+  # .env already sitting on the server (see WINDOWS_NATIVE_DEPLOYMENT.md step
+  # 2) — never stored as a GitHub Secret, same secrets-stay-on-the-server
+  # principle as before.
+  migrate:
+    if: github.event_name == 'push'
+    needs: [build, test]
+    runs-on: [self-hosted, windows, deploy]
+    environment: production
+    env:
+      DEPLOY_DIR: "C:\\deploy\\booking-system\\api"
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - shell: pwsh
+        run: |
+          Get-Content "$env:DEPLOY_DIR\.env" | ForEach-Object {
+            if ($_ -match '^\s*DATABASE_URL\s*=\s*(.+)$') { $env:DATABASE_URL = $Matches[1].Trim() }
+          }
+          if (-not $env:DATABASE_URL) { throw "DATABASE_URL not found in $env:DEPLOY_DIR\.env" }
+          Get-ChildItem .\sql\schema\*.up.sql | Sort-Object Name | ForEach-Object {
+            Write-Host "Applying $($_.Name)..."
+            psql $env:DATABASE_URL -f $_.FullName
+            if ($LASTEXITCODE -ne 0) { throw "migration failed: $($_.Name)" }
+          }
+
+  deploy:
+    if: github.event_name == 'push'
+    needs: [migrate]
+    runs-on: [self-hosted, windows, deploy]
+    # `production` environment has required reviewers configured in GitHub
+    # Settings -> Environments -> production: this is what gates master
+    # deploys behind a manual approval click, same as GitLab's `when: manual`.
+    # develop pushes to this same environment auto-run without waiting —
+    # add a separate `staging` environment (no required reviewers) if you
+    # want develop to deploy without touching the production gate at all.
+    environment: production
+    env:
+      DEPLOY_DIR: "C:\\deploy\\booking-system\\api"
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+      - shell: pwsh
+        run: |
+          go build -o "$env:DEPLOY_DIR\api_bin.exe" .\cmd\api
+          Restart-Service -Name BookingAPI
+          Start-Sleep -Seconds 2
+          $health = Invoke-WebRequest -Uri http://localhost:8080/health -UseBasicParsing -TimeoutSec 5
+          if ($health.StatusCode -ne 200) { throw "health check failed after deploy: $($health.StatusCode)" }

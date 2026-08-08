@@ -1,11 +1,28 @@
 -- name: ListDrivers :many
+-- assigned_plate: sqlc v1.31.1's nullability inference for anything but a
+-- direct table.column reference is unreliable here — a scalar subquery
+-- silently flipped this to non-nullable `string` on a regen (the original
+-- bug), LEFT JOIN LATERAL didn't propagate nullability at all, and
+-- NULLIF()/CASE tricks to force nullable produced flatly wrong types
+-- (bool, interface{}). Rather than fight the inference, COALESCE(...,
+-- '')::text pins it to a plain, always-non-null `string` deterministically
+-- — same pattern already used for overlapping_purpose below. The Go side
+-- (driver_service.go) checks `!= ""` instead of `.Valid`.
+-- DISTINCT ON precomputes "latest assigned vehicle per driver" without
+-- correlation, so it joins like an ordinary table (also avoids the original
+-- correlated-subquery instability).
 SELECT d.*, u.name AS user_name, u."employeeId", u.email,
-       (SELECT v2."plateNumber" FROM bookings ab2
-          JOIN vehicles v2 ON v2.id = ab2."assignedVehicleId"
-          WHERE ab2."assignedDriverId" = d.id AND ab2.status IN ('APPROVED','ONGOING')
-          ORDER BY ab2."startDate" DESC LIMIT 1) AS assigned_plate
+       COALESCE(ap."plateNumber", '')::text AS assigned_plate
 FROM drivers d
 JOIN users u ON u.id = d."userId"
+LEFT JOIN (
+    SELECT DISTINCT ON (ab2."assignedDriverId")
+        ab2."assignedDriverId" AS driver_id, v2."plateNumber"
+    FROM bookings ab2
+    JOIN vehicles v2 ON v2.id = ab2."assignedVehicleId"
+    WHERE ab2.status IN ('APPROVED','ONGOING')
+    ORDER BY ab2."assignedDriverId", ab2."startDate" DESC
+) ap ON ap.driver_id = d.id
 WHERE (sqlc.narg(is_active)::boolean IS NULL OR d."isActive" = sqlc.narg(is_active)::boolean)
 ORDER BY d."createdAt" DESC
 LIMIT $1 OFFSET $2;
@@ -15,13 +32,19 @@ SELECT COUNT(*) FROM drivers d
 WHERE (sqlc.narg(is_active)::boolean IS NULL OR d."isActive" = sqlc.narg(is_active)::boolean);
 
 -- name: GetDriverByID :one
+-- See note on ListDrivers above.
 SELECT d.*, u.name AS user_name, u."employeeId", u.email, u."profilePhoto",
-       (SELECT v2."plateNumber" FROM bookings ab2
-          JOIN vehicles v2 ON v2.id = ab2."assignedVehicleId"
-          WHERE ab2."assignedDriverId" = d.id AND ab2.status IN ('APPROVED','ONGOING')
-          ORDER BY ab2."startDate" DESC LIMIT 1) AS assigned_plate
+       COALESCE(ap."plateNumber", '')::text AS assigned_plate
 FROM drivers d
 JOIN users u ON u.id = d."userId"
+LEFT JOIN (
+    SELECT DISTINCT ON (ab2."assignedDriverId")
+        ab2."assignedDriverId" AS driver_id, v2."plateNumber"
+    FROM bookings ab2
+    JOIN vehicles v2 ON v2.id = ab2."assignedVehicleId"
+    WHERE ab2.status IN ('APPROVED','ONGOING')
+    ORDER BY ab2."assignedDriverId", ab2."startDate" DESC
+) ap ON ap.driver_id = d.id
 WHERE d.id = $1 LIMIT 1;
 
 -- name: GetDriverByUserID :one
@@ -69,13 +92,17 @@ SELECT d.id AS driver_id, u.name AS driver_name, u."employeeId",
               AND b."endDate" > sqlc.arg(start_from)::timestamptz
            ), 0
        )::int AS overlapping_passengers,
+       -- Explicit ::text cast: sqlc can't always resolve the type of a
+       -- COALESCE wrapped around a scalar subquery on its own and falls
+       -- back to `interface{}` (seen in the generated code before this
+       -- cast was added) — pin it so it stays `string`, not `sql.NullString`.
        COALESCE((SELECT b.purpose
         FROM bookings b
         WHERE b."assignedDriverId" = d.id
           AND b.status IN ('APPROVED', 'ONGOING')
           AND b."startDate" < sqlc.arg(end_to)::timestamptz
           AND b."endDate" > sqlc.arg(start_from)::timestamptz
-        ORDER BY b."startDate" ASC LIMIT 1), '') AS overlapping_purpose
+        ORDER BY b."startDate" ASC LIMIT 1), '')::text AS overlapping_purpose
 FROM drivers d
 JOIN users u ON u.id = d."userId"
 LEFT JOIN driver_assignments da ON da."driverId" = d.id AND da."releasedAt" IS NULL

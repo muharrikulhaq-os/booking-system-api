@@ -67,6 +67,7 @@ type Querier interface {
 	GetBookingByID(ctx context.Context, id int32) (GetBookingByIDRow, error)
 	GetDepartmentByID(ctx context.Context, id int32) (Department, error)
 	GetDriverAssignmentHistory(ctx context.Context, driverid int32) ([]GetDriverAssignmentHistoryRow, error)
+	// See note on ListDrivers above.
 	GetDriverByID(ctx context.Context, id int32) (GetDriverByIDRow, error)
 	GetDriverByUserID(ctx context.Context, userid int32) (Driver, error)
 	GetDriverCurrentAssignment(ctx context.Context, driverid int32) (GetDriverCurrentAssignmentRow, error)
@@ -100,6 +101,18 @@ type Querier interface {
 	ListAvailableDrivers(ctx context.Context, arg ListAvailableDriversParams) ([]ListAvailableDriversRow, error)
 	ListBookings(ctx context.Context, arg ListBookingsParams) ([]ListBookingsRow, error)
 	ListDepartments(ctx context.Context) ([]Department, error)
+	// assigned_plate: sqlc v1.31.1's nullability inference for anything but a
+	// direct table.column reference is unreliable here — a scalar subquery
+	// silently flipped this to non-nullable `string` on a regen (the original
+	// bug), LEFT JOIN LATERAL didn't propagate nullability at all, and
+	// NULLIF()/CASE tricks to force nullable produced flatly wrong types
+	// (bool, interface{}). Rather than fight the inference, COALESCE(...,
+	// '')::text pins it to a plain, always-non-null `string` deterministically
+	// — same pattern already used for overlapping_purpose below. The Go side
+	// (driver_service.go) checks `!= ""` instead of `.Valid`.
+	// DISTINCT ON precomputes "latest assigned vehicle per driver" without
+	// correlation, so it joins like an ordinary table (also avoids the original
+	// correlated-subquery instability).
 	ListDrivers(ctx context.Context, arg ListDriversParams) ([]ListDriversRow, error)
 	ListFuelExpenses(ctx context.Context, arg ListFuelExpensesParams) ([]ListFuelExpensesRow, error)
 	ListFuelTypes(ctx context.Context) ([]FuelType, error)

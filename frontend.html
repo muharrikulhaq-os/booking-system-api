@@ -1,0 +1,2342 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Booking System - Management Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#2563eb',
+                        secondary: '#475569',
+                        success: '#16a34a',
+                        warning: '#ca8a04',
+                        danger: '#dc2626',
+                        info: '#0891b2'
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        * { scrollbar-width: thin; scrollbar-color: #cbd5e1 transparent; }
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+        .fade-in { animation: fadeIn 0.3s ease-in; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        .sidebar-item:hover { background: rgba(37, 99, 235, 0.1); }
+        .sidebar-item.active { background: rgba(37, 99, 235, 0.15); border-right: 3px solid #2563eb; color: #2563eb; }
+        .loading-spinner { border: 3px solid #f3f4f6; border-top: 3px solid #2563eb; border-radius: 50%; width: 24px; height: 24px; animation: spin 1s linear infinite; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        .modal-overlay { background: rgba(0,0,0,0.5); backdrop-filter: blur(4px); }
+        .toast { animation: slideIn 0.3s ease-out; }
+        @keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+        .status-pending { background: #fef3c7; color: #92400e; }
+        .status-approved { background: #dbeafe; color: #1e40af; }
+        .status-ongoing { background: #e0e7ff; color: #3730a3; }
+        .status-completed { background: #d1fae5; color: #065f46; }
+        .status-rejected { background: #fee2e2; color: #991b1b; }
+        .status-cancelled { background: #f3f4f6; color: #4b5563; }
+        .card-hover { transition: all 0.2s; }
+        .card-hover:hover { transform: translateY(-2px); box-shadow: 0 10px 25px -5px rgba(0,0,0,0.1); }
+    </style>
+<base target="_blank">
+</head>
+<body class="bg-gray-50 text-gray-800 font-sans antialiased">
+    <!-- Toast Container -->
+    <div id="toast-container" class="fixed top-4 right-4 z-50 space-y-2"></div>
+
+    <!-- Auth Pages -->
+    <div id="auth-page" class="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100">
+        <div class="w-full max-w-md">
+            <!-- Login Form -->
+            <div id="login-form" class="bg-white rounded-2xl shadow-xl p-8 fade-in">
+                <div class="text-center mb-8">
+                    <div class="w-16 h-16 bg-primary/10 rounded-xl flex items-center justify-center mx-auto mb-4">
+                        <i class="fas fa-calendar-check text-2xl text-primary"></i>
+                    </div>
+                    <h1 class="text-2xl font-bold text-gray-900">Booking System</h1>
+                    <p class="text-sm text-gray-500 mt-1">Masuk untuk mengelola reservasi</p>
+                </div>
+                <form onsubmit="handleLogin(event)" class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Email</label>
+                        <input type="email" id="login-email" required class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition" placeholder="budi@example.com">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Password</label>
+                        <div class="relative">
+                            <input type="password" id="login-password" required class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition" placeholder="••••••••">
+                            <button type="button" onclick="togglePassword('login-password')" class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+                                <i class="fas fa-eye"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="flex items-center justify-between text-sm">
+                        <label class="flex items-center gap-2 cursor-pointer">
+                            <input type="checkbox" class="rounded border-gray-300 text-primary focus:ring-primary">
+                            <span class="text-gray-600">Ingat saya</span>
+                        </label>
+                        <button type="button" onclick="showForgotPassword()" class="text-primary hover:underline">Lupa password?</button>
+                    </div>
+                    <button type="submit" id="login-btn" class="w-full bg-primary hover:bg-blue-700 text-white font-medium py-2.5 rounded-lg transition flex items-center justify-center gap-2">
+                        <span>Masuk</span>
+                        <i class="fas fa-arrow-right"></i>
+                    </button>
+                </form>
+                <div class="mt-6 text-center text-sm">
+                    <span class="text-gray-500">Belum punya akun?</span>
+                    <button onclick="showRegister()" class="text-primary hover:underline font-medium ml-1">Daftar</button>
+                </div>
+                <div class="mt-4 pt-4 border-t border-gray-100">
+                    <button onclick="showGuestBooking()" class="w-full text-center text-sm text-gray-500 hover:text-primary transition">
+                        <i class="fas fa-user-clock mr-1"></i> Reservasi sebagai Tamu
+                    </button>
+                </div>
+            </div>
+
+            <!-- Register Form -->
+            <div id="register-form" class="hidden bg-white rounded-2xl shadow-xl p-8 fade-in">
+                <div class="text-center mb-6">
+                    <h2 class="text-xl font-bold">Daftar Akun</h2>
+                    <p class="text-sm text-gray-500">Buat akun untuk mengakses sistem</p>
+                </div>
+                <form onsubmit="handleRegister(event)" class="space-y-4">
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">ID Karyawan</label>
+                            <input type="text" id="reg-employeeId" required class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none" placeholder="EMP-001">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Nama</label>
+                            <input type="text" id="reg-name" required class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none" placeholder="Budi Santoso">
+                        </div>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Email</label>
+                        <input type="email" id="reg-email" required class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none" placeholder="budi@example.com">
+                    </div>
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Role</label>
+                            <select id="reg-roleId" required class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none">
+                                <option value="">Pilih Role</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Departemen</label>
+                            <select id="reg-departmentId" required class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none">
+                                <option value="">Pilih Departemen</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Password</label>
+                        <input type="password" id="reg-password" required minlength="8" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none" placeholder="Minimal 8 karakter">
+                    </div>
+                    <button type="submit" id="reg-btn" class="w-full bg-primary hover:bg-blue-700 text-white font-medium py-2.5 rounded-lg transition">
+                        Daftar
+                    </button>
+                </form>
+                <div class="mt-4 text-center text-sm">
+                    <span class="text-gray-500">Sudah punya akun?</span>
+                    <button onclick="showLogin()" class="text-primary hover:underline font-medium ml-1">Masuk</button>
+                </div>
+            </div>
+
+            <!-- Forgot Password -->
+            <div id="forgot-form" class="hidden bg-white rounded-2xl shadow-xl p-8 fade-in">
+                <div class="text-center mb-6">
+                    <div class="w-12 h-12 bg-warning/10 rounded-full flex items-center justify-center mx-auto mb-3">
+                        <i class="fas fa-key text-warning"></i>
+                    </div>
+                    <h2 class="text-xl font-bold">Lupa Password</h2>
+                    <p class="text-sm text-gray-500">Masukkan email untuk menerima OTP</p>
+                </div>
+                <form onsubmit="handleForgotPassword(event)" class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Email</label>
+                        <input type="email" id="forgot-email" required class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none">
+                    </div>
+                    <button type="submit" class="w-full bg-warning hover:bg-yellow-600 text-white font-medium py-2.5 rounded-lg transition">
+                        Kirim OTP
+                    </button>
+                </form>
+                <div class="mt-4 text-center">
+                    <button onclick="showLogin()" class="text-sm text-primary hover:underline">Kembali ke Login</button>
+                </div>
+            </div>
+
+            <!-- Guest Booking Form -->
+            <div id="guest-form" class="hidden bg-white rounded-2xl shadow-xl p-8 fade-in max-w-lg mx-auto">
+                <div class="text-center mb-6">
+                    <div class="w-12 h-12 bg-info/10 rounded-full flex items-center justify-center mx-auto mb-3">
+                        <i class="fas fa-user-clock text-info"></i>
+                    </div>
+                    <h2 class="text-xl font-bold">Reservasi Tamu</h2>
+                    <p class="text-sm text-gray-500">Buat reservasi tanpa login</p>
+                </div>
+                <form onsubmit="handleGuestBooking(event)" class="space-y-4">
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Nama Tamu</label>
+                            <input type="text" id="guest-name" required class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Email</label>
+                            <input type="email" id="guest-email" required class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none">
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Telepon</label>
+                            <input type="tel" id="guest-phone" required class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Perusahaan/Dept</label>
+                            <input type="text" id="guest-dept" required class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none">
+                        </div>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Pilih Resource</label>
+                        <select id="guest-resource" required class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none">
+                            <option value="">Memuat...</option>
+                        </select>
+                    </div>
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Mulai</label>
+                            <input type="datetime-local" id="guest-start" required class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Selesai</label>
+                            <input type="datetime-local" id="guest-end" required class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none">
+                        </div>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Tujuan</label>
+                        <textarea id="guest-purpose" required rows="2" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none"></textarea>
+                    </div>
+                    <button type="submit" class="w-full bg-info hover:bg-cyan-700 text-white font-medium py-2.5 rounded-lg transition">
+                        Ajukan Reservasi
+                    </button>
+                </form>
+                <div class="mt-4 text-center">
+                    <button onclick="showLogin()" class="text-sm text-primary hover:underline">Kembali ke Login</button>
+                </div>
+            </div>
+
+            <!-- Guest Tracking -->
+            <div id="guest-track" class="hidden bg-white rounded-2xl shadow-xl p-8 fade-in">
+                <div class="text-center mb-6">
+                    <h2 class="text-xl font-bold">Lacak Reservasi</h2>
+                    <p class="text-sm text-gray-500">Masukkan token akses dari email</p>
+                </div>
+                <div class="space-y-4">
+                    <input type="text" id="track-token" placeholder="Token akses..." class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none">
+                    <button onclick="trackGuestBooking()" class="w-full bg-primary hover:bg-blue-700 text-white font-medium py-2.5 rounded-lg transition">
+                        Lacak
+                    </button>
+                </div>
+                <div id="track-result" class="mt-4 hidden"></div>
+                <div class="mt-4 text-center">
+                    <button onclick="showLogin()" class="text-sm text-primary hover:underline">Kembali ke Login</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main App -->
+    <div id="app-page" class="hidden min-h-screen flex">
+        <!-- Sidebar -->
+        <aside id="sidebar" class="w-64 bg-white border-r border-gray-200 flex flex-col fixed h-full z-30 transition-transform duration-300 lg:translate-x-0 -translate-x-full">
+            <div class="p-4 border-b border-gray-100">
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 bg-primary/10 rounded-lg flex items-center justify-center">
+                        <i class="fas fa-calendar-check text-primary"></i>
+                    </div>
+                    <div>
+                        <h1 class="font-bold text-gray-900 leading-tight">Booking System</h1>
+                        <p class="text-xs text-gray-500">Management Portal</p>
+                    </div>
+                </div>
+            </div>
+
+            <nav class="flex-1 overflow-y-auto p-3 space-y-1" id="sidebar-menu">
+                <!-- Dynamic menu items will be inserted here -->
+            </nav>
+
+            <div class="p-4 border-t border-gray-100">
+                <div class="flex items-center gap-3 mb-3">
+                    <img id="user-avatar" src="" alt="" class="w-10 h-10 rounded-full bg-gray-200 object-cover hidden">
+                    <div id="user-avatar-placeholder" class="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold"></div>
+                    <div class="flex-1 min-w-0">
+                        <p id="user-name" class="text-sm font-medium text-gray-900 truncate"></p>
+                        <p id="user-role" class="text-xs text-gray-500 truncate"></p>
+                    </div>
+                </div>
+                <button onclick="logout()" class="w-full flex items-center justify-center gap-2 px-4 py-2 text-sm text-red-600 hover:bg-red-50 rounded-lg transition">
+                    <i class="fas fa-sign-out-alt"></i>
+                    <span>Keluar</span>
+                </button>
+            </div>
+        </aside>
+
+        <!-- Mobile Sidebar Overlay -->
+        <div id="sidebar-overlay" onclick="toggleSidebar()" class="fixed inset-0 bg-black/50 z-20 hidden lg:hidden"></div>
+
+        <!-- Main Content -->
+        <main class="flex-1 lg:ml-64 min-h-screen">
+            <!-- Top Bar -->
+            <header class="sticky top-0 z-10 bg-white/80 backdrop-blur-md border-b border-gray-200 px-6 py-3 flex items-center justify-between">
+                <div class="flex items-center gap-4">
+                    <button onclick="toggleSidebar()" class="lg:hidden p-2 hover:bg-gray-100 rounded-lg">
+                        <i class="fas fa-bars text-gray-600"></i>
+                    </button>
+                    <h2 id="page-title" class="text-lg font-semibold text-gray-800">Dashboard</h2>
+                </div>
+                <div class="flex items-center gap-3">
+                    <button onclick="refreshCurrentPage()" class="p-2 hover:bg-gray-100 rounded-lg text-gray-600" title="Refresh">
+                        <i class="fas fa-sync-alt"></i>
+                    </button>
+                    <button onclick="showNotifications()" class="p-2 hover:bg-gray-100 rounded-lg text-gray-600 relative">
+                        <i class="fas fa-bell"></i>
+                        <span id="notif-badge" class="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full hidden"></span>
+                    </button>
+                </div>
+            </header>
+
+            <!-- Content Area -->
+            <div id="content-area" class="p-6">
+                <!-- Dynamic content will be loaded here -->
+            </div>
+        </main>
+    </div>
+
+    <!-- Modal Container -->
+    <div id="modal-container" class="fixed inset-0 z-50 hidden">
+        <div class="modal-overlay absolute inset-0" onclick="closeModal()"></div>
+        <div class="absolute inset-0 flex items-center justify-center p-4 pointer-events-none">
+            <div id="modal-content" class="bg-white rounded-xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto pointer-events-auto fade-in">
+                <!-- Modal content will be inserted here -->
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ==================== CONFIG ====================
+        const API_BASE = 'http://localhost:8080/api/v1';
+        let currentUser = null;
+        let accessToken = localStorage.getItem('accessToken');
+        let refreshToken = localStorage.getItem('refreshToken');
+
+        // ==================== MENU CONFIGURATION ====================
+        const MENU_CONFIG = [
+            { id: 'dashboard', label: 'Dashboard', icon: 'fa-tachometer-alt', roles: ['ADMIN','USER','DRIVER'], path: 'dashboard' },
+            { id: 'bookings', label: 'Booking', icon: 'fa-calendar-alt', roles: ['ADMIN','USER','DRIVER'], path: 'bookings' },
+            { id: 'vehicles', label: 'Kendaraan', icon: 'fa-car', roles: ['ADMIN','USER','DRIVER'], path: 'vehicles' },
+            { id: 'rooms', label: 'Ruangan', icon: 'fa-building', roles: ['ADMIN','USER','DRIVER'], path: 'rooms' },
+            { id: 'drivers', label: 'Driver', icon: 'fa-id-card', roles: ['ADMIN','DRIVER'], path: 'drivers' },
+            { id: 'fuel', label: 'Pengeluaran BBM', icon: 'fa-gas-pump', roles: ['ADMIN','DRIVER'], path: 'fuel-expenses' },
+            { id: 'maintenance', label: 'Pemeliharaan', icon: 'fa-tools', roles: ['ADMIN'], path: 'maintenance' },
+            { id: 'users', label: 'Pengguna', icon: 'fa-users', roles: ['ADMIN'], path: 'users' },
+            { id: 'guest-bookings', label: 'Booking Tamu', icon: 'fa-user-clock', roles: ['ADMIN'], path: 'guest-bookings' },
+            { id: 'reports', label: 'Laporan', icon: 'fa-chart-bar', roles: ['ADMIN'], path: 'reports' },
+            { id: 'settings', label: 'Pengaturan', icon: 'fa-cog', roles: ['ADMIN'], path: 'settings' }
+        ];
+
+        // ==================== UTILITY FUNCTIONS ====================
+        function showToast(message, type = 'success') {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            const colors = { success: 'bg-green-500', error: 'bg-red-500', warning: 'bg-yellow-500', info: 'bg-blue-500' };
+            const icons = { success: 'fa-check-circle', error: 'fa-times-circle', warning: 'fa-exclamation-circle', info: 'fa-info-circle' };
+            toast.className = `toast ${colors[type]} text-white px-4 py-3 rounded-lg shadow-lg flex items-center gap-3 min-w-[300px]`;
+            toast.innerHTML = `<i class="fas ${icons[type]}"></i><span class="font-medium">${message}</span>`;
+            container.appendChild(toast);
+            setTimeout(() => { toast.style.opacity = '0'; toast.style.transform = 'translateX(100%)'; setTimeout(() => toast.remove(), 300); }, 4000);
+        }
+
+        function togglePassword(id) {
+            const input = document.getElementById(id);
+            input.type = input.type === 'password' ? 'text' : 'password';
+        }
+
+        function formatDate(dateStr) {
+            if (!dateStr) return '-';
+            const d = new Date(dateStr);
+            return d.toLocaleString('id-ID', { day:'2-digit', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit' });
+        }
+
+        function formatCurrency(num) {
+            return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(num || 0);
+        }
+
+        function getStatusBadge(status) {
+            const classes = {
+                PENDING: 'status-pending', APPROVED: 'status-approved', ONGOING: 'status-ongoing',
+                COMPLETED: 'status-completed', REJECTED: 'status-rejected', CANCELLED: 'status-cancelled',
+                AVAILABLE: 'bg-green-100 text-green-800', MAINTENANCE: 'bg-yellow-100 text-yellow-800', INACTIVE: 'bg-gray-100 text-gray-800'
+            };
+            return `<span class="px-2.5 py-1 rounded-full text-xs font-medium ${classes[status] || 'bg-gray-100 text-gray-800'}">${status}</span>`;
+        }
+
+        function setLoading(btn, loading) {
+            if (!btn) return;
+            if (loading) { btn.disabled = true; btn.dataset.original = btn.innerHTML; btn.innerHTML = '<div class="loading-spinner"></div>'; }
+            else { btn.disabled = false; btn.innerHTML = btn.dataset.original || btn.innerHTML; }
+        }
+
+        // ==================== API CLIENT ====================
+        async function api(endpoint, options = {}) {
+            const url = `${API_BASE}${endpoint}`;
+            const config = {
+                headers: {
+                    'Content-Type': 'application/json',
+                    ...(accessToken ? { 'Authorization': `Bearer ${accessToken}` } : {}),
+                    ...options.headers
+                },
+                ...options
+            };
+            if (config.body && typeof config.body === 'object' && config.headers['Content-Type'] === 'application/json') {
+                config.body = JSON.stringify(config.body);
+            }
+            try {
+                const response = await fetch(url, config);
+                if (response.status === 401) {
+                    const refreshed = await refreshAccessToken();
+                    if (refreshed) return api(endpoint, options);
+                    else { logout(); throw new Error('Sesi habis. Silakan login kembali.'); }
+                }
+                const data = await response.json().catch(() => ({}));
+                if (!response.ok) throw new Error(data.error?.message || data.message || `HTTP ${response.status}`);
+                return data;
+            } catch (err) {
+                showToast(err.message, 'error');
+                throw err;
+            }
+        }
+
+        async function refreshAccessToken() {
+            try {
+                const res = await fetch(`${API_BASE}/auth/refresh`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ refreshToken })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    accessToken = data.data.accessToken;
+                    refreshToken = data.data.refreshToken;
+                    localStorage.setItem('accessToken', accessToken);
+                    localStorage.setItem('refreshToken', refreshToken);
+                    return true;
+                }
+            } catch (e) { }
+            return false;
+        }
+
+        async function uploadFile(endpoint, formData) {
+            const res = await fetch(`${API_BASE}${endpoint}`, {
+                method: 'POST',
+                headers: accessToken ? { 'Authorization': `Bearer ${accessToken}` } : {},
+                body: formData
+            });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error(data.error?.message || 'Upload failed');
+            return data;
+        }
+
+        // ==================== AUTH FUNCTIONS ====================
+        function showLogin() {
+            document.getElementById('login-form').classList.remove('hidden');
+            document.getElementById('register-form').classList.add('hidden');
+            document.getElementById('forgot-form').classList.add('hidden');
+            document.getElementById('guest-form').classList.add('hidden');
+            document.getElementById('guest-track').classList.add('hidden');
+        }
+
+        function showRegister() {
+            document.getElementById('login-form').classList.add('hidden');
+            document.getElementById('register-form').classList.remove('hidden');
+            loadDropdowns();
+        }
+
+        function showForgotPassword() {
+            document.getElementById('login-form').classList.add('hidden');
+            document.getElementById('forgot-form').classList.remove('hidden');
+        }
+
+        function showGuestBooking() {
+            document.getElementById('login-form').classList.add('hidden');
+            document.getElementById('guest-form').classList.remove('hidden');
+            loadGuestResources();
+        }
+
+        function showGuestTrack() {
+            document.getElementById('login-form').classList.add('hidden');
+            document.getElementById('guest-track').classList.remove('hidden');
+        }
+
+        async function loadDropdowns() {
+            try {
+                const [roles, depts] = await Promise.all([
+                    api('/users/roles').catch(() => ({ data: [{id:1,name:'ADMIN'},{id:2,name:'USER'},{id:3,name:'DRIVER'}] })),
+                    api('/users/departments').catch(() => ({ data: [{id:1,name:'HR'},{id:2,name:'Finance'},{id:3,name:'Operations'}] }))
+                ]);
+                const roleSel = document.getElementById('reg-roleId');
+                const deptSel = document.getElementById('reg-departmentId');
+                roleSel.innerHTML = '<option value="">Pilih Role</option>' + roles.data.map(r => `<option value="${r.id}">${r.name}</option>`).join('');
+                deptSel.innerHTML = '<option value="">Pilih Departemen</option>' + depts.data.map(d => `<option value="${d.id}">${d.name}</option>`).join('');
+            } catch (e) {}
+        }
+
+        async function handleLogin(e) {
+            e.preventDefault();
+            const btn = document.getElementById('login-btn');
+            setLoading(btn, true);
+            try {
+                const data = await api('/auth/login', {
+                    method: 'POST',
+                    body: {
+                        email: document.getElementById('login-email').value,
+                        password: document.getElementById('login-password').value
+                    }
+                });
+                accessToken = data.data.accessToken;
+                refreshToken = data.data.refreshToken;
+                localStorage.setItem('accessToken', accessToken);
+                localStorage.setItem('refreshToken', refreshToken);
+                currentUser = data.data.user;
+                localStorage.setItem('user', JSON.stringify(currentUser));
+                initApp();
+                showToast('Login berhasil!');
+            } finally { setLoading(btn, false); }
+        }
+
+        async function handleRegister(e) {
+            e.preventDefault();
+            const btn = document.getElementById('reg-btn');
+            setLoading(btn, true);
+            try {
+                await api('/auth/register', {
+                    method: 'POST',
+                    body: {
+                        employeeId: document.getElementById('reg-employeeId').value,
+                        name: document.getElementById('reg-name').value,
+                        email: document.getElementById('reg-email').value,
+                        password: document.getElementById('reg-password').value,
+                        roleId: parseInt(document.getElementById('reg-roleId').value),
+                        departmentId: parseInt(document.getElementById('reg-departmentId').value)
+                    }
+                });
+                showToast('Registrasi berhasil! Silakan login.', 'success');
+                showLogin();
+            } finally { setLoading(btn, false); }
+        }
+
+        async function handleForgotPassword(e) {
+            e.preventDefault();
+            try {
+                await api('/auth/forgot-password', {
+                    method: 'POST',
+                    body: { email: document.getElementById('forgot-email').value }
+                });
+                showToast('OTP telah dikirim ke email (jika terdaftar).');
+            } catch (e) {}
+        }
+
+        async function loadGuestResources() {
+            try {
+                const [vehicles, rooms] = await Promise.all([
+                    api('/vehicles').catch(() => ({ data: [] })),
+                    api('/rooms').catch(() => ({ data: [] }))
+                ]);
+                const sel = document.getElementById('guest-resource');
+                let opts = '<option value="">Pilih Resource</option>';
+                vehicles.data.forEach(v => opts += `<option value="${v.resourceId}">[KENDARAAN] ${v.name} (${v.plateNumber})</option>`);
+                rooms.data.forEach(r => opts += `<option value="${r.resourceId}">[RUANGAN] ${r.name}</option>`);
+                sel.innerHTML = opts;
+            } catch (e) {}
+        }
+
+        async function handleGuestBooking(e) {
+            e.preventDefault();
+            try {
+                const data = await api('/guest-bookings', {
+                    method: 'POST',
+                    body: {
+                        guestName: document.getElementById('guest-name').value,
+                        guestEmail: document.getElementById('guest-email').value,
+                        guestPhone: document.getElementById('guest-phone').value,
+                        departmentName: document.getElementById('guest-dept').value,
+                        resourceId: parseInt(document.getElementById('guest-resource').value),
+                        startDate: new Date(document.getElementById('guest-start').value).toISOString(),
+                        endDate: new Date(document.getElementById('guest-end').value).toISOString(),
+                        purpose: document.getElementById('guest-purpose').value
+                    }
+                });
+                showToast(`Reservasi berhasil! Token: ${data.data.accessToken}`, 'success');
+                document.getElementById('guest-form').querySelector('form').reset();
+            } catch (e) {}
+        }
+
+        async function trackGuestBooking() {
+            const token = document.getElementById('track-token').value;
+            if (!token) return;
+            try {
+                const data = await fetch(`${API_BASE}/guest-bookings/${token}`).then(r => r.json());
+                const res = document.getElementById('track-result');
+                res.classList.remove('hidden');
+                res.innerHTML = `
+                    <div class="bg-gray-50 rounded-lg p-4 space-y-2 text-sm">
+                        <div class="flex justify-between"><span class="text-gray-500">Status</span>${getStatusBadge(data.data.status)}</div>
+                        <div class="flex justify-between"><span class="text-gray-500">Resource</span><span class="font-medium">${data.data.resource?.name || '-'}</span></div>
+                        <div class="flex justify-between"><span class="text-gray-500">Mulai</span><span>${formatDate(data.data.startDate)}</span></div>
+                        <div class="flex justify-between"><span class="text-gray-500">Selesai</span><span>${formatDate(data.data.endDate)}</span></div>
+                        ${data.data.approvedBy ? `<div class="flex justify-between"><span class="text-gray-500">Disetujui Oleh</span><span>${data.data.approvedBy}</span></div>` : ''}
+                        ${data.data.rejectionNote ? `<div class="mt-2 p-2 bg-red-50 text-red-700 rounded text-xs">Alasan Penolakan: ${data.data.rejectionNote}</div>` : ''}
+                    </div>
+                    <div class="flex gap-2 mt-3">
+                        ${data.data.status === 'APPROVED' ? `<button onclick="completeGuest('${token}')" class="flex-1 bg-success text-white py-2 rounded-lg text-sm hover:bg-green-700">Selesai</button>` : ''}
+                        ${['PENDING','APPROVED'].includes(data.data.status) ? `<button onclick="cancelGuest('${token}')" class="flex-1 bg-red-500 text-white py-2 rounded-lg text-sm hover:bg-red-700">Batal</button>` : ''}
+                    </div>
+                `;
+            } catch (e) { showToast('Token tidak valid', 'error'); }
+        }
+
+        async function completeGuest(token) {
+            try {
+                await api(`/guest-bookings/${token}/complete`, { method: 'PATCH' });
+                showToast('Reservasi diselesaikan');
+                trackGuestBooking();
+            } catch (e) {}
+        }
+
+        async function cancelGuest(token) {
+            try {
+                await api(`/guest-bookings/${token}/cancel`, { method: 'PATCH' });
+                showToast('Reservasi dibatalkan');
+                trackGuestBooking();
+            } catch (e) {}
+        }
+
+        function logout() {
+            api('/auth/logout', { method: 'POST', body: { refreshToken } }).catch(()=>{});
+            accessToken = null; refreshToken = null; currentUser = null;
+            localStorage.removeItem('accessToken');
+            localStorage.removeItem('refreshToken');
+            localStorage.removeItem('user');
+            document.getElementById('auth-page').classList.remove('hidden');
+            document.getElementById('app-page').classList.add('hidden');
+            showLogin();
+        }
+
+        // ==================== APP INITIALIZATION ====================
+        function initApp() {
+            if (!currentUser) {
+                const saved = localStorage.getItem('user');
+                if (saved) currentUser = JSON.parse(saved);
+            }
+            if (!currentUser) { logout(); return; }
+
+            document.getElementById('auth-page').classList.add('hidden');
+            document.getElementById('app-page').classList.remove('hidden');
+
+            // Setup user info
+            document.getElementById('user-name').textContent = currentUser.name || currentUser.employeeId;
+            document.getElementById('user-role').textContent = currentUser.role || currentUser.department || 'User';
+            const placeholder = document.getElementById('user-avatar-placeholder');
+            placeholder.textContent = (currentUser.name || 'U').charAt(0).toUpperCase();
+
+            // Build sidebar menu based on role
+            const menuContainer = document.getElementById('sidebar-menu');
+            const userRole = currentUser.role;
+            menuContainer.innerHTML = '';
+            MENU_CONFIG.forEach(item => {
+                if (item.roles.includes(userRole)) {
+                    const div = document.createElement('button');
+                    div.className = 'sidebar-item w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-gray-700 transition text-left';
+                    div.innerHTML = `<i class="fas ${item.icon} w-5 text-center"></i><span>${item.label}</span>`;
+                    div.onclick = () => navigateTo(item.path);
+                    div.id = `menu-${item.id}`;
+                    menuContainer.appendChild(div);
+                }
+            });
+
+            navigateTo('dashboard');
+        }
+
+        function toggleSidebar() {
+            const sidebar = document.getElementById('sidebar');
+            const overlay = document.getElementById('sidebar-overlay');
+            sidebar.classList.toggle('-translate-x-full');
+            overlay.classList.toggle('hidden');
+        }
+
+        function navigateTo(path) {
+            // Update active menu
+            document.querySelectorAll('.sidebar-item').forEach(el => el.classList.remove('active'));
+            const activeItem = MENU_CONFIG.find(m => m.path === path);
+            if (activeItem) {
+                const el = document.getElementById(`menu-${activeItem.id}`);
+                if (el) el.classList.add('active');
+                document.getElementById('page-title').textContent = activeItem.label;
+            }
+
+            // Close mobile sidebar
+            if (window.innerWidth < 1024) toggleSidebar();
+
+            // Route to page
+            const content = document.getElementById('content-area');
+            content.innerHTML = '<div class="flex items-center justify-center h-64"><div class="loading-spinner"></div></div>';
+
+            switch(path) {
+                case 'dashboard': loadDashboard(); break;
+                case 'bookings': loadBookings(); break;
+                case 'vehicles': loadVehicles(); break;
+                case 'rooms': loadRooms(); break;
+                case 'drivers': loadDrivers(); break;
+                case 'fuel-expenses': loadFuelExpenses(); break;
+                case 'maintenance': loadMaintenance(); break;
+                case 'users': loadUsers(); break;
+                case 'guest-bookings': loadGuestBookingsAdmin(); break;
+                case 'reports': loadReports(); break;
+                case 'settings': loadSettings(); break;
+                default: loadDashboard();
+            }
+        }
+
+        function refreshCurrentPage() {
+            const active = document.querySelector('.sidebar-item.active');
+            if (active) active.click();
+        }
+
+        // ==================== DASHBOARD ====================
+        async function loadDashboard() {
+            const content = document.getElementById('content-area');
+            try {
+                const isAdmin = currentUser.role === 'ADMIN';
+                let stats = { totalBookings: 0, pending: 0, approved: 0, ongoing: 0, completed: 0 };
+                let recentBookings = [];
+
+                if (isAdmin) {
+                    try {
+                        const report = await api('/reports/bookings');
+                        stats = report.data;
+                    } catch (e) {}
+                }
+
+                try {
+                    const bookings = await api('/bookings?limit=5');
+                    recentBookings = bookings.data || [];
+                } catch (e) {}
+
+                content.innerHTML = `
+                    <div class="fade-in space-y-6">
+                        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                            <div class="bg-white p-5 rounded-xl shadow-sm border border-gray-100 card-hover">
+                                <div class="flex items-center justify-between">
+                                    <div>
+                                        <p class="text-sm text-gray-500">Total Booking</p>
+                                        <p class="text-2xl font-bold text-gray-900 mt-1">${stats.totalBookings || 0}</p>
+                                    </div>
+                                    <div class="w-12 h-12 bg-blue-50 rounded-lg flex items-center justify-center"><i class="fas fa-calendar text-primary text-lg"></i></div>
+                                </div>
+                            </div>
+                            <div class="bg-white p-5 rounded-xl shadow-sm border border-gray-100 card-hover">
+                                <div class="flex items-center justify-between">
+                                    <div>
+                                        <p class="text-sm text-gray-500">Pending</p>
+                                        <p class="text-2xl font-bold text-yellow-600 mt-1">${stats.pendingCount || 0}</p>
+                                    </div>
+                                    <div class="w-12 h-12 bg-yellow-50 rounded-lg flex items-center justify-center"><i class="fas fa-clock text-warning text-lg"></i></div>
+                                </div>
+                            </div>
+                            <div class="bg-white p-5 rounded-xl shadow-sm border border-gray-100 card-hover">
+                                <div class="flex items-center justify-between">
+                                    <div>
+                                        <p class="text-sm text-gray-500">Disetujui</p>
+                                        <p class="text-2xl font-bold text-blue-600 mt-1">${stats.approvedCount || 0}</p>
+                                    </div>
+                                    <div class="w-12 h-12 bg-blue-50 rounded-lg flex items-center justify-center"><i class="fas fa-check text-primary text-lg"></i></div>
+                                </div>
+                            </div>
+                            <div class="bg-white p-5 rounded-xl shadow-sm border border-gray-100 card-hover">
+                                <div class="flex items-center justify-between">
+                                    <div>
+                                        <p class="text-sm text-gray-500">Selesai</p>
+                                        <p class="text-2xl font-bold text-green-600 mt-1">${stats.completedCount || 0}</p>
+                                    </div>
+                                    <div class="w-12 h-12 bg-green-50 rounded-lg flex items-center justify-center"><i class="fas fa-check-double text-success text-lg"></i></div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+                            <div class="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
+                                <h3 class="font-semibold text-gray-900">Booking Terbaru</h3>
+                                <button onclick="navigateTo('bookings')" class="text-sm text-primary hover:underline">Lihat Semua</button>
+                            </div>
+                            <div class="overflow-x-auto">
+                                <table class="w-full text-sm text-left">
+                                    <thead class="bg-gray-50 text-gray-600 font-medium">
+                                        <tr><th class="px-6 py-3">ID</th><th class="px-6 py-3">Pemohon</th><th class="px-6 py-3">Resource</th><th class="px-6 py-3">Waktu</th><th class="px-6 py-3">Status</th></tr>
+                                    </thead>
+                                    <tbody class="divide-y divide-gray-100">
+                                        ${recentBookings.length ? recentBookings.map(b => `
+                                            <tr class="hover:bg-gray-50 cursor-pointer" onclick="showBookingDetail(${b.id})">
+                                                <td class="px-6 py-3 font-medium">#${b.id}</td>
+                                                <td class="px-6 py-3">${b.user?.name || '-'}</td>
+                                                <td class="px-6 py-3">${b.resource?.name || '-'}</td>
+                                                <td class="px-6 py-3 text-gray-500">${formatDate(b.startDate)}</td>
+                                                <td class="px-6 py-3">${getStatusBadge(b.status)}</td>
+                                            </tr>
+                                        `).join('') : '<tr><td colspan="5" class="px-6 py-8 text-center text-gray-400">Tidak ada data</td></tr>'}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            } catch (e) {
+                content.innerHTML = `<div class="text-center text-red-500 py-8">Gagal memuat dashboard</div>`;
+            }
+        }
+
+        // ==================== BOOKINGS ====================
+        async function loadBookings() {
+            const content = document.getElementById('content-area');
+            const isAdmin = currentUser.role === 'ADMIN';
+            const isUser = currentUser.role === 'USER';
+            const isDriver = currentUser.role === 'DRIVER';
+
+            content.innerHTML = `
+                <div class="fade-in space-y-4">
+                    <div class="flex flex-wrap items-center justify-between gap-3">
+                        <div class="flex gap-2">
+                            <select id="booking-filter-status" onchange="fetchBookings()" class="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none">
+                                <option value="">Semua Status</option>
+                                <option value="PENDING">Pending</option>
+                                <option value="APPROVED">Approved</option>
+                                <option value="ONGOING">Ongoing</option>
+                                <option value="COMPLETED">Completed</option>
+                                <option value="REJECTED">Rejected</option>
+                                <option value="CANCELLED">Cancelled</option>
+                            </select>
+                            ${isAdmin ? `<select id="booking-filter-type" onchange="fetchBookings()" class="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none">
+                                <option value="">Semua Tipe</option>
+                                <option value="VEHICLE">Kendaraan</option>
+                                <option value="ROOM">Ruangan</option>
+                            </select>` : ''}
+                        </div>
+                        ${isUser ? `<button onclick="showCreateBooking()" class="bg-primary hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 transition">
+                            <i class="fas fa-plus"></i> Booking Baru
+                        </button>` : ''}
+                    </div>
+                    <div id="bookings-table-container" class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+                        <div class="flex items-center justify-center h-64"><div class="loading-spinner"></div></div>
+                    </div>
+                </div>
+            `;
+            fetchBookings();
+        }
+
+        async function fetchBookings(page = 1) {
+            const container = document.getElementById('bookings-table-container');
+            const status = document.getElementById('booking-filter-status')?.value || '';
+            const type = document.getElementById('booking-filter-type')?.value || '';
+            let url = `/bookings?page=${page}&limit=20`;
+            if (status) url += `&status=${status}`;
+            if (type) url += `&resourceType=${type}`;
+
+            try {
+                const data = await api(url);
+                const isAdmin = currentUser.role === 'ADMIN';
+                const isUser = currentUser.role === 'USER';
+
+                container.innerHTML = `
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-sm text-left">
+                            <thead class="bg-gray-50 text-gray-600 font-medium">
+                                <tr>
+                                    <th class="px-4 py-3">ID</th>
+                                    ${isAdmin ? '<th class="px-4 py-3">Pemohon</th>' : ''}
+                                    <th class="px-4 py-3">Resource</th>
+                                    <th class="px-4 py-3">Tujuan</th>
+                                    <th class="px-4 py-3">Waktu</th>
+                                    <th class="px-4 py-3">Status</th>
+                                    <th class="px-4 py-3">Aksi</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-gray-100">
+                                ${data.data?.length ? data.data.map(b => `
+                                    <tr class="hover:bg-gray-50">
+                                        <td class="px-4 py-3 font-medium">#${b.id}</td>
+                                        ${isAdmin ? `<td class="px-4 py-3">${b.user?.name || '-'}</td>` : ''}
+                                        <td class="px-4 py-3">${b.resource?.name || '-'} <span class="text-xs text-gray-400">(${b.resource?.type || ''})</span></td>
+                                        <td class="px-4 py-3 max-w-[200px] truncate" title="${b.purpose}">${b.purpose || '-'}</td>
+                                        <td class="px-4 py-3 text-gray-500 whitespace-nowrap">${formatDate(b.startDate)}</td>
+                                        <td class="px-4 py-3">${getStatusBadge(b.status)}</td>
+                                        <td class="px-4 py-3">
+                                            <div class="flex gap-1">
+                                                <button onclick="showBookingDetail(${b.id})" class="p-1.5 hover:bg-gray-100 rounded text-gray-600" title="Detail"><i class="fas fa-eye"></i></button>
+                                                ${isAdmin && b.status === 'PENDING' ? `
+                                                    <button onclick="approveBooking(${b.id})" class="p-1.5 hover:bg-green-50 rounded text-green-600" title="Setujui"><i class="fas fa-check"></i></button>
+                                                    <button onclick="rejectBooking(${b.id})" class="p-1.5 hover:bg-red-50 rounded text-red-600" title="Tolak"><i class="fas fa-times"></i></button>
+                                                ` : ''}
+                                                ${isAdmin && b.status === 'APPROVED' && b.resource?.type === 'VEHICLE' ? `
+                                                    <button onclick="assignBooking(${b.id})" class="p-1.5 hover:bg-blue-50 rounded text-blue-600" title="Tugaskan"><i class="fas fa-user-plus"></i></button>
+                                                ` : ''}
+                                                ${(isAdmin || isDriver) && b.status === 'APPROVED' ? `
+                                                    <button onclick="startBooking(${b.id})" class="p-1.5 hover:bg-indigo-50 rounded text-indigo-600" title="Mulai"><i class="fas fa-play"></i></button>
+                                                ` : ''}
+                                                ${isAdmin && b.status === 'ONGOING' ? `
+                                                    <button onclick="completeBooking(${b.id})" class="p-1.5 hover:bg-green-50 rounded text-green-600" title="Selesai"><i class="fas fa-check-double"></i></button>
+                                                ` : ''}
+                                                ${isUser && b.status === 'PENDING' && b.user?.id === currentUser.id ? `
+                                                    <button onclick="cancelBooking(${b.id})" class="p-1.5 hover:bg-red-50 rounded text-red-600" title="Batal"><i class="fas fa-ban"></i></button>
+                                                ` : ''}
+                                                ${isUser && b.status === 'COMPLETED' && !b.rated ? `
+                                                    <button onclick="rateDriver(${b.id})" class="p-1.5 hover:bg-yellow-50 rounded text-yellow-600" title="Rating"><i class="fas fa-star"></i></button>
+                                                ` : ''}
+                                            </div>
+                                        </td>
+                                    </tr>
+                                `).join('') : '<tr><td colspan="7" class="px-4 py-8 text-center text-gray-400">Tidak ada data booking</td></tr>'}
+                            </tbody>
+                        </table>
+                    </div>
+                    ${data.pagination ? `
+                        <div class="px-4 py-3 border-t border-gray-100 flex items-center justify-between text-sm">
+                            <span class="text-gray-500">Halaman ${data.pagination.page} dari ${data.pagination.totalPages}</span>
+                            <div class="flex gap-2">
+                                <button ${data.pagination.page <= 1 ? 'disabled' : ''} onclick="fetchBookings(${data.pagination.page - 1})" class="px-3 py-1 border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50">Prev</button>
+                                <button ${data.pagination.page >= data.pagination.totalPages ? 'disabled' : ''} onclick="fetchBookings(${data.pagination.page + 1})" class="px-3 py-1 border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50">Next</button>
+                            </div>
+                        </div>
+                    ` : ''}
+                `;
+            } catch (e) {
+                container.innerHTML = `<div class="text-center text-red-500 py-8">Gagal memuat data</div>`;
+            }
+        }
+
+        async function showBookingDetail(id) {
+            try {
+                const data = await api(`/bookings/${id}`);
+                const b = data.data;
+                openModal(`
+                    <div class="p-6">
+                        <div class="flex items-center justify-between mb-4">
+                            <h3 class="text-lg font-bold">Detail Booking #${b.id}</h3>
+                            ${getStatusBadge(b.status)}
+                        </div>
+                        <div class="space-y-3 text-sm">
+                            <div class="grid grid-cols-3 gap-4 p-3 bg-gray-50 rounded-lg">
+                                <div><p class="text-gray-500">Pemohon</p><p class="font-medium">${b.user?.name || '-'}</p></div>
+                                <div><p class="text-gray-500">Departemen</p><p class="font-medium">${b.user?.department || '-'}</p></div>
+                                <div><p class="text-gray-500">Resource</p><p class="font-medium">${b.resource?.name || '-'}</p></div>
+                            </div>
+                            <div><p class="text-gray-500">Tujuan</p><p class="font-medium">${b.purpose || '-'}</p></div>
+                            <div class="grid grid-cols-2 gap-4">
+                                <div><p class="text-gray-500">Mulai</p><p class="font-medium">${formatDate(b.startDate)}</p></div>
+                                <div><p class="text-gray-500">Selesai</p><p class="font-medium">${formatDate(b.endDate)}</p></div>
+                            </div>
+                            ${b.approvedBy ? `<div><p class="text-gray-500">Disetujui Oleh</p><p class="font-medium">${b.approvedBy.name} pada ${formatDate(b.approvedAt)}</p></div>` : ''}
+                            ${b.assignedDriver ? `<div><p class="text-gray-500">Driver</p><p class="font-medium">${b.assignedDriver.name} (${b.assignedDriver.phoneNumber || 'No HP'})</p></div>` : ''}
+                            ${b.assignedVehicle ? `<div><p class="text-gray-500">Kendaraan Ditugaskan</p><p class="font-medium">${b.assignedVehicle.plateNumber}</p></div>` : ''}
+                            ${b.returnedAt ? `<div><p class="text-gray-500">Dikembalikan</p><p class="font-medium">${formatDate(b.returnedAt)}</p></div>` : ''}
+                        </div>
+                    </div>
+                `);
+            } catch (e) {}
+        }
+
+        async function showCreateBooking() {
+            try {
+                const [vehicles, rooms] = await Promise.all([
+                    api('/vehicles?status=AVAILABLE').catch(() => ({ data: [] })),
+                    api('/rooms?status=AVAILABLE').catch(() => ({ data: [] }))
+                ]);
+                openModal(`
+                    <div class="p-6">
+                        <h3 class="text-lg font-bold mb-4">Booking Baru</h3>
+                        <form onsubmit="handleCreateBooking(event)" class="space-y-4">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Pilih Resource</label>
+                                <select id="new-booking-resource" required class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none">
+                                    <option value="">Pilih...</option>
+                                    <optgroup label="Kendaraan">
+                                        ${vehicles.data.map(v => `<option value="${v.resourceId}">${v.name} (${v.plateNumber}) - ${v.category?.name || ''}</option>`).join('')}
+                                    </optgroup>
+                                    <optgroup label="Ruangan">
+                                        ${rooms.data.map(r => `<option value="${r.resourceId}">${r.name} - ${r.location || ''}</option>`).join('')}
+                                    </optgroup>
+                                </select>
+                            </div>
+                            <div class="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-1">Mulai</label>
+                                    <input type="datetime-local" id="new-booking-start" required class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none">
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-1">Selesai</label>
+                                    <input type="datetime-local" id="new-booking-end" required class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none">
+                                </div>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Tujuan</label>
+                                <textarea id="new-booking-purpose" required rows="3" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none" placeholder="Jelaskan tujuan peminjaman..."></textarea>
+                            </div>
+                            <div class="flex gap-3 pt-2">
+                                <button type="button" onclick="closeModal()" class="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition">Batal</button>
+                                <button type="submit" class="flex-1 px-4 py-2 bg-primary hover:bg-blue-700 text-white rounded-lg transition">Ajukan</button>
+                            </div>
+                        </form>
+                    </div>
+                `);
+            } catch (e) {}
+        }
+
+        async function handleCreateBooking(e) {
+            e.preventDefault();
+            try {
+                await api('/bookings', {
+                    method: 'POST',
+                    body: {
+                        resourceId: parseInt(document.getElementById('new-booking-resource').value),
+                        startDate: new Date(document.getElementById('new-booking-start').value).toISOString(),
+                        endDate: new Date(document.getElementById('new-booking-end').value).toISOString(),
+                        purpose: document.getElementById('new-booking-purpose').value
+                    }
+                });
+                showToast('Booking berhasil diajukan!');
+                closeModal();
+                fetchBookings();
+            } catch (e) {}
+        }
+
+        async function approveBooking(id) {
+            try {
+                await api(`/bookings/${id}/approve`, { method: 'POST', body: { note: 'Disetujui' } });
+                showToast('Booking disetujui');
+                fetchBookings();
+            } catch (e) {}
+        }
+
+        async function rejectBooking(id) {
+            const note = prompt('Alasan penolakan:');
+            if (note === null) return;
+            try {
+                await api(`/bookings/${id}/reject`, { method: 'POST', body: { note } });
+                showToast('Booking ditolak');
+                fetchBookings();
+            } catch (e) {}
+        }
+
+        async function assignBooking(id) {
+            try {
+                const [drivers, vehicles] = await Promise.all([
+                    api('/drivers').catch(() => ({ data: [] })),
+                    api('/vehicles?status=AVAILABLE').catch(() => ({ data: [] }))
+                ]);
+                openModal(`
+                    <div class="p-6">
+                        <h3 class="text-lg font-bold mb-4">Tugaskan Driver & Kendaraan</h3>
+                        <form onsubmit="handleAssign(event, ${id})" class="space-y-4">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Driver</label>
+                                <select id="assign-driver" required class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none">
+                                    ${drivers.data.map(d => `<option value="${d.userId}">${d.name} (${d.employeeId})</option>`).join('')}
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Kendaraan</label>
+                                <select id="assign-vehicle" required class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none">
+                                    ${vehicles.data.map(v => `<option value="${v.id}">${v.name} (${v.plateNumber})</option>`).join('')}
+                                </select>
+                            </div>
+                            <div class="flex gap-3 pt-2">
+                                <button type="button" onclick="closeModal()" class="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50">Batal</button>
+                                <button type="submit" class="flex-1 px-4 py-2 bg-primary hover:bg-blue-700 text-white rounded-lg">Simpan</button>
+                            </div>
+                        </form>
+                    </div>
+                `);
+            } catch (e) {}
+        }
+
+        async function handleAssign(e, id) {
+            e.preventDefault();
+            try {
+                await api(`/bookings/${id}/assign-vehicle`, {
+                    method: 'POST',
+                    body: {
+                        driverId: parseInt(document.getElementById('assign-driver').value),
+                        vehicleId: parseInt(document.getElementById('assign-vehicle').value)
+                    }
+                });
+                showToast('Driver dan kendaraan ditugaskan');
+                closeModal();
+                fetchBookings();
+            } catch (e) {}
+        }
+
+        async function startBooking(id) {
+            try {
+                await api(`/bookings/${id}/start`, { method: 'PATCH' });
+                showToast('Booking dimulai');
+                fetchBookings();
+            } catch (e) {}
+        }
+
+        async function completeBooking(id) {
+            try {
+                await api(`/bookings/${id}/complete`, { method: 'PATCH' });
+                showToast('Booking selesai');
+                fetchBookings();
+            } catch (e) {}
+        }
+
+        async function cancelBooking(id) {
+            if (!confirm('Yakin ingin membatalkan booking ini?')) return;
+            try {
+                await api(`/bookings/${id}/cancel`, { method: 'PATCH' });
+                showToast('Booking dibatalkan');
+                fetchBookings();
+            } catch (e) {}
+        }
+
+        async function rateDriver(bookingId) {
+            openModal(`
+                <div class="p-6">
+                    <h3 class="text-lg font-bold mb-4">Rating Driver</h3>
+                    <form onsubmit="handleRate(event, ${bookingId})" class="space-y-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Rating (1-5)</label>
+                            <select id="rate-value" required class="w-full px-3 py-2 border border-gray-300 rounded-lg">
+                                <option value="5">⭐⭐⭐⭐⭐ (5)</option>
+                                <option value="4">⭐⭐⭐⭐ (4)</option>
+                                <option value="3">⭐⭐⭐ (3)</option>
+                                <option value="2">⭐⭐ (2)</option>
+                                <option value="1">⭐ (1)</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Ulasan</label>
+                            <textarea id="rate-review" rows="3" class="w-full px-3 py-2 border border-gray-300 rounded-lg" placeholder="Opsional..."></textarea>
+                        </div>
+                        <div class="flex gap-3 pt-2">
+                            <button type="button" onclick="closeModal()" class="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50">Batal</button>
+                            <button type="submit" class="flex-1 px-4 py-2 bg-yellow-500 hover:bg-yellow-600 text-white rounded-lg">Kirim</button>
+                        </div>
+                    </form>
+                </div>
+            `);
+        }
+
+        async function handleRate(e, bookingId) {
+            e.preventDefault();
+            try {
+                await api(`/bookings/${bookingId}/rate-driver`, {
+                    method: 'POST',
+                    body: {
+                        rating: parseInt(document.getElementById('rate-value').value),
+                        review: document.getElementById('rate-review').value
+                    }
+                });
+                showToast('Rating berhasil dikirim!');
+                closeModal();
+                fetchBookings();
+            } catch (e) {}
+        }
+
+        // ==================== VEHICLES ====================
+        async function loadVehicles() {
+            const content = document.getElementById('content-area');
+            const isAdmin = currentUser.role === 'ADMIN';
+            content.innerHTML = `
+                <div class="fade-in space-y-4">
+                    <div class="flex items-center justify-between">
+                        <div class="flex gap-2">
+                            <input type="text" id="vehicle-search" placeholder="Cari kendaraan..." onkeyup="if(event.key==='Enter')fetchVehicles()" class="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none w-64">
+                            <select id="vehicle-filter-status" onchange="fetchVehicles()" class="px-3 py-2 border border-gray-300 rounded-lg text-sm">
+                                <option value="">Semua Status</option>
+                                <option value="AVAILABLE">Tersedia</option>
+                                <option value="MAINTENANCE">Perbaikan</option>
+                                <option value="INACTIVE">Nonaktif</option>
+                            </select>
+                        </div>
+                        ${isAdmin ? `<button onclick="showVehicleForm()" class="bg-primary hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2"><i class="fas fa-plus"></i> Tambah</button>` : ''}
+                    </div>
+                    <div id="vehicles-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"></div>
+                </div>
+            `;
+            fetchVehicles();
+        }
+
+        async function fetchVehicles(page = 1) {
+            const grid = document.getElementById('vehicles-grid');
+            const search = document.getElementById('vehicle-search')?.value || '';
+            const status = document.getElementById('vehicle-filter-status')?.value || '';
+            let url = `/vehicles?page=${page}&limit=20`;
+            if (search) url += `&search=${encodeURIComponent(search)}`;
+            if (status) url += `&status=${status}`;
+
+            try {
+                const data = await api(url);
+                const isAdmin = currentUser.role === 'ADMIN';
+                grid.innerHTML = data.data?.length ? data.data.map(v => `
+                    <div class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden card-hover">
+                        <div class="h-40 bg-gray-100 relative overflow-hidden">
+                            ${v.photoUrl ? `<img src="http://localhost:8080${v.photoUrl}" class="w-full h-full object-cover" onerror="this.style.display='none'">` : ''}
+                            <div class="absolute top-3 right-3">${getStatusBadge(v.status)}</div>
+                        </div>
+                        <div class="p-4">
+                            <div class="flex items-start justify-between">
+                                <div>
+                                    <h3 class="font-semibold text-gray-900">${v.name}</h3>
+                                    <p class="text-sm text-gray-500">${v.brand} ${v.model} ${v.year}</p>
+                                </div>
+                                <span class="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded">${v.category?.name || '-'}</span>
+                            </div>
+                            <div class="mt-3 grid grid-cols-2 gap-2 text-sm">
+                                <div class="bg-gray-50 rounded p-2"><p class="text-gray-500 text-xs">Plat</p><p class="font-medium">${v.plateNumber}</p></div>
+                                <div class="bg-gray-50 rounded p-2"><p class="text-gray-500 text-xs">Odometer</p><p class="font-medium">${v.currentOdometer?.toLocaleString() || 0} km</p></div>
+                                <div class="bg-gray-50 rounded p-2"><p class="text-gray-500 text-xs">Kapasitas</p><p class="font-medium">${v.capacity} orang</p></div>
+                                <div class="bg-gray-50 rounded p-2"><p class="text-gray-500 text-xs">Resource ID</p><p class="font-medium">${v.resourceId}</p></div>
+                            </div>
+                            ${isAdmin ? `
+                                <div class="mt-3 flex gap-2 pt-3 border-t border-gray-100">
+                                    <button onclick="editVehicle(${v.id})" class="flex-1 py-1.5 text-sm border border-gray-300 rounded hover:bg-gray-50"><i class="fas fa-edit mr-1"></i> Edit</button>
+                                    <button onclick="updateVehicleStatus(${v.id}, '${v.status}')" class="flex-1 py-1.5 text-sm border border-gray-300 rounded hover:bg-gray-50"><i class="fas fa-toggle-on mr-1"></i> Status</button>
+                                    <button onclick="deleteVehicle(${v.id})" class="py-1.5 px-3 text-sm border border-red-200 text-red-600 rounded hover:bg-red-50"><i class="fas fa-trash"></i></button>
+                                </div>
+                            ` : ''}
+                        </div>
+                    </div>
+                `).join('') : '<div class="col-span-full text-center py-12 text-gray-400">Tidak ada kendaraan</div>';
+            } catch (e) {
+                grid.innerHTML = `<div class="col-span-full text-center py-12 text-red-500">Gagal memuat data</div>`;
+            }
+        }
+
+        async function showVehicleForm(vehicle = null) {
+            try {
+                const cats = await api('/vehicles/categories').catch(() => ({ data: [] }));
+                const isEdit = !!vehicle;
+                openModal(`
+                    <div class="p-6">
+                        <h3 class="text-lg font-bold mb-4">${isEdit ? 'Edit' : 'Tambah'} Kendaraan</h3>
+                        <form onsubmit="handleVehicleSubmit(event, ${vehicle?.id || 'null'})" class="space-y-4">
+                            <div class="grid grid-cols-2 gap-4">
+                                <div><label class="block text-sm font-medium text-gray-700 mb-1">Nama</label><input type="text" id="v-name" value="${vehicle?.name || ''}" required class="w-full px-3 py-2 border border-gray-300 rounded-lg"></div>
+                                <div><label class="block text-sm font-medium text-gray-700 mb-1">Plat Nomor</label><input type="text" id="v-plate" value="${vehicle?.plateNumber || ''}" required class="w-full px-3 py-2 border border-gray-300 rounded-lg"></div>
+                            </div>
+                            <div class="grid grid-cols-3 gap-4">
+                                <div><label class="block text-sm font-medium text-gray-700 mb-1">Merek</label><input type="text" id="v-brand" value="${vehicle?.brand || ''}" required class="w-full px-3 py-2 border border-gray-300 rounded-lg"></div>
+                                <div><label class="block text-sm font-medium text-gray-700 mb-1">Model</label><input type="text" id="v-model" value="${vehicle?.model || ''}" required class="w-full px-3 py-2 border border-gray-300 rounded-lg"></div>
+                                <div><label class="block text-sm font-medium text-gray-700 mb-1">Tahun</label><input type="number" id="v-year" value="${vehicle?.year || ''}" required class="w-full px-3 py-2 border border-gray-300 rounded-lg"></div>
+                            </div>
+                            <div class="grid grid-cols-2 gap-4">
+                                <div><label class="block text-sm font-medium text-gray-700 mb-1">Kategori</label>
+                                    <select id="v-category" required class="w-full px-3 py-2 border border-gray-300 rounded-lg">
+                                        ${cats.data.map(c => `<option value="${c.id}" ${vehicle?.category?.id === c.id ? 'selected' : ''}>${c.name}</option>`).join('')}
+                                    </select>
+                                </div>
+                                <div><label class="block text-sm font-medium text-gray-700 mb-1">Kapasitas</label><input type="number" id="v-capacity" value="${vehicle?.capacity || ''}" required min="1" class="w-full px-3 py-2 border border-gray-300 rounded-lg"></div>
+                            </div>
+                            <div><label class="block text-sm font-medium text-gray-700 mb-1">Odometer (km)</label><input type="number" id="v-odometer" value="${vehicle?.currentOdometer || 0}" class="w-full px-3 py-2 border border-gray-300 rounded-lg"></div>
+                            <div class="flex gap-3 pt-2">
+                                <button type="button" onclick="closeModal()" class="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50">Batal</button>
+                                <button type="submit" class="flex-1 px-4 py-2 bg-primary hover:bg-blue-700 text-white rounded-lg">Simpan</button>
+                            </div>
+                        </form>
+                    </div>
+                `);
+            } catch (e) {}
+        }
+
+        async function handleVehicleSubmit(e, id) {
+            e.preventDefault();
+            const body = {
+                name: document.getElementById('v-name').value,
+                plateNumber: document.getElementById('v-plate').value,
+                brand: document.getElementById('v-brand').value,
+                model: document.getElementById('v-model').value,
+                year: parseInt(document.getElementById('v-year').value),
+                categoryId: parseInt(document.getElementById('v-category').value),
+                capacity: parseInt(document.getElementById('v-capacity').value),
+                currentOdometer: parseInt(document.getElementById('v-odometer').value) || 0
+            };
+            try {
+                if (id) await api(`/vehicles/${id}`, { method: 'PUT', body });
+                else await api('/vehicles', { method: 'POST', body });
+                showToast(id ? 'Kendaraan diperbarui' : 'Kendaraan ditambahkan');
+                closeModal();
+                fetchVehicles();
+            } catch (e) {}
+        }
+
+        async function editVehicle(id) {
+            try {
+                const data = await api(`/vehicles/${id}`);
+                showVehicleForm(data.data);
+            } catch (e) {}
+        }
+
+        async function updateVehicleStatus(id, current) {
+            const statuses = ['AVAILABLE', 'MAINTENANCE', 'INACTIVE'];
+            const next = statuses[(statuses.indexOf(current) + 1) % statuses.length];
+            if (!confirm(`Ubah status ke ${next}?`)) return;
+            try {
+                await api(`/vehicles/${id}/status`, { method: 'PATCH', body: { status: next } });
+                showToast('Status diperbarui');
+                fetchVehicles();
+            } catch (e) {}
+        }
+
+        async function deleteVehicle(id) {
+            if (!confirm('Yakin hapus kendaraan ini?')) return;
+            try {
+                await api(`/vehicles/${id}`, { method: 'DELETE' });
+                showToast('Kendaraan dihapus');
+                fetchVehicles();
+            } catch (e) {}
+        }
+
+        // ==================== ROOMS ====================
+        async function loadRooms() {
+            const content = document.getElementById('content-area');
+            const isAdmin = currentUser.role === 'ADMIN';
+            content.innerHTML = `
+                <div class="fade-in space-y-4">
+                    <div class="flex items-center justify-between">
+                        <div class="flex gap-2">
+                            <input type="text" id="room-search" placeholder="Cari ruangan..." onkeyup="if(event.key==='Enter')fetchRooms()" class="px-3 py-2 border border-gray-300 rounded-lg text-sm w-64">
+                            <select id="room-filter-status" onchange="fetchRooms()" class="px-3 py-2 border border-gray-300 rounded-lg text-sm">
+                                <option value="">Semua Status</option>
+                                <option value="AVAILABLE">Tersedia</option>
+                                <option value="MAINTENANCE">Perbaikan</option>
+                                <option value="INACTIVE">Nonaktif</option>
+                            </select>
+                        </div>
+                        ${isAdmin ? `<button onclick="showRoomForm()" class="bg-primary hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2"><i class="fas fa-plus"></i> Tambah</button>` : ''}
+                    </div>
+                    <div id="rooms-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"></div>
+                </div>
+            `;
+            fetchRooms();
+        }
+
+        async function fetchRooms(page = 1) {
+            const grid = document.getElementById('rooms-grid');
+            const search = document.getElementById('room-search')?.value || '';
+            const status = document.getElementById('room-filter-status')?.value || '';
+            let url = `/rooms?page=${page}&limit=20`;
+            if (search) url += `&search=${encodeURIComponent(search)}`;
+            if (status) url += `&status=${status}`;
+
+            try {
+                const data = await api(url);
+                const isAdmin = currentUser.role === 'ADMIN';
+                grid.innerHTML = data.data?.length ? data.data.map(r => `
+                    <div class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden card-hover">
+                        <div class="h-40 bg-gray-100 relative overflow-hidden">
+                            ${r.photoUrl ? `<img src="http://localhost:8080${r.photoUrl}" class="w-full h-full object-cover" onerror="this.style.display='none'">` : '<div class="w-full h-full flex items-center justify-center text-gray-300"><i class="fas fa-building text-4xl"></i></div>'}
+                            <div class="absolute top-3 right-3">${getStatusBadge(r.status)}</div>
+                        </div>
+                        <div class="p-4">
+                            <h3 class="font-semibold text-gray-900">${r.name}</h3>
+                            <p class="text-sm text-gray-500 mt-1"><i class="fas fa-map-marker-alt mr-1"></i>${r.location || '-'}</p>
+                            <div class="mt-3 flex items-center gap-4 text-sm">
+                                <span class="bg-gray-50 px-2 py-1 rounded"><i class="fas fa-users mr-1 text-gray-400"></i>${r.capacity} orang</span>
+                                <span class="bg-gray-50 px-2 py-1 rounded">Resource ID: ${r.resourceId}</span>
+                            </div>
+                            ${isAdmin ? `
+                                <div class="mt-3 flex gap-2 pt-3 border-t border-gray-100">
+                                    <button onclick="editRoom(${r.id})" class="flex-1 py-1.5 text-sm border border-gray-300 rounded hover:bg-gray-50"><i class="fas fa-edit mr-1"></i> Edit</button>
+                                    <button onclick="updateRoomStatus(${r.id}, '${r.status}')" class="flex-1 py-1.5 text-sm border border-gray-300 rounded hover:bg-gray-50"><i class="fas fa-toggle-on mr-1"></i> Status</button>
+                                    <button onclick="deleteRoom(${r.id})" class="py-1.5 px-3 text-sm border border-red-200 text-red-600 rounded hover:bg-red-50"><i class="fas fa-trash"></i></button>
+                                </div>
+                            ` : ''}
+                        </div>
+                    </div>
+                `).join('') : '<div class="col-span-full text-center py-12 text-gray-400">Tidak ada ruangan</div>';
+            } catch (e) {
+                grid.innerHTML = `<div class="col-span-full text-center py-12 text-red-500">Gagal memuat data</div>`;
+            }
+        }
+
+        async function showRoomForm(room = null) {
+            const isEdit = !!room;
+            openModal(`
+                <div class="p-6">
+                    <h3 class="text-lg font-bold mb-4">${isEdit ? 'Edit' : 'Tambah'} Ruangan</h3>
+                    <form onsubmit="handleRoomSubmit(event, ${room?.id || 'null'})" class="space-y-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Nama Ruangan</label>
+                            <input type="text" id="r-name" value="${room?.name || ''}" required class="w-full px-3 py-2 border border-gray-300 rounded-lg">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Lokasi</label>
+                            <input type="text" id="r-location" value="${room?.location || ''}" required class="w-full px-3 py-2 border border-gray-300 rounded-lg">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Kapasitas</label>
+                            <input type="number" id="r-capacity" value="${room?.capacity || ''}" required min="1" class="w-full px-3 py-2 border border-gray-300 rounded-lg">
+                        </div>
+                        <div class="flex gap-3 pt-2">
+                            <button type="button" onclick="closeModal()" class="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50">Batal</button>
+                            <button type="submit" class="flex-1 px-4 py-2 bg-primary hover:bg-blue-700 text-white rounded-lg">Simpan</button>
+                        </div>
+                    </form>
+                </div>
+            `);
+        }
+
+        async function handleRoomSubmit(e, id) {
+            e.preventDefault();
+            const body = {
+                name: document.getElementById('r-name').value,
+                location: document.getElementById('r-location').value,
+                capacity: parseInt(document.getElementById('r-capacity').value)
+            };
+            try {
+                if (id) await api(`/rooms/${id}`, { method: 'PUT', body });
+                else await api('/rooms', { method: 'POST', body });
+                showToast(id ? 'Ruangan diperbarui' : 'Ruangan ditambahkan');
+                closeModal();
+                fetchRooms();
+            } catch (e) {}
+        }
+
+        async function editRoom(id) {
+            try {
+                const data = await api(`/rooms/${id}`);
+                showRoomForm(data.data);
+            } catch (e) {}
+        }
+
+        async function updateRoomStatus(id, current) {
+            const statuses = ['AVAILABLE', 'MAINTENANCE', 'INACTIVE'];
+            const next = statuses[(statuses.indexOf(current) + 1) % statuses.length];
+            if (!confirm(`Ubah status ke ${next}?`)) return;
+            try {
+                await api(`/rooms/${id}/status`, { method: 'PATCH', body: { status: next } });
+                showToast('Status diperbarui');
+                fetchRooms();
+            } catch (e) {}
+        }
+
+        async function deleteRoom(id) {
+            if (!confirm('Yakin hapus ruangan ini?')) return;
+            try {
+                await api(`/rooms/${id}`, { method: 'DELETE' });
+                showToast('Ruangan dihapus');
+                fetchRooms();
+            } catch (e) {}
+        }
+
+        // ==================== DRIVERS ====================
+        async function loadDrivers() {
+            const content = document.getElementById('content-area');
+            const isAdmin = currentUser.role === 'ADMIN';
+            content.innerHTML = `
+                <div class="fade-in space-y-4">
+                    ${isAdmin ? `<div class="flex justify-end"><button onclick="showDriverForm()" class="bg-primary hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2"><i class="fas fa-plus"></i> Tambah Driver</button></div>` : ''}
+                    <div id="drivers-table-container" class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden"></div>
+                </div>
+            `;
+            fetchDrivers();
+        }
+
+        async function fetchDrivers(page = 1) {
+            const container = document.getElementById('drivers-table-container');
+            try {
+                const data = await api(`/drivers?page=${page}&limit=20`);
+                const isAdmin = currentUser.role === 'ADMIN';
+                container.innerHTML = `
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-sm text-left">
+                            <thead class="bg-gray-50 text-gray-600 font-medium">
+                                <tr><th class="px-4 py-3">Nama</th><th class="px-4 py-3">Employee ID</th><th class="px-4 py-3">SIM</th><th class="px-4 py-3">Telepon</th><th class="px-4 py-3">Status</th><th class="px-4 py-3">Plat</th>${isAdmin ? '<th class="px-4 py-3">Aksi</th>' : ''}</tr>
+                            </thead>
+                            <tbody class="divide-y divide-gray-100">
+                                ${data.data?.length ? data.data.map(d => `
+                                    <tr class="hover:bg-gray-50">
+                                        <td class="px-4 py-3 font-medium">${d.name}</td>
+                                        <td class="px-4 py-3">${d.employeeId}</td>
+                                        <td class="px-4 py-3">${d.licenseNumber}</td>
+                                        <td class="px-4 py-3">${d.phoneNumber || '-'}</td>
+                                        <td class="px-4 py-3"><span class="px-2 py-1 rounded-full text-xs ${d.isActive ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}">${d.isActive ? 'Aktif' : 'Nonaktif'}</span></td>
+                                        <td class="px-4 py-3">${d.assignedPlate || '-'}</td>
+                                        ${isAdmin ? `<td class="px-4 py-3">
+                                            <div class="flex gap-1">
+                                                <button onclick="editDriver(${d.userId})" class="p-1.5 hover:bg-gray-100 rounded text-gray-600"><i class="fas fa-edit"></i></button>
+                                                <button onclick="toggleDriver(${d.userId})" class="p-1.5 hover:bg-gray-100 rounded text-gray-600"><i class="fas fa-power-off"></i></button>
+                                                ${!d.assignedPlate ? `<button onclick="assignDriver(${d.userId})" class="p-1.5 hover:bg-blue-50 rounded text-blue-600"><i class="fas fa-car"></i></button>` : `<button onclick="releaseDriver(${d.userId})" class="p-1.5 hover:bg-red-50 rounded text-red-600"><i class="fas fa-unlink"></i></button>`}
+                                            </div>
+                                        </td>` : ''}
+                                    </tr>
+                                `).join('') : '<tr><td colspan="7" class="px-4 py-8 text-center text-gray-400">Tidak ada data driver</td></tr>'}
+                            </tbody>
+                        </table>
+                    </div>
+                `;
+            } catch (e) {
+                container.innerHTML = `<div class="text-center text-red-500 py-8">Gagal memuat data</div>`;
+            }
+        }
+
+        async function showDriverForm() {
+            try {
+                const users = await api('/users?limit=100').catch(() => ({ data: [] }));
+                const drivers = await api('/drivers?limit=100').catch(() => ({ data: [] }));
+                const driverUserIds = new Set(drivers.data.map(d => d.userId));
+                const availableUsers = users.data.filter(u => u.role?.name === 'DRIVER' && !driverUserIds.has(u.id));
+
+                openModal(`
+                    <div class="p-6">
+                        <h3 class="text-lg font-bold mb-4">Tambah Driver</h3>
+                        <form onsubmit="handleDriverSubmit(event)" class="space-y-4">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Pilih User (Role DRIVER)</label>
+                                <select id="d-user" required class="w-full px-3 py-2 border border-gray-300 rounded-lg">
+                                    ${availableUsers.length ? availableUsers.map(u => `<option value="${u.id}">${u.name} (${u.employeeId})</option>`).join('') : '<option value="">Tidak ada user DRIVER yang tersedia</option>'}
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Nomor SIM</label>
+                                <input type="text" id="d-license" required class="w-full px-3 py-2 border border-gray-300 rounded-lg">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Telepon</label>
+                                <input type="tel" id="d-phone" required class="w-full px-3 py-2 border border-gray-300 rounded-lg">
+                            </div>
+                            <div class="flex gap-3 pt-2">
+                                <button type="button" onclick="closeModal()" class="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50">Batal</button>
+                                <button type="submit" class="flex-1 px-4 py-2 bg-primary hover:bg-blue-700 text-white rounded-lg">Simpan</button>
+                            </div>
+                        </form>
+                    </div>
+                `);
+            } catch (e) {}
+        }
+
+        async function handleDriverSubmit(e) {
+            e.preventDefault();
+            try {
+                await api('/drivers', {
+                    method: 'POST',
+                    body: {
+                        userId: parseInt(document.getElementById('d-user').value),
+                        licenseNumber: document.getElementById('d-license').value,
+                        phoneNumber: document.getElementById('d-phone').value
+                    }
+                });
+                showToast('Driver ditambahkan');
+                closeModal();
+                fetchDrivers();
+            } catch (e) {}
+        }
+
+        async function editDriver(userId) {
+            try {
+                const data = await api(`/drivers/${userId}`);
+                const d = data.data;
+                openModal(`
+                    <div class="p-6">
+                        <h3 class="text-lg font-bold mb-4">Edit Driver</h3>
+                        <form onsubmit="handleDriverUpdate(event, ${userId})" class="space-y-4">
+                            <div><label class="block text-sm font-medium text-gray-700 mb-1">Nomor SIM</label><input type="text" id="du-license" value="${d.licenseNumber}" required class="w-full px-3 py-2 border border-gray-300 rounded-lg"></div>
+                            <div><label class="block text-sm font-medium text-gray-700 mb-1">Telepon</label><input type="tel" id="du-phone" value="${d.phoneNumber}" required class="w-full px-3 py-2 border border-gray-300 rounded-lg"></div>
+                            <div class="flex gap-3 pt-2">
+                                <button type="button" onclick="closeModal()" class="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50">Batal</button>
+                                <button type="submit" class="flex-1 px-4 py-2 bg-primary hover:bg-blue-700 text-white rounded-lg">Simpan</button>
+                            </div>
+                        </form>
+                    </div>
+                `);
+            } catch (e) {}
+        }
+
+        async function handleDriverUpdate(e, userId) {
+            e.preventDefault();
+            try {
+                await api(`/drivers/${userId}`, {
+                    method: 'PUT',
+                    body: {
+                        licenseNumber: document.getElementById('du-license').value,
+                        phoneNumber: document.getElementById('du-phone').value
+                    }
+                });
+                showToast('Driver diperbarui');
+                closeModal();
+                fetchDrivers();
+            } catch (e) {}
+        }
+
+        async function toggleDriver(userId) {
+            try {
+                await api(`/drivers/${userId}/toggle-active`, { method: 'PATCH' });
+                showToast('Status driver diubah');
+                fetchDrivers();
+            } catch (e) {}
+        }
+
+        async function assignDriver(userId) {
+            try {
+                const vehicles = await api('/vehicles?status=AVAILABLE');
+                openModal(`
+                    <div class="p-6">
+                        <h3 class="text-lg font-bold mb-4">Tugaskan Kendaraan</h3>
+                        <form onsubmit="handleAssignDriver(event, ${userId})" class="space-y-4">
+                            <select id="ad-vehicle" required class="w-full px-3 py-2 border border-gray-300 rounded-lg">
+                                ${vehicles.data.map(v => `<option value="${v.id}">${v.name} (${v.plateNumber})</option>`).join('')}
+                            </select>
+                            <div class="flex gap-3">
+                                <button type="button" onclick="closeModal()" class="flex-1 px-4 py-2 border border-gray-300 rounded-lg">Batal</button>
+                                <button type="submit" class="flex-1 px-4 py-2 bg-primary text-white rounded-lg">Tugaskan</button>
+                            </div>
+                        </form>
+                    </div>
+                `);
+            } catch (e) {}
+        }
+
+        async function handleAssignDriver(e, userId) {
+            e.preventDefault();
+            try {
+                await api(`/drivers/${userId}/assign`, { method: 'POST', body: { vehicleId: parseInt(document.getElementById('ad-vehicle').value) } });
+                showToast('Driver ditugaskan');
+                closeModal();
+                fetchDrivers();
+            } catch (e) {}
+        }
+
+        async function releaseDriver(userId) {
+            if (!confirm('Lepaskan driver dari kendaraan?')) return;
+            try {
+                await api(`/drivers/${userId}/release`, { method: 'PATCH' });
+                showToast('Driver dilepaskan');
+                fetchDrivers();
+            } catch (e) {}
+        }
+
+        // ==================== FUEL EXPENSES ====================
+        async function loadFuelExpenses() {
+            const content = document.getElementById('content-area');
+            const isAdmin = currentUser.role === 'ADMIN';
+            const isDriver = currentUser.role === 'DRIVER';
+            content.innerHTML = `
+                <div class="fade-in space-y-4">
+                    <div class="flex items-center justify-between">
+                        <div class="flex gap-2">
+                            <select id="fuel-filter-type" onchange="fetchFuelExpenses()" class="px-3 py-2 border border-gray-300 rounded-lg text-sm">
+                                <option value="">Semua Tipe</option>
+                                <option value="BBM">BBM</option>
+                                <option value="LISTRIK">Listrik</option>
+                            </select>
+                        </div>
+                        ${isDriver ? `<button onclick="showFuelForm()" class="bg-primary hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2"><i class="fas fa-plus"></i> Input Pengeluaran</button>` : ''}
+                    </div>
+                    <div id="fuel-table-container" class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden"></div>
+                </div>
+            `;
+            fetchFuelExpenses();
+        }
+
+        async function fetchFuelExpenses(page = 1) {
+            const container = document.getElementById('fuel-table-container');
+            const type = document.getElementById('fuel-filter-type')?.value || '';
+            let url = `/fuel-expenses?page=${page}&limit=20`;
+            if (type) url += `&fuelType=${type}`;
+            try {
+                const data = await api(url);
+                container.innerHTML = `
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-sm text-left">
+                            <thead class="bg-gray-50 text-gray-600 font-medium">
+                                <tr><th class="px-4 py-3">Tanggal</th><th class="px-4 py-3">Driver</th><th class="px-4 py-3">Tipe</th><th class="px-4 py-3">Jumlah</th><th class="px-4 py-3">Total</th><th class="px-4 py-3">Odometer</th><th class="px-4 py-3">Catatan</th></tr>
+                            </thead>
+                            <tbody class="divide-y divide-gray-100">
+                                ${data.data?.length ? data.data.map(f => `
+                                    <tr class="hover:bg-gray-50">
+                                        <td class="px-4 py-3">${formatDate(f.createdAt)}</td>
+                                        <td class="px-4 py-3">${f.driverName}</td>
+                                        <td class="px-4 py-3"><span class="px-2 py-1 rounded text-xs ${f.fuelType === 'BBM' ? 'bg-orange-100 text-orange-800' : 'bg-blue-100 text-blue-800'}">${f.fuelType}</span></td>
+                                        <td class="px-4 py-3">${f.fuelType === 'BBM' ? f.liter + ' L' : f.kwh + ' kWh'}</td>
+                                        <td class="px-4 py-3 font-medium">${formatCurrency(f.totalCost)}</td>
+                                        <td class="px-4 py-3 text-gray-500">${f.odometerBefore || f.batteryBefore || '-'} → ${f.odometerAfter || f.batteryAfter || '-'}</td>
+                                        <td class="px-4 py-3 text-gray-500 max-w-[200px] truncate">${f.note || '-'}</td>
+                                    </tr>
+                                `).join('') : '<tr><td colspan="7" class="px-4 py-8 text-center text-gray-400">Tidak ada data</td></tr>'}
+                            </tbody>
+                        </table>
+                    </div>
+                `;
+            } catch (e) {
+                container.innerHTML = `<div class="text-center text-red-500 py-8">Gagal memuat data</div>`;
+            }
+        }
+
+        async function showFuelForm() {
+            try {
+                const [vehicles, drivers] = await Promise.all([
+                    api('/vehicles').catch(() => ({ data: [] })),
+                    api('/drivers').catch(() => ({ data: [] }))
+                ]);
+                const myDriver = drivers.data.find(d => d.userId === currentUser.id);
+                openModal(`
+                    <div class="p-6">
+                        <h3 class="text-lg font-bold mb-4">Input Pengeluaran</h3>
+                        <div class="flex gap-2 mb-4">
+                            <button onclick="switchFuelTab('bbm')" id="tab-bbm" class="flex-1 py-2 rounded-lg text-sm font-medium bg-primary text-white">BBM</button>
+                            <button onclick="switchFuelTab('listrik')" id="tab-listrik" class="flex-1 py-2 rounded-lg text-sm font-medium bg-gray-100 text-gray-700">Listrik</button>
+                        </div>
+                        <form onsubmit="handleFuelSubmit(event, 'bbm')" id="form-bbm" class="space-y-4">
+                            <input type="hidden" id="fuel-driver" value="${myDriver?.id || ''}">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Kendaraan</label>
+                                <select id="fuel-vehicle" required class="w-full px-3 py-2 border border-gray-300 rounded-lg">
+                                    ${vehicles.data.map(v => `<option value="${v.id}">${v.name} (${v.plateNumber})</option>`).join('')}
+                                </select>
+                            </div>
+                            <div class="grid grid-cols-2 gap-4">
+                                <div><label class="block text-sm font-medium text-gray-700 mb-1">Liter</label><input type="number" step="0.1" id="fuel-liter" required class="w-full px-3 py-2 border border-gray-300 rounded-lg"></div>
+                                <div><label class="block text-sm font-medium text-gray-700 mb-1">Harga/Liter</label><input type="number" id="fuel-price" required class="w-full px-3 py-2 border border-gray-300 rounded-lg"></div>
+                            </div>
+                            <div class="grid grid-cols-2 gap-4">
+                                <div><label class="block text-sm font-medium text-gray-700 mb-1">Odometer Sebelum</label><input type="number" id="fuel-odo-before" required class="w-full px-3 py-2 border border-gray-300 rounded-lg"></div>
+                                <div><label class="block text-sm font-medium text-gray-700 mb-1">Odometer Sesudah</label><input type="number" id="fuel-odo-after" required class="w-full px-3 py-2 border border-gray-300 rounded-lg"></div>
+                            </div>
+                            <div><label class="block text-sm font-medium text-gray-700 mb-1">Catatan</label><textarea id="fuel-note" rows="2" class="w-full px-3 py-2 border border-gray-300 rounded-lg"></textarea></div>
+                            <div class="flex gap-3 pt-2">
+                                <button type="button" onclick="closeModal()" class="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50">Batal</button>
+                                <button type="submit" class="flex-1 px-4 py-2 bg-primary hover:bg-blue-700 text-white rounded-lg">Simpan</button>
+                            </div>
+                        </form>
+                        <form onsubmit="handleFuelSubmit(event, 'listrik')" id="form-listrik" class="space-y-4 hidden">
+                            <input type="hidden" id="fuel-driver-ev" value="${myDriver?.id || ''}">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Kendaraan EV</label>
+                                <select id="fuel-vehicle-ev" required class="w-full px-3 py-2 border border-gray-300 rounded-lg">
+                                    ${vehicles.data.filter(v => v.category?.name?.toLowerCase().includes('electric') || v.name.toLowerCase().includes('ev')).map(v => `<option value="${v.id}">${v.name}</option>`).join('') || '<option value="">Tidak ada EV</option>'}
+                                </select>
+                            </div>
+                            <div class="grid grid-cols-2 gap-4">
+                                <div><label class="block text-sm font-medium text-gray-700 mb-1">kWh</label><input type="number" step="0.1" id="fuel-kwh" required class="w-full px-3 py-2 border border-gray-300 rounded-lg"></div>
+                                <div><label class="block text-sm font-medium text-gray-700 mb-1">Harga/kWh</label><input type="number" id="fuel-price-kwh" required class="w-full px-3 py-2 border border-gray-300 rounded-lg"></div>
+                            </div>
+                            <div class="grid grid-cols-2 gap-4">
+                                <div><label class="block text-sm font-medium text-gray-700 mb-1">Baterai Sebelum (%)</label><input type="number" id="fuel-bat-before" min="0" max="100" class="w-full px-3 py-2 border border-gray-300 rounded-lg"></div>
+                                <div><label class="block text-sm font-medium text-gray-700 mb-1">Baterai Sesudah (%)</label><input type="number" id="fuel-bat-after" min="0" max="100" class="w-full px-3 py-2 border border-gray-300 rounded-lg"></div>
+                            </div>
+                            <div><label class="block text-sm font-medium text-gray-700 mb-1">Catatan</label><textarea id="fuel-note-ev" rows="2" class="w-full px-3 py-2 border border-gray-300 rounded-lg"></textarea></div>
+                            <div class="flex gap-3 pt-2">
+                                <button type="button" onclick="closeModal()" class="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50">Batal</button>
+                                <button type="submit" class="flex-1 px-4 py-2 bg-primary hover:bg-blue-700 text-white rounded-lg">Simpan</button>
+                            </div>
+                        </form>
+                    </div>
+                `;
+            } catch (e) {}
+        }
+
+        function switchFuelTab(type) {
+            document.getElementById('tab-bbm').className = type === 'bbm' ? 'flex-1 py-2 rounded-lg text-sm font-medium bg-primary text-white' : 'flex-1 py-2 rounded-lg text-sm font-medium bg-gray-100 text-gray-700';
+            document.getElementById('tab-listrik').className = type === 'listrik' ? 'flex-1 py-2 rounded-lg text-sm font-medium bg-primary text-white' : 'flex-1 py-2 rounded-lg text-sm font-medium bg-gray-100 text-gray-700';
+            document.getElementById('form-bbm').classList.toggle('hidden', type !== 'bbm');
+            document.getElementById('form-listrik').classList.toggle('hidden', type !== 'listrik');
+        }
+
+        async function handleFuelSubmit(e, type) {
+            e.preventDefault();
+            const driverId = document.getElementById(type === 'bbm' ? 'fuel-driver' : 'fuel-driver-ev').value;
+            if (!driverId) { showToast('Driver ID tidak ditemukan', 'error'); return; }
+
+            const url = type === 'bbm' ? `/fuel-expenses/bbm?driverId=${driverId}` : `/fuel-expenses/listrik?driverId=${driverId}`;
+            const body = type === 'bbm' ? {
+                vehicleId: parseInt(document.getElementById('fuel-vehicle').value),
+                liter: parseFloat(document.getElementById('fuel-liter').value),
+                pricePerLiter: parseFloat(document.getElementById('fuel-price').value),
+                odometerBefore: parseInt(document.getElementById('fuel-odo-before').value),
+                odometerAfter: parseInt(document.getElementById('fuel-odo-after').value),
+                note: document.getElementById('fuel-note').value
+            } : {
+                vehicleId: parseInt(document.getElementById('fuel-vehicle-ev').value),
+                kwh: parseFloat(document.getElementById('fuel-kwh').value),
+                pricePerKwh: parseFloat(document.getElementById('fuel-price-kwh').value),
+                batteryBefore: parseFloat(document.getElementById('fuel-bat-before').value) || undefined,
+                batteryAfter: parseFloat(document.getElementById('fuel-bat-after').value) || undefined,
+                note: document.getElementById('fuel-note-ev').value
+            };
+            try {
+                await api(url, { method: 'POST', body });
+                showToast('Pengeluaran tercatat');
+                closeModal();
+                fetchFuelExpenses();
+            } catch (e) {}
+        }
+
+        // ==================== MAINTENANCE ====================
+        async function loadMaintenance() {
+            const content = document.getElementById('content-area');
+            content.innerHTML = `
+                <div class="fade-in space-y-4">
+                    <div class="flex justify-end">
+                        <button onclick="showMaintenanceForm()" class="bg-primary hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2"><i class="fas fa-plus"></i> Tambah Pemeliharaan</button>
+                    </div>
+                    <div id="maint-table-container" class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden"></div>
+                </div>
+            `;
+            fetchMaintenance();
+        }
+
+        async function fetchMaintenance(page = 1) {
+            const container = document.getElementById('maint-table-container');
+            try {
+                const data = await api(`/maintenance?page=${page}&limit=20`);
+                container.innerHTML = `
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-sm text-left">
+                            <thead class="bg-gray-50 text-gray-600 font-medium">
+                                <tr><th class="px-4 py-3">Resource</th><th class="px-4 py-3">Deskripsi</th><th class="px-4 py-3">Mulai</th><th class="px-4 py-3">Selesai</th><th class="px-4 py-3">Biaya</th><th class="px-4 py-3">Aksi</th></tr>
+                            </thead>
+                            <tbody class="divide-y divide-gray-100">
+                                ${data.data?.length ? data.data.map(m => `
+                                    <tr class="hover:bg-gray-50">
+                                        <td class="px-4 py-3 font-medium">${m.resourceName} <span class="text-xs text-gray-400">(${m.resourceType})</span></td>
+                                        <td class="px-4 py-3">${m.description}</td>
+                                        <td class="px-4 py-3">${formatDate(m.startDate)}</td>
+                                        <td class="px-4 py-3">${m.endDate ? formatDate(m.endDate) : '<span class="text-yellow-600 text-xs">Berlangsung</span>'}</td>
+                                        <td class="px-4 py-3">${formatCurrency(m.cost)}</td>
+                                        <td class="px-4 py-3">
+                                            <div class="flex gap-1">
+                                                <button onclick="editMaintenance(${m.id})" class="p-1.5 hover:bg-gray-100 rounded text-gray-600"><i class="fas fa-edit"></i></button>
+                                                <button onclick="deleteMaintenance(${m.id})" class="p-1.5 hover:bg-red-50 rounded text-red-600"><i class="fas fa-trash"></i></button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                `).join('') : '<tr><td colspan="6" class="px-4 py-8 text-center text-gray-400">Tidak ada data</td></tr>'}
+                            </tbody>
+                        </table>
+                    </div>
+                `;
+            } catch (e) {
+                container.innerHTML = `<div class="text-center text-red-500 py-8">Gagal memuat data</div>`;
+            }
+        }
+
+        async function showMaintenanceForm(record = null) {
+            try {
+                const [vehicles, rooms] = await Promise.all([
+                    api('/vehicles').catch(() => ({ data: [] })),
+                    api('/rooms').catch(() => ({ data: [] }))
+                ]);
+                const isEdit = !!record;
+                openModal(`
+                    <div class="p-6">
+                        <h3 class="text-lg font-bold mb-4">${isEdit ? 'Edit' : 'Tambah'} Pemeliharaan</h3>
+                        <form onsubmit="handleMaintenanceSubmit(event, ${record?.id || 'null'})" class="space-y-4">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Resource</label>
+                                <select id="m-resource" required class="w-full px-3 py-2 border border-gray-300 rounded-lg">
+                                    <optgroup label="Kendaraan">
+                                        ${vehicles.data.map(v => `<option value="${v.resourceId}" ${record?.resourceId === v.resourceId ? 'selected' : ''}>${v.name} (${v.plateNumber})</option>`).join('')}
+                                    </optgroup>
+                                    <optgroup label="Ruangan">
+                                        ${rooms.data.map(r => `<option value="${r.resourceId}" ${record?.resourceId === r.resourceId ? 'selected' : ''}>${r.name}</option>`).join('')}
+                                    </optgroup>
+                                </select>
+                            </div>
+                            <div><label class="block text-sm font-medium text-gray-700 mb-1">Deskripsi</label><textarea id="m-desc" required rows="2" class="w-full px-3 py-2 border border-gray-300 rounded-lg">${record?.description || ''}</textarea></div>
+                            <div class="grid grid-cols-2 gap-4">
+                                <div><label class="block text-sm font-medium text-gray-700 mb-1">Tanggal Mulai</label><input type="datetime-local" id="m-start" required value="${record?.startDate ? new Date(record.startDate).toISOString().slice(0,16) : ''}" class="w-full px-3 py-2 border border-gray-300 rounded-lg"></div>
+                                <div><label class="block text-sm font-medium text-gray-700 mb-1">Tanggal Selesai (opsional)</label><input type="datetime-local" id="m-end" value="${record?.endDate ? new Date(record.endDate).toISOString().slice(0,16) : ''}" class="w-full px-3 py-2 border border-gray-300 rounded-lg"></div>
+                            </div>
+                            <div><label class="block text-sm font-medium text-gray-700 mb-1">Biaya</label><input type="number" id="m-cost" value="${record?.cost || ''}" class="w-full px-3 py-2 border border-gray-300 rounded-lg"></div>
+                            <div class="flex gap-3 pt-2">
+                                <button type="button" onclick="closeModal()" class="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50">Batal</button>
+                                <button type="submit" class="flex-1 px-4 py-2 bg-primary hover:bg-blue-700 text-white rounded-lg">Simpan</button>
+                            </div>
+                        </form>
+                    </div>
+                `);
+            } catch (e) {}
+        }
+
+        async function handleMaintenanceSubmit(e, id) {
+            e.preventDefault();
+            const body = {
+                resourceId: parseInt(document.getElementById('m-resource').value),
+                description: document.getElementById('m-desc').value,
+                startDate: new Date(document.getElementById('m-start').value).toISOString(),
+                cost: parseFloat(document.getElementById('m-cost').value) || 0
+            };
+            const endVal = document.getElementById('m-end').value;
+            if (endVal) body.endDate = new Date(endVal).toISOString();
+            try {
+                if (id) await api(`/maintenance/${id}`, { method: 'PUT', body });
+                else await api('/maintenance', { method: 'POST', body });
+                showToast(id ? 'Pemeliharaan diperbarui' : 'Pemeliharaan ditambahkan');
+                closeModal();
+                fetchMaintenance();
+            } catch (e) {}
+        }
+
+        async function editMaintenance(id) {
+            try {
+                const data = await api(`/maintenance/${id}`);
+                showMaintenanceForm(data.data);
+            } catch (e) {}
+        }
+
+        async function deleteMaintenance(id) {
+            if (!confirm('Yakin hapus record ini?')) return;
+            try {
+                await api(`/maintenance/${id}`, { method: 'DELETE' });
+                showToast('Record dihapus');
+                fetchMaintenance();
+            } catch (e) {}
+        }
+
+        // ==================== USERS ====================
+        async function loadUsers() {
+            const content = document.getElementById('content-area');
+            content.innerHTML = `
+                <div class="fade-in space-y-4">
+                    <div class="flex items-center justify-between">
+                        <input type="text" id="user-search" placeholder="Cari pengguna..." onkeyup="if(event.key==='Enter')fetchUsers()" class="px-3 py-2 border border-gray-300 rounded-lg text-sm w-64">
+                        <button onclick="showUserForm()" class="bg-primary hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2"><i class="fas fa-plus"></i> Tambah User</button>
+                    </div>
+                    <div id="users-table-container" class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden"></div>
+                </div>
+            `;
+            fetchUsers();
+        }
+
+        async function fetchUsers(page = 1) {
+            const container = document.getElementById('users-table-container');
+            const search = document.getElementById('user-search')?.value || '';
+            let url = `/users?page=${page}&limit=20`;
+            if (search) url += `&search=${encodeURIComponent(search)}`;
+            try {
+                const data = await api(url);
+                container.innerHTML = `
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-sm text-left">
+                            <thead class="bg-gray-50 text-gray-600 font-medium">
+                                <tr><th class="px-4 py-3">Nama</th><th class="px-4 py-3">Email</th><th class="px-4 py-3">Role</th><th class="px-4 py-3">Departemen</th><th class="px-4 py-3">Status</th><th class="px-4 py-3">Aksi</th></tr>
+                            </thead>
+                            <tbody class="divide-y divide-gray-100">
+                                ${data.data?.length ? data.data.map(u => `
+                                    <tr class="hover:bg-gray-50">
+                                        <td class="px-4 py-3">
+                                            <div class="flex items-center gap-3">
+                                                <div class="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-primary text-xs font-bold">${u.name?.charAt(0).toUpperCase()}</div>
+                                                <div>
+                                                    <p class="font-medium">${u.name}</p>
+                                                    <p class="text-xs text-gray-500">${u.employeeId}</p>
+                                                </div>
+                                            </div>
+                                        </td>
+                                        <td class="px-4 py-3">${u.email}</td>
+                                        <td class="px-4 py-3"><span class="px-2 py-1 rounded text-xs bg-gray-100">${u.role?.name || '-'}</span></td>
+                                        <td class="px-4 py-3">${u.department?.name || '-'}</td>
+                                        <td class="px-4 py-3"><span class="px-2 py-1 rounded-full text-xs ${u.isActive ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}">${u.isActive ? 'Aktif' : 'Nonaktif'}</span></td>
+                                        <td class="px-4 py-3">
+                                            <div class="flex gap-1">
+                                                <button onclick="editUser(${u.id})" class="p-1.5 hover:bg-gray-100 rounded text-gray-600"><i class="fas fa-edit"></i></button>
+                                                <button onclick="toggleUser(${u.id})" class="p-1.5 hover:bg-gray-100 rounded text-gray-600"><i class="fas fa-power-off"></i></button>
+                                                <button onclick="deleteUser(${u.id})" class="p-1.5 hover:bg-red-50 rounded text-red-600"><i class="fas fa-trash"></i></button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                `).join('') : '<tr><td colspan="6" class="px-4 py-8 text-center text-gray-400">Tidak ada data</td></tr>'}
+                            </tbody>
+                        </table>
+                    </div>
+                    ${data.pagination ? `
+                        <div class="px-4 py-3 border-t border-gray-100 flex items-center justify-between text-sm">
+                            <span class="text-gray-500">Halaman ${data.pagination.page} dari ${data.pagination.totalPages}</span>
+                            <div class="flex gap-2">
+                                <button ${data.pagination.page <= 1 ? 'disabled' : ''} onclick="fetchUsers(${data.pagination.page - 1})" class="px-3 py-1 border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50">Prev</button>
+                                <button ${data.pagination.page >= data.pagination.totalPages ? 'disabled' : ''} onclick="fetchUsers(${data.pagination.page + 1})" class="px-3 py-1 border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50">Next</button>
+                            </div>
+                        </div>
+                    ` : ''}
+                `;
+            } catch (e) {
+                container.innerHTML = `<div class="text-center text-red-500 py-8">Gagal memuat data</div>`;
+            }
+        }
+
+        async function showUserForm(user = null) {
+            try {
+                const [roles, depts] = await Promise.all([
+                    api('/users/roles').catch(() => ({ data: [] })),
+                    api('/users/departments').catch(() => ({ data: [] }))
+                ]);
+                const isEdit = !!user;
+                openModal(`
+                    <div class="p-6">
+                        <h3 class="text-lg font-bold mb-4">${isEdit ? 'Edit' : 'Tambah'} Pengguna</h3>
+                        <form onsubmit="handleUserSubmit(event, ${user?.id || 'null'})" class="space-y-4">
+                            <div class="grid grid-cols-2 gap-4">
+                                <div><label class="block text-sm font-medium text-gray-700 mb-1">ID Karyawan</label><input type="text" id="u-empid" value="${user?.employeeId || ''}" ${isEdit ? 'disabled' : 'required'} class="w-full px-3 py-2 border border-gray-300 rounded-lg ${isEdit ? 'bg-gray-100' : ''}"></div>
+                                <div><label class="block text-sm font-medium text-gray-700 mb-1">Nama</label><input type="text" id="u-name" value="${user?.name || ''}" required class="w-full px-3 py-2 border border-gray-300 rounded-lg"></div>
+                            </div>
+                            <div><label class="block text-sm font-medium text-gray-700 mb-1">Email</label><input type="email" id="u-email" value="${user?.email || ''}" required class="w-full px-3 py-2 border border-gray-300 rounded-lg"></div>
+                            <div class="grid grid-cols-2 gap-4">
+                                <div><label class="block text-sm font-medium text-gray-700 mb-1">Role</label>
+                                    <select id="u-role" required class="w-full px-3 py-2 border border-gray-300 rounded-lg">${roles.data.map(r => `<option value="${r.id}" ${user?.role?.id === r.id ? 'selected' : ''}>${r.name}</option>`).join('')}</select>
+                                </div>
+                                <div><label class="block text-sm font-medium text-gray-700 mb-1">Departemen</label>
+                                    <select id="u-dept" required class="w-full px-3 py-2 border border-gray-300 rounded-lg">${depts.data.map(d => `<option value="${d.id}" ${user?.department?.id === d.id ? 'selected' : ''}>${d.name}</option>`).join('')}</select>
+                                </div>
+                            </div>
+                            ${!isEdit ? `<div><label class="block text-sm font-medium text-gray-700 mb-1">Password</label><input type="password" id="u-pass" required minlength="8" class="w-full px-3 py-2 border border-gray-300 rounded-lg" placeholder="Minimal 8 karakter"></div>` : ''}
+                            <div class="flex gap-3 pt-2">
+                                <button type="button" onclick="closeModal()" class="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50">Batal</button>
+                                <button type="submit" class="flex-1 px-4 py-2 bg-primary hover:bg-blue-700 text-white rounded-lg">Simpan</button>
+                            </div>
+                        </form>
+                    </div>
+                `);
+            } catch (e) {}
+        }
+
+        async function handleUserSubmit(e, id) {
+            e.preventDefault();
+            const body = {
+                name: document.getElementById('u-name').value,
+                email: document.getElementById('u-email').value,
+                roleId: parseInt(document.getElementById('u-role').value),
+                departmentId: parseInt(document.getElementById('u-dept').value)
+            };
+            if (!id) {
+                body.employeeId = document.getElementById('u-empid').value;
+                body.password = document.getElementById('u-pass').value;
+            }
+            try {
+                if (id) await api(`/users/${id}`, { method: 'PUT', body });
+                else await api('/users', { method: 'POST', body });
+                showToast(id ? 'User diperbarui' : 'User ditambahkan');
+                closeModal();
+                fetchUsers();
+            } catch (e) {}
+        }
+
+        async function editUser(id) {
+            try {
+                const data = await api(`/users/${id}`);
+                showUserForm(data.data);
+            } catch (e) {}
+        }
+
+        async function toggleUser(id) {
+            try {
+                await api(`/users/${id}/toggle-active`, { method: 'PATCH' });
+                showToast('Status user diubah');
+                fetchUsers();
+            } catch (e) {}
+        }
+
+        async function deleteUser(id) {
+            if (!confirm('Yakin hapus user ini?')) return;
+            try {
+                await api(`/users/${id}`, { method: 'DELETE' });
+                showToast('User dihapus');
+                fetchUsers();
+            } catch (e) {}
+        }
+
+        // ==================== GUEST BOOKINGS (ADMIN) ====================
+        async function loadGuestBookingsAdmin() {
+            const content = document.getElementById('content-area');
+            content.innerHTML = `
+                <div class="fade-in space-y-4">
+                    <div class="flex gap-2">
+                        <select id="guest-filter-status" onchange="fetchGuestBookings()" class="px-3 py-2 border border-gray-300 rounded-lg text-sm">
+                            <option value="">Semua Status</option>
+                            <option value="PENDING">Pending</option>
+                            <option value="APPROVED">Approved</option>
+                            <option value="ONGOING">Ongoing</option>
+                            <option value="COMPLETED">Completed</option>
+                            <option value="REJECTED">Rejected</option>
+                            <option value="CANCELLED">Cancelled</option>
+                        </select>
+                    </div>
+                    <div id="guest-table-container" class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden"></div>
+                </div>
+            `;
+            fetchGuestBookings();
+        }
+
+        async function fetchGuestBookings(page = 1) {
+            const container = document.getElementById('guest-table-container');
+            const status = document.getElementById('guest-filter-status')?.value || '';
+            let url = `/guest-bookings?page=${page}&limit=20`;
+            if (status) url += `&status=${status}`;
+            try {
+                const data = await api(url);
+                container.innerHTML = `
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-sm text-left">
+                            <thead class="bg-gray-50 text-gray-600 font-medium">
+                                <tr><th class="px-4 py-3">Tamu</th><th class="px-4 py-3">Resource</th><th class="px-4 py-3">Waktu</th><th class="px-4 py-3">Status</th><th class="px-4 py-3">Aksi</th></tr>
+                            </thead>
+                            <tbody class="divide-y divide-gray-100">
+                                ${data.data?.length ? data.data.map(g => `
+                                    <tr class="hover:bg-gray-50">
+                                        <td class="px-4 py-3">
+                                            <p class="font-medium">${g.guestName}</p>
+                                            <p class="text-xs text-gray-500">${g.guestEmail}</p>
+                                        </td>
+                                        <td class="px-4 py-3">${g.resource?.name || '-'} <span class="text-xs text-gray-400">(${g.resource?.type || ''})</span></td>
+                                        <td class="px-4 py-3 text-gray-500">${formatDate(g.startDate)}</td>
+                                        <td class="px-4 py-3">${getStatusBadge(g.status)}</td>
+                                        <td class="px-4 py-3">
+                                            <div class="flex gap-1">
+                                                ${g.status === 'PENDING' ? `
+                                                    <button onclick="approveGuest(${g.id})" class="p-1.5 hover:bg-green-50 rounded text-green-600"><i class="fas fa-check"></i></button>
+                                                    <button onclick="rejectGuest(${g.id})" class="p-1.5 hover:bg-red-50 rounded text-red-600"><i class="fas fa-times"></i></button>
+                                                ` : ''}
+                                                ${g.status === 'APPROVED' ? `<button onclick="startGuest(${g.id})" class="p-1.5 hover:bg-indigo-50 rounded text-indigo-600"><i class="fas fa-play"></i></button>` : ''}
+                                            </div>
+                                        </td>
+                                    </tr>
+                                `).join('') : '<tr><td colspan="5" class="px-4 py-8 text-center text-gray-400">Tidak ada data</td></tr>'}
+                            </tbody>
+                        </table>
+                    </div>
+                `;
+            } catch (e) {
+                container.innerHTML = `<div class="text-center text-red-500 py-8">Gagal memuat data</div>`;
+            }
+        }
+
+        async function approveGuest(id) {
+            try {
+                await api(`/guest-bookings/${id}/approve`, { method: 'POST' });
+                showToast('Guest booking disetujui');
+                fetchGuestBookings();
+            } catch (e) {}
+        }
+
+        async function rejectGuest(id) {
+            const note = prompt('Alasan penolakan:');
+            if (note === null) return;
+            try {
+                await api(`/guest-bookings/${id}/reject`, { method: 'POST', body: { note } });
+                showToast('Guest booking ditolak');
+                fetchGuestBookings();
+            } catch (e) {}
+        }
+
+        async function startGuest(id) {
+            try {
+                await api(`/guest-bookings/${id}/start`, { method: 'PATCH' });
+                showToast('Guest booking dimulai');
+                fetchGuestBookings();
+            } catch (e) {}
+        }
+
+        // ==================== REPORTS ====================
+        async function loadReports() {
+            const content = document.getElementById('content-area');
+            content.innerHTML = `
+                <div class="fade-in space-y-6">
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div class="bg-white p-5 rounded-xl shadow-sm border border-gray-100">
+                            <h3 class="font-semibold mb-3">Statistik Booking</h3>
+                            <div id="report-bookings" class="text-sm text-gray-500">Memuat...</div>
+                        </div>
+                        <div class="bg-white p-5 rounded-xl shadow-sm border border-gray-100">
+                            <h3 class="font-semibold mb-3">Utilisasi Resource</h3>
+                            <div id="report-usage" class="text-sm text-gray-500">Memuat...</div>
+                        </div>
+                        <div class="bg-white p-5 rounded-xl shadow-sm border border-gray-100">
+                            <h3 class="font-semibold mb-3">Pengeluaran BBM</h3>
+                            <div id="report-fuel" class="text-sm text-gray-500">Memuat...</div>
+                        </div>
+                        <div class="bg-white p-5 rounded-xl shadow-sm border border-gray-100">
+                            <h3 class="font-semibold mb-3">Rating Driver</h3>
+                            <div id="report-ratings" class="text-sm text-gray-500">Memuat...</div>
+                        </div>
+                    </div>
+                    <div class="bg-white p-5 rounded-xl shadow-sm border border-gray-100">
+                        <h3 class="font-semibold mb-3">Booking Terlambat</h3>
+                        <div id="report-overdue" class="text-sm text-gray-500">Memuat...</div>
+                    </div>
+                </div>
+            `;
+            loadReportData();
+        }
+
+        async function loadReportData() {
+            try {
+                const bookings = await api('/reports/bookings').catch(() => null);
+                if (bookings) {
+                    document.getElementById('report-bookings').innerHTML = `
+                        <div class="grid grid-cols-3 gap-3">
+                            <div class="bg-blue-50 p-3 rounded-lg text-center"><p class="text-2xl font-bold text-blue-700">${bookings.data.totalBookings}</p><p class="text-xs text-blue-600">Total</p></div>
+                            <div class="bg-yellow-50 p-3 rounded-lg text-center"><p class="text-2xl font-bold text-yellow-700">${bookings.data.pendingCount}</p><p class="text-xs text-yellow-600">Pending</p></div>
+                            <div class="bg-green-50 p-3 rounded-lg text-center"><p class="text-2xl font-bold text-green-700">${bookings.data.completedCount}</p><p class="text-xs text-green-600">Selesai</p></div>
+                        </div>
+                    `;
+                }
+            } catch (e) {}
+
+            try {
+                const usage = await api('/reports/resource-usage').catch(() => null);
+                if (usage) {
+                    document.getElementById('report-usage').innerHTML = `
+                        <div class="space-y-2 max-h-48 overflow-y-auto">
+                            ${usage.data.map(u => `
+                                <div class="flex items-center justify-between p-2 bg-gray-50 rounded">
+                                    <span class="font-medium">${u.resourceName}</span>
+                                    <span class="text-sm text-gray-500">${u.totalBookings} booking • ${u.utilizationRate}% utilisasi</span>
+                                </div>
+                            `).join('')}
+                        </div>
+                    `;
+                }
+            } catch (e) {}
+
+            try {
+                const fuel = await api('/reports/fuel-expenses').catch(() => null);
+                if (fuel) {
+                    document.getElementById('report-fuel').innerHTML = `
+                        <div class="space-y-2 max-h-48 overflow-y-auto">
+                            ${fuel.data.map(f => `
+                                <div class="flex items-center justify-between p-2 bg-gray-50 rounded">
+                                    <span class="font-medium">${f.vehicleName}</span>
+                                    <span class="text-sm text-gray-500">${formatCurrency(f.totalCost)} • ${f.totalLiter || f.totalKwh} ${f.fuelType === 'BBM' ? 'L' : 'kWh'}</span>
+                                </div>
+                            `).join('')}
+                        </div>
+                    `;
+                }
+            } catch (e) {}
+
+            try {
+                const ratings = await api('/reports/driver-ratings').catch(() => null);
+                if (ratings) {
+                    document.getElementById('report-ratings').innerHTML = `
+                        <div class="space-y-2 max-h-48 overflow-y-auto">
+                            ${ratings.data.map(r => `
+                                <div class="flex items-center justify-between p-2 bg-gray-50 rounded">
+                                    <span class="font-medium">${r.driverName}</span>
+                                    <span class="text-sm text-yellow-600"><i class="fas fa-star mr-1"></i>${r.averageRating} (${r.totalReviews} ulasan)</span>
+                                </div>
+                            `).join('')}
+                        </div>
+                    `;
+                }
+            } catch (e) {}
+
+            try {
+                const overdue = await api('/reports/overdue-bookings').catch(() => null);
+                if (overdue) {
+                    document.getElementById('report-overdue').innerHTML = overdue.data.length ? `
+                        <table class="w-full text-sm">
+                            <thead><tr class="text-gray-500"><th class="text-left py-2">Booking</th><th class="text-left py-2">Resource</th><th class="text-left py-2">Seharusnya Selesai</th><th class="text-left py-2">Keterlambatan</th></tr></thead>
+                            <tbody>
+                                ${overdue.data.map(o => `
+                                    <tr class="border-t border-gray-100">
+                                        <td class="py-2">#${o.id} - ${o.user?.name}</td>
+                                        <td class="py-2">${o.resource?.name}</td>
+                                        <td class="py-2 text-gray-500">${formatDate(o.endDate)}</td>
+                                        <td class="py-2 text-red-600 font-medium">${o.overdueHours} jam</td>
+                                    </tr>
+                                `).join('')}
+                            </tbody>
+                        </table>
+                    ` : '<p class="text-gray-400">Tidak ada booking terlambat</p>';
+                }
+            } catch (e) {}
+        }
+
+        // ==================== SETTINGS ====================
+        async function loadSettings() {
+            const content = document.getElementById('content-area');
+            content.innerHTML = `
+                <div class="fade-in space-y-6 max-w-2xl">
+                    <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+                        <h3 class="font-semibold mb-4">Pengaturan Global</h3>
+                        <div id="settings-list" class="space-y-4"></div>
+                    </div>
+                </div>
+            `;
+            fetchSettings();
+        }
+
+        async function fetchSettings() {
+            const container = document.getElementById('settings-list');
+            try {
+                const data = await api('/master-settings');
+                container.innerHTML = data.data?.length ? data.data.map(s => `
+                    <div class="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+                        <div>
+                            <p class="font-medium text-sm">${s.description || s.key}</p>
+                            <p class="text-xs text-gray-500">${s.key} • ${s.unit || '-'}</p>
+                        </div>
+                        <div class="flex items-center gap-3">
+                            <input type="text" id="setting-${s.key}" value="${s.value}" class="w-32 px-3 py-1.5 border border-gray-300 rounded text-sm text-right">
+                            <button onclick="updateSetting('${s.key}')" class="px-3 py-1.5 bg-primary text-white rounded text-sm hover:bg-blue-700">Simpan</button>
+                        </div>
+                    </div>
+                `).join('') : '<p class="text-gray-400">Tidak ada pengaturan</p>';
+            } catch (e) {
+                container.innerHTML = `<div class="text-red-500">Gagal memuat pengaturan</div>`;
+            }
+        }
+
+        async function updateSetting(key) {
+            const value = document.getElementById(`setting-${key}`).value;
+            try {
+                await api(`/master-settings/${key}`, {
+                    method: 'PUT',
+                    body: { value: parseFloat(value) || value, unit: 'IDR' }
+                });
+                showToast('Pengaturan diperbarui');
+            } catch (e) {}
+        }
+
+        // ==================== MODAL SYSTEM ====================
+        function openModal(html) {
+            document.getElementById('modal-content').innerHTML = html;
+            document.getElementById('modal-container').classList.remove('hidden');
+            document.body.style.overflow = 'hidden';
+        }
+
+        function closeModal() {
+            document.getElementById('modal-container').classList.add('hidden');
+            document.body.style.overflow = '';
+        }
+
+        function showNotifications() {
+            showToast('Fitur notifikasi akan segera hadir', 'info');
+        }
+
+        // ==================== INIT ====================
+        document.addEventListener('DOMContentLoaded', () => {
+            if (accessToken && localStorage.getItem('user')) {
+                currentUser = JSON.parse(localStorage.getItem('user'));
+                initApp();
+            } else {
+                showLogin();
+            }
+        });
+    </script>
+</body>
+</html>

@@ -33,9 +33,11 @@ type AssignDriverRequest struct {
 }
 
 func serializeDriverRow(d repository.ListDriversRow) map[string]any {
+	// AssignedPlate is always a plain (never-null) string from the query —
+	// see the comment on ListDrivers in sql/query/driver.sql for why.
 	var plate any
-	if d.AssignedPlate.Valid {
-		plate = d.AssignedPlate.String
+	if d.AssignedPlate != "" {
+		plate = d.AssignedPlate
 	}
 	return map[string]any{
 		"id":            d.ID,
@@ -52,8 +54,8 @@ func serializeDriverRow(d repository.ListDriversRow) map[string]any {
 
 func serializeDriverByID(d repository.GetDriverByIDRow) map[string]any {
 	var plate, photo any
-	if d.AssignedPlate.Valid {
-		plate = d.AssignedPlate.String
+	if d.AssignedPlate != "" {
+		plate = d.AssignedPlate
 	}
 	if d.ProfilePhoto.Valid {
 		photo = d.ProfilePhoto.String
