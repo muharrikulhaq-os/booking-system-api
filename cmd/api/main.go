@@ -34,7 +34,7 @@ func main() {
 
 	app.Use(fiberlog.New())
 	app.Use(cors.New(cors.Config{
-		AllowOrigins: "*",
+		AllowOrigins: config.C.FrontendOrigin,
 		AllowHeaders: "Origin, Content-Type, Accept, Authorization",
 		AllowMethods: "GET, POST, PUT, PATCH, DELETE, OPTIONS",
 	}))

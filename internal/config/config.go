@@ -30,6 +30,8 @@ type Config struct {
 	UploadDir      string
 	MaxFileSizeMB  int64
 
+	FrontendOrigin string
+
 	// Path file service-account Firebase (untuk push FCM). Bila file tidak
 	// ada, push FCM dinonaktifkan otomatis (WebSocket tetap jalan).
 	FirebaseCredFile string
@@ -59,6 +61,7 @@ func Load() {
 		UploadDir:            getEnv("UPLOAD_DIR", "./uploads"),
 		MaxFileSizeMB:        int64(getEnvInt("MAX_FILE_SIZE_MB", 10)),
 		FirebaseCredFile:     getEnv("FIREBASE_CREDENTIALS_FILE", "./firebase-service-account.json"),
+		FrontendOrigin:       getEnv("FRONTEND_ORIGIN", "http://localhost:3000"),
 	}
 }
 
