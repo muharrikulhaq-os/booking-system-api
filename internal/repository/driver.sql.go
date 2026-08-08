@@ -143,7 +143,7 @@ type GetDriverByIDRow struct {
 	EmployeeId    string         `json:"employeeId"`
 	Email         string         `json:"email"`
 	ProfilePhoto  sql.NullString `json:"profilePhoto"`
-	AssignedPlate sql.NullString `json:"assigned_plate"`
+	AssignedPlate string         `json:"assigned_plate"`
 }
 
 func (q *Queries) GetDriverByID(ctx context.Context, id int32) (GetDriverByIDRow, error) {
@@ -257,7 +257,7 @@ type ListAvailableDriversRow struct {
 	PlateNumber           sql.NullString `json:"plateNumber"`
 	Capacity              sql.NullInt16  `json:"capacity"`
 	OverlappingPassengers int32          `json:"overlapping_passengers"`
-	OverlappingPurpose    string         `json:"overlapping_purpose"`
+	OverlappingPurpose    interface{}    `json:"overlapping_purpose"`
 }
 
 func (q *Queries) ListAvailableDrivers(ctx context.Context, arg ListAvailableDriversParams) ([]ListAvailableDriversRow, error) {
@@ -312,16 +312,16 @@ type ListDriversParams struct {
 }
 
 type ListDriversRow struct {
-	ID            int32          `json:"id"`
-	UserId        int32          `json:"userId"`
-	LicenseNumber string         `json:"licenseNumber"`
-	PhoneNumber   string         `json:"phoneNumber"`
-	IsActive      bool           `json:"isActive"`
-	CreatedAt     time.Time      `json:"createdAt"`
-	UserName      string         `json:"user_name"`
-	EmployeeId    string         `json:"employeeId"`
-	Email         string         `json:"email"`
-	AssignedPlate sql.NullString `json:"assigned_plate"`
+	ID            int32     `json:"id"`
+	UserId        int32     `json:"userId"`
+	LicenseNumber string    `json:"licenseNumber"`
+	PhoneNumber   string    `json:"phoneNumber"`
+	IsActive      bool      `json:"isActive"`
+	CreatedAt     time.Time `json:"createdAt"`
+	UserName      string    `json:"user_name"`
+	EmployeeId    string    `json:"employeeId"`
+	Email         string    `json:"email"`
+	AssignedPlate string    `json:"assigned_plate"`
 }
 
 func (q *Queries) ListDrivers(ctx context.Context, arg ListDriversParams) ([]ListDriversRow, error) {

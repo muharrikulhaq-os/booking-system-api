@@ -1,0 +1,112 @@
+# CI/CD for booking-system-api (Go / Fiber).
+#
+# Flow: push/MR -> build+test -> (on develop/master) build & push Docker image
+# to the GitLab Container Registry -> deploy stage runs docker compose on the
+# same server the runner lives on. See ../PRODUCTION_DEPLOYMENT.md.
+
+stages:
+  - build
+  - test
+  - docker
+  - deploy
+
+variables:
+  GO_VERSION: "1.26"
+  IMAGE: "$CI_REGISTRY_IMAGE"
+  # Where docker-compose.prod.yml + .env live on the server (see deploy/ folder).
+  DEPLOY_DIR: "C:\\deploy\\booking-system"
+
+default:
+  image: golang:${GO_VERSION}-alpine
+
+.go_cache: &go_cache
+  cache:
+    key: go-mod-cache
+    paths:
+      - .go-cache/
+
+build:
+  stage: build
+  <<: *go_cache
+  variables:
+    GOPATH: "$CI_PROJECT_DIR/.go-cache"
+  script:
+    - go mod download
+    - go vet ./...
+    - CGO_ENABLED=0 GOOS=linux go build -o bin/api ./cmd/api
+  artifacts:
+    paths:
+      - bin/api
+    expire_in: 1 hour
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == "develop"
+    - if: $CI_COMMIT_BRANCH == "master"
+
+test:
+  stage: test
+  <<: *go_cache
+  variables:
+    GOPATH: "$CI_PROJECT_DIR/.go-cache"
+  script:
+    - go test ./... -v -cover
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == "develop"
+    - if: $CI_COMMIT_BRANCH == "master"
+
+docker-build-push:
+  stage: docker
+  image: docker:27
+  services:
+    - docker:27-dind
+  script:
+    - docker login -u "$CI_REGISTRY_USER" -p "$CI_REGISTRY_PASSWORD" "$CI_REGISTRY"
+    - docker build -t "$IMAGE:$CI_COMMIT_SHORT_SHA" -t "$IMAGE:$CI_COMMIT_REF_SLUG" .
+    - docker push "$IMAGE:$CI_COMMIT_SHORT_SHA"
+    - docker push "$IMAGE:$CI_COMMIT_REF_SLUG"
+    # `latest` only follows the production branch
+    - |
+      if [ "$CI_COMMIT_BRANCH" = "master" ]; then
+        docker tag "$IMAGE:$CI_COMMIT_SHORT_SHA" "$IMAGE:latest"
+        docker push "$IMAGE:latest"
+      fi
+  rules:
+    - if: $CI_COMMIT_BRANCH == "develop"
+    - if: $CI_COMMIT_BRANCH == "master"
+
+# Runner is registered directly on the deploy server (see PRODUCTION_DEPLOYMENT.md
+# step 6), so this job runs `docker compose` against the local Docker Desktop
+# engine of that same machine — no SSH hop needed.
+deploy-staging:
+  stage: deploy
+  tags: [windows, deploy]
+  environment:
+    name: staging
+    url: https://staging.booking.company.local
+  script:
+    - Copy-Item -Recurse -Force .\sql\schema\* "$env:DEPLOY_DIR\migrations\booking-system-api\"
+    - cd $env:DEPLOY_DIR
+    - docker compose -f docker-compose.prod.yml --env-file .env.staging pull api
+    - docker compose -f docker-compose.prod.yml --env-file .env.staging run --rm migrate
+    - docker compose -f docker-compose.prod.yml --env-file .env.staging up -d api
+    - docker image prune -f
+  rules:
+    - if: $CI_COMMIT_BRANCH == "develop"
+
+deploy-production:
+  stage: deploy
+  tags: [windows, deploy]
+  environment:
+    name: production
+    url: https://booking.company.local
+  script:
+    - Copy-Item -Recurse -Force .\sql\schema\* "$env:DEPLOY_DIR\migrations\booking-system-api\"
+    - cd $env:DEPLOY_DIR
+    - docker compose -f docker-compose.prod.yml --env-file .env pull api
+    - docker compose -f docker-compose.prod.yml --env-file .env run --rm migrate
+    - docker compose -f docker-compose.prod.yml --env-file .env up -d api
+    - docker image prune -f
+  rules:
+    - if: $CI_COMMIT_BRANCH == "master"
+      when: manual

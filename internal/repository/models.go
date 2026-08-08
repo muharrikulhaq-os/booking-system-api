@@ -438,24 +438,27 @@ type AuditLog struct {
 }
 
 type Booking struct {
-	ID                 int32         `json:"id"`
-	UserId             int32         `json:"userId"`
-	ResourceId         int32         `json:"resourceId"`
-	StartDate          time.Time     `json:"startDate"`
-	EndDate            time.Time     `json:"endDate"`
-	Purpose            string        `json:"purpose"`
-	PassengerCount     int32         `json:"passengerCount"`
-	Status             BookingStatus `json:"status"`
-	ApprovedById       sql.NullInt32 `json:"approvedById"`
-	ApprovedAt         sql.NullTime  `json:"approvedAt"`
-	AssignedDriverId   sql.NullInt32 `json:"assignedDriverId"`
-	AssignedVehicleId  sql.NullInt32 `json:"assignedVehicleId"`
-	AssignedAt         sql.NullTime  `json:"assignedAt"`
-	ReturnedAt         sql.NullTime  `json:"returnedAt"`
-	CreatedAt          time.Time     `json:"createdAt"`
-	UpdatedAt          time.Time     `json:"updatedAt"`
-	OriginalResourceId sql.NullInt32 `json:"originalResourceId"`
-	BookingType        BookingType   `json:"bookingType"`
+	ID                 int32          `json:"id"`
+	UserId             int32          `json:"userId"`
+	ResourceId         int32          `json:"resourceId"`
+	StartDate          time.Time      `json:"startDate"`
+	EndDate            time.Time      `json:"endDate"`
+	Purpose            string         `json:"purpose"`
+	PassengerCount     int32          `json:"passengerCount"`
+	Status             BookingStatus  `json:"status"`
+	ApprovedById       sql.NullInt32  `json:"approvedById"`
+	ApprovedAt         sql.NullTime   `json:"approvedAt"`
+	AssignedDriverId   sql.NullInt32  `json:"assignedDriverId"`
+	AssignedVehicleId  sql.NullInt32  `json:"assignedVehicleId"`
+	AssignedAt         sql.NullTime   `json:"assignedAt"`
+	ReturnedAt         sql.NullTime   `json:"returnedAt"`
+	CreatedAt          time.Time      `json:"createdAt"`
+	UpdatedAt          time.Time      `json:"updatedAt"`
+	OriginalResourceId sql.NullInt32  `json:"originalResourceId"`
+	BookingType        BookingType    `json:"bookingType"`
+	OdometerStart      sql.NullInt32  `json:"odometerStart"`
+	StartLocation      sql.NullString `json:"startLocation"`
+	StartPhotoUrl      sql.NullString `json:"startPhotoUrl"`
 }
 
 type BookingMerge struct {
@@ -469,12 +472,13 @@ type BookingMerge struct {
 
 // Laporan akhir perjalanan dari driver — note, lokasi, foto dikirim sebelum admin complete booking
 type BookingReturnReport struct {
-	ID            int32     `json:"id"`
-	BookingId     int32     `json:"bookingId"`
-	SubmittedById int32     `json:"submittedById"`
-	Note          string    `json:"note"`
-	Location      string    `json:"location"`
-	SubmittedAt   time.Time `json:"submittedAt"`
+	ID            int32         `json:"id"`
+	BookingId     int32         `json:"bookingId"`
+	SubmittedById int32         `json:"submittedById"`
+	Note          string        `json:"note"`
+	Location      string        `json:"location"`
+	SubmittedAt   time.Time     `json:"submittedAt"`
+	Odometer      sql.NullInt32 `json:"odometer"`
 }
 
 type Department struct {
