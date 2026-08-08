@@ -8,6 +8,11 @@ import (
 
 type ExtendedQuerier interface {
 	Querier
+	ListActiveUserIDsByRole(ctx context.Context, role string) ([]int32, error)
+	CountUnreadNotifications(ctx context.Context, userID int32) (int64, error)
+	UpsertDeviceToken(ctx context.Context, userID int32, token, platform string) error
+	DeleteDeviceToken(ctx context.Context, token string) error
+	ListDeviceTokensByUser(ctx context.Context, userID int32) ([]string, error)
 	AssignVehicleAndUpdateResource(ctx context.Context, bookingID, driverID, vehicleID, vehicleResourceID int32) error
 	CreateBookingMerge(ctx context.Context, primaryBookingID, mergedBookingID, mergedByID int32, reason string) (BookingMerge, error)
 	GetBookingMerges(ctx context.Context, bookingID int32) ([]BookingMergeInfoRow, error)

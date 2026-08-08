@@ -249,12 +249,43 @@ func EnsureReturnReportTable(ctx context.Context, db DBTX) error {
 		)`); err != nil {
 		return err
 	}
-	// Kolom odometer perjalanan (idempoten — aman dijalankan berulang).
+	// Kolom & tabel tambahan (idempoten — aman dijalankan berulang). Menjamin
+	// fitur SPD/Non-SPD, overtime, maintenance berkala, & notifikasi berjalan
+	// tanpa perlu migrasi manual.
 	_, err := db.ExecContext(ctx, `
 		ALTER TABLE booking_return_reports ADD COLUMN IF NOT EXISTS odometer INTEGER;
 		ALTER TABLE bookings ADD COLUMN IF NOT EXISTS "odometerStart" INTEGER;
 		ALTER TABLE bookings ADD COLUMN IF NOT EXISTS "startLocation" VARCHAR(500);
-		ALTER TABLE bookings ADD COLUMN IF NOT EXISTS "startPhotoUrl" TEXT;`)
+		ALTER TABLE bookings ADD COLUMN IF NOT EXISTS "startPhotoUrl" TEXT;
+		ALTER TABLE bookings ADD COLUMN IF NOT EXISTS "bookingType" VARCHAR(20) NOT NULL DEFAULT 'NON_SPD';
+		ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS "maintenanceIntervalKm" INTEGER NOT NULL DEFAULT 10000;
+		ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS "lastMaintenanceOdometer" INTEGER NOT NULL DEFAULT 0;
+		CREATE TABLE IF NOT EXISTS driver_overtimes (
+			id                SERIAL      PRIMARY KEY,
+			"bookingId"       INTEGER     NOT NULL REFERENCES bookings(id) ON DELETE CASCADE,
+			"driverId"        INTEGER     NOT NULL,
+			"scheduledEndAt"  TIMESTAMPTZ NOT NULL,
+			"actualEndAt"     TIMESTAMPTZ NOT NULL,
+			"overtimeMinutes" INTEGER     NOT NULL DEFAULT 0,
+			"createdAt"       TIMESTAMPTZ NOT NULL DEFAULT NOW()
+		);
+		CREATE TABLE IF NOT EXISTS notifications (
+			id                 SERIAL      PRIMARY KEY,
+			user_id            INTEGER     NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+			title              TEXT        NOT NULL,
+			body               TEXT        NOT NULL,
+			type               VARCHAR(50) NOT NULL,
+			related_entity_id  INTEGER     NULL,
+			is_read            BOOLEAN     NOT NULL DEFAULT FALSE,
+			created_at         TIMESTAMPTZ NOT NULL DEFAULT NOW()
+		);
+		CREATE TABLE IF NOT EXISTS device_tokens (
+			token      TEXT        PRIMARY KEY,
+			user_id    INTEGER     NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+			platform   VARCHAR(20) NOT NULL DEFAULT 'android',
+			created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+			updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+		);`)
 	return err
 }
 

@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"database/sql"
+	"strings"
 
 	"booking-system-api/internal/repository"
 	"booking-system-api/internal/util"
@@ -211,4 +212,190 @@ func (s *UserService) DeleteDepartment(ctx context.Context, id int32) error {
 		return util.ErrNotFound
 	}
 	return s.q.DeleteDepartment(ctx, id)
+}
+
+// ─── Bulk Import (Excel) ──────────────────────────────────────────────────────
+
+// DefaultBulkPassword dipakai bila kolom password di Excel dikosongkan.
+const DefaultBulkPassword = "Password123!"
+
+// BulkUserRow = satu baris data dari Excel (role & department berupa NAMA, bukan id).
+type BulkUserRow struct {
+	Row            int    // nomor baris di file Excel (untuk pesan error)
+	EmployeeID     string
+	Name           string
+	Email          string
+	Password       string
+	RoleName       string
+	DepartmentName string
+}
+
+// BulkImportRowResult = hasil per baris agar admin tahu baris mana yang gagal.
+type BulkImportRowResult struct {
+	Row        int    `json:"row"`
+	EmployeeID string `json:"employeeId"`
+	Name       string `json:"name"`
+	Email      string `json:"email"`
+	Success    bool   `json:"success"`
+	Error      string `json:"error,omitempty"`
+}
+
+// BulkImport memvalidasi & menyimpan banyak user sekaligus.
+// Baris yang gagal TIDAK membatalkan baris lain — hasil dilaporkan per baris.
+func (s *UserService) BulkImport(ctx context.Context, rows []BulkUserRow) (map[string]any, error) {
+	if len(rows) == 0 {
+		return nil, util.NewError(400, "no data rows found in the file", util.ErrBadRequest)
+	}
+
+	// Peta nama → id (case-insensitive) untuk role & department.
+	roles, err := s.q.ListRoles(ctx)
+	if err != nil {
+		return nil, err
+	}
+	roleByName := make(map[string]int32, len(roles))
+	roleNames := make([]string, 0, len(roles))
+	for _, r := range roles {
+		roleByName[strings.ToUpper(strings.TrimSpace(string(r.Name)))] = r.ID
+		roleNames = append(roleNames, string(r.Name))
+	}
+
+	depts, err := s.q.ListDepartments(ctx)
+	if err != nil {
+		return nil, err
+	}
+	deptByName := make(map[string]int32, len(depts))
+	for _, d := range depts {
+		deptByName[strings.ToLower(strings.TrimSpace(d.Name))] = d.ID
+	}
+
+	results := make([]BulkImportRowResult, 0, len(rows))
+	seenEmail := make(map[string]bool, len(rows))
+	seenEmp := make(map[string]bool, len(rows))
+	successCount := 0
+
+	for _, r := range rows {
+		employeeID := strings.TrimSpace(r.EmployeeID)
+		name := strings.TrimSpace(r.Name)
+		email := strings.ToLower(strings.TrimSpace(r.Email))
+		roleName := strings.ToUpper(strings.TrimSpace(r.RoleName))
+		deptName := strings.ToLower(strings.TrimSpace(r.DepartmentName))
+		password := strings.TrimSpace(r.Password)
+
+		res := BulkImportRowResult{Row: r.Row, EmployeeID: employeeID, Name: name, Email: email}
+
+		fail := func(msg string) {
+			res.Success = false
+			res.Error = msg
+			results = append(results, res)
+		}
+
+		switch {
+		case employeeID == "":
+			fail("employeeId wajib diisi")
+			continue
+		case name == "":
+			fail("name wajib diisi")
+			continue
+		case email == "":
+			fail("email wajib diisi")
+			continue
+		case !strings.Contains(email, "@") || !strings.Contains(email, "."):
+			fail("format email tidak valid")
+			continue
+		}
+
+		if password == "" {
+			password = DefaultBulkPassword
+		} else if len(password) < 8 {
+			fail("password minimal 8 karakter")
+			continue
+		}
+
+		roleID, ok := roleByName[roleName]
+		if !ok {
+			fail("role tidak dikenal: '" + r.RoleName + "' (pilihan: " + strings.Join(roleNames, ", ") + ")")
+			continue
+		}
+		deptID, ok := deptByName[deptName]
+		if !ok {
+			fail("departemen tidak ditemukan: '" + r.DepartmentName + "'")
+			continue
+		}
+
+		// Duplikat di dalam file itu sendiri.
+		if seenEmail[email] {
+			fail("email duplikat di dalam file")
+			continue
+		}
+		if seenEmp[strings.ToLower(employeeID)] {
+			fail("employeeId duplikat di dalam file")
+			continue
+		}
+
+		// Duplikat terhadap data yang sudah ada.
+		if _, err := s.q.GetUserByEmail(ctx, email); err == nil {
+			fail("email sudah terdaftar")
+			continue
+		}
+
+		hashed, herr := util.HashPassword(password)
+		if herr != nil {
+			fail("gagal memproses password")
+			continue
+		}
+
+		if _, cerr := s.q.CreateUser(ctx, repository.CreateUserParams{
+			EmployeeId:   employeeID,
+			Name:         name,
+			Email:        email,
+			Password:     hashed,
+			IsActive:     true,
+			RoleId:       roleID,
+			DepartmentId: deptID,
+		}); cerr != nil {
+			// employeeId & email UNIQUE di DB — terjemahkan agar mudah dipahami.
+			msg := cerr.Error()
+			switch {
+			case strings.Contains(msg, "employeeId"):
+				fail("employeeId sudah terdaftar")
+			case strings.Contains(msg, "email"):
+				fail("email sudah terdaftar")
+			default:
+				fail("gagal menyimpan: " + msg)
+			}
+			continue
+		}
+
+		seenEmail[email] = true
+		seenEmp[strings.ToLower(employeeID)] = true
+		successCount++
+		res.Success = true
+		results = append(results, res)
+	}
+
+	return map[string]any{
+		"total":        len(rows),
+		"successCount": successCount,
+		"failedCount":  len(rows) - successCount,
+		"results":      results,
+	}, nil
+}
+
+// BulkImportRefData = daftar role & department valid untuk sheet referensi template.
+func (s *UserService) BulkImportRefData(ctx context.Context) (roles []string, departments []string, err error) {
+	rs, err := s.q.ListRoles(ctx)
+	if err != nil {
+		return nil, nil, err
+	}
+	for _, r := range rs {
+		roles = append(roles, string(r.Name))
+	}
+	ds, err := s.q.ListDepartments(ctx)
+	if err != nil {
+		return nil, nil, err
+	}
+	for _, d := range ds {
+		departments = append(departments, d.Name)
+	}
+	return roles, departments, nil
 }

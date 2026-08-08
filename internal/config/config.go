@@ -29,6 +29,10 @@ type Config struct {
 
 	UploadDir      string
 	MaxFileSizeMB  int64
+
+	// Path file service-account Firebase (untuk push FCM). Bila file tidak
+	// ada, push FCM dinonaktifkan otomatis (WebSocket tetap jalan).
+	FirebaseCredFile string
 }
 
 var C Config
@@ -54,6 +58,7 @@ func Load() {
 		SMTPFrom:             getEnv("SMTP_FROM", "noreply@company.com"),
 		UploadDir:            getEnv("UPLOAD_DIR", "./uploads"),
 		MaxFileSizeMB:        int64(getEnvInt("MAX_FILE_SIZE_MB", 10)),
+		FirebaseCredFile:     getEnv("FIREBASE_CREDENTIALS_FILE", "./firebase-service-account.json"),
 	}
 }
 

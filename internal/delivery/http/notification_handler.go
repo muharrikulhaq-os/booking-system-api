@@ -21,12 +21,55 @@ func (h *NotificationHandler) Register(r fiber.Router) {
 	g := r.Group("/users/me/notifications", auth)
 
 	g.Get("/", h.GetMyNotifications)
+	g.Get("/unread-count", h.UnreadCount)
 	g.Patch("/:id/read", h.MarkAsRead)
 	g.Patch("/read-all", h.MarkAllAsRead)
+
+	// FCM device token (push notification saat app ditutup).
+	d := r.Group("/users/me/device-tokens", auth)
+	d.Post("/", h.SaveDeviceToken)
+	d.Delete("/", h.DeleteDeviceToken)
+}
+
+type deviceTokenRequest struct {
+	Token    string `json:"token" validate:"required"`
+	Platform string `json:"platform"`
+}
+
+func (h *NotificationHandler) SaveDeviceToken(c *fiber.Ctx) error {
+	userID := middleware.GetUserID(c)
+	var req deviceTokenRequest
+	if err := bindAndValidate(c, &req); err != nil {
+		return err
+	}
+	if err := h.svc.SaveDeviceToken(c.Context(), int32(userID), req.Token, req.Platform); err != nil {
+		return err
+	}
+	return util.OK(c, "Device token saved", nil)
+}
+
+func (h *NotificationHandler) DeleteDeviceToken(c *fiber.Ctx) error {
+	var req deviceTokenRequest
+	if err := bindAndValidate(c, &req); err != nil {
+		return err
+	}
+	if err := h.svc.RemoveDeviceToken(c.Context(), req.Token); err != nil {
+		return err
+	}
+	return util.OK(c, "Device token removed", nil)
+}
+
+func (h *NotificationHandler) UnreadCount(c *fiber.Ctx) error {
+	userID := middleware.GetUserID(c)
+	count, err := h.svc.UnreadCount(c.Context(), int32(userID))
+	if err != nil {
+		return err
+	}
+	return util.OK(c, "Unread count retrieved", fiber.Map{"count": count})
 }
 
 func (h *NotificationHandler) GetMyNotifications(c *fiber.Ctx) error {
-	userID := c.Locals("userId").(int)
+	userID := middleware.GetUserID(c)
 	page, _ := strconv.Atoi(c.Query("page", "1"))
 	limit, _ := strconv.Atoi(c.Query("limit", "20"))
 
@@ -38,7 +81,7 @@ func (h *NotificationHandler) GetMyNotifications(c *fiber.Ctx) error {
 }
 
 func (h *NotificationHandler) MarkAsRead(c *fiber.Ctx) error {
-	userID := c.Locals("userId").(int)
+	userID := middleware.GetUserID(c)
 	notifID, _ := strconv.Atoi(c.Params("id"))
 
 	err := h.svc.MarkAsRead(c.Context(), int32(notifID), int32(userID))
@@ -49,7 +92,7 @@ func (h *NotificationHandler) MarkAsRead(c *fiber.Ctx) error {
 }
 
 func (h *NotificationHandler) MarkAllAsRead(c *fiber.Ctx) error {
-	userID := c.Locals("userId").(int)
+	userID := middleware.GetUserID(c)
 
 	err := h.svc.MarkAllAsRead(c.Context(), int32(userID))
 	if err != nil {

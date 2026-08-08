@@ -1,0 +1,18 @@
+# Runtime upload storage (foto bukti fuel/maintenance/return/trip)
+/uploads/
+
+# Env & secrets
+.env
+.env.local
+
+# Compiled binaries
+/booking-system-api
+/booking-system-api.exe
+/tmp/
+/bin/
+
+# Editor / OS
+.DS_Store
+.idea/
+.vscode/
+*.log

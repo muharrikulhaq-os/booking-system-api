@@ -399,6 +399,12 @@ func (s *BookingService) Create(ctx context.Context, req CreateBookingRequest, u
 		Description: sql.NullString{String: "Booking created", Valid: true},
 	})
 
+	// Notifikasi: booking baru butuh persetujuan → semua admin.
+	if s.notif != nil {
+		s.notif.NotifyAdmins("BOOKING_CREATED", "Booking baru",
+			"Ada booking baru yang menunggu persetujuan", map[string]any{"bookingId": b.ID})
+	}
+
 	full, _ := s.q.GetBookingByID(ctx, b.ID)
 	return serializeBookingByID(full), nil
 }
@@ -416,6 +422,17 @@ func (s *BookingService) Cancel(ctx context.Context, id int32, userID int, role 
 	}
 	if _, err = s.q.CancelBooking(ctx, id); err != nil {
 		return nil, err
+	}
+	// Notifikasi: pembatalan → admin, dan supir yang ditugaskan (bila ada).
+	if s.notif != nil {
+		s.notif.NotifyAdmins("BOOKING_CANCELLED", "Booking dibatalkan",
+			"Booking dibatalkan oleh pemohon", map[string]any{"bookingId": id})
+		if b.AssignedDriverId.Valid {
+			if drv, derr := s.q.GetDriverByID(ctx, b.AssignedDriverId.Int32); derr == nil {
+				s.notif.Notify(drv.UserId, "BOOKING_CANCELLED", "Booking dibatalkan",
+					"Booking yang ditugaskan kepada Anda dibatalkan", map[string]any{"bookingId": id})
+			}
+		}
 	}
 	full, _ := s.q.GetBookingByID(ctx, id)
 	return serializeBookingByID(full), nil
@@ -483,19 +500,22 @@ func (s *BookingService) Approve(ctx context.Context, id int32, req ApproveBooki
 
 	full, _ := s.q.GetBookingByID(ctx, id)
 	
-	// Notify user
+	// Notifikasi persetujuan.
 	if s.notif != nil {
-		s.notif.NotifyUser(full.UserId, "Your booking has been approved", map[string]any{
-			"bookingId": full.ID,
-		})
-	}
-	// Notify driver if assigned
-	if full.DriverID.Valid && s.notif != nil {
-		driver, err := s.q.GetDriverByID(ctx, full.DriverID.Int32)
-		if err == nil {
-			s.notif.NotifyDriver(driver.UserId, "You have been assigned to a new booking", map[string]any{
-				"bookingId": full.ID,
-			})
+		// Pemohon (karyawan).
+		s.notif.Notify(full.UserId, "BOOKING_APPROVED", "Booking disetujui",
+			"Booking Anda telah disetujui", map[string]any{"bookingId": full.ID})
+		// Supir yang ditugaskan → dapat booking aktif.
+		if full.DriverID.Valid {
+			if driver, derr := s.q.GetDriverByID(ctx, full.DriverID.Int32); derr == nil {
+				s.notif.Notify(driver.UserId, "NEW_BOOKING", "Booking aktif baru",
+					"Anda mendapat booking aktif", map[string]any{"bookingId": full.ID})
+			}
+		}
+		// Booking ruangan → beri tahu room keeper.
+		if full.ResourceType == repository.ResourceTypeROOM {
+			s.notif.NotifyRoomKeepers("ROOM_BOOKED", "Ruangan dipesan",
+				"Ada booking ruangan yang disetujui", map[string]any{"bookingId": full.ID})
 		}
 	}
 
@@ -538,6 +558,10 @@ func (s *BookingService) Reject(ctx context.Context, id int32, req RejectBooking
 	})
 
 	full, _ := s.q.GetBookingByID(ctx, id)
+	if s.notif != nil {
+		s.notif.Notify(b.UserId, "BOOKING_REJECTED", "Booking ditolak",
+			"Booking Anda ditolak", map[string]any{"bookingId": id, "note": req.Note})
+	}
 	go util.SendBookingStatusEmail(b.UserName, b.UserName, int(id), b.ResourceName, "REJECTED", req.Note)
 	return serializeBookingByID(full), nil
 }
@@ -594,12 +618,13 @@ func (s *BookingService) AssignVehicle(ctx context.Context, id int32, req Assign
 	full, _ := s.q.GetBookingByID(ctx, id)
 	
 	if s.notif != nil {
-		s.notif.NotifyDriver(driver.UserId, "You have been assigned to a vehicle and booking", map[string]any{
-			"bookingId": full.ID,
-			"vehicleId": vehicle.ID,
-		})
+		s.notif.Notify(driver.UserId, "NEW_BOOKING", "Penugasan kendaraan",
+			"Anda ditugaskan kendaraan dan booking", map[string]any{
+				"bookingId": full.ID,
+				"vehicleId": vehicle.ID,
+			})
 	}
-	
+
 	return serializeBookingByID(full), nil
 }
 
@@ -666,6 +691,11 @@ func (s *BookingService) Start(ctx context.Context, id int32, odometer *int32, l
 	})
 
 	full, _ := s.q.GetBookingByID(ctx, id)
+	// Notifikasi: perjalanan dimulai → pemohon.
+	if s.notif != nil {
+		s.notif.Notify(full.UserId, "BOOKING_STARTED", "Perjalanan dimulai",
+			"Perjalanan booking Anda telah dimulai", map[string]any{"bookingId": id})
+	}
 	return serializeBookingByID(full), nil
 }
 
@@ -695,6 +725,7 @@ func (s *BookingService) Complete(ctx context.Context, id int32, userID int, rol
 	// (endDate). Kendaraan yang baru selesai dipakai setelah endDate dicatat
 	// sebagai overtime supir, mis. jadwal berakhir 16:30 tapi baru selesai
 	// 18:00 -> overtime 1 jam 30 menit. SPD (surat perintah dinas) dikecualikan.
+	var overtimeMins int32
 	if b.ResourceType == repository.ResourceTypeVEHICLE &&
 		b.BookingType == repository.BookingTypeNONSPD &&
 		b.AssignedDriverId.Valid {
@@ -702,6 +733,7 @@ func (s *BookingService) Complete(ctx context.Context, id int32, userID int, rol
 		if now.After(b.EndDate) {
 			overtimeMinutes := int32(now.Sub(b.EndDate).Minutes())
 			if overtimeMinutes > 0 {
+				overtimeMins = overtimeMinutes
 				_, _ = s.q.CreateDriverOvertime(ctx, repository.CreateDriverOvertimeParams{
 					BookingId:       b.ID,
 					DriverId:        b.AssignedDriverId.Int32,
@@ -732,6 +764,19 @@ func (s *BookingService) Complete(ctx context.Context, id int32, userID int, rol
 	})
 
 	full, _ := s.q.GetBookingByID(ctx, id)
+	// Notifikasi penyelesaian + overtime.
+	if s.notif != nil {
+		s.notif.Notify(full.UserId, "BOOKING_COMPLETED", "Booking selesai",
+			"Booking Anda telah selesai", map[string]any{"bookingId": id})
+		if overtimeMins > 0 && b.AssignedDriverId.Valid {
+			if drv, derr := s.q.GetDriverByID(ctx, b.AssignedDriverId.Int32); derr == nil {
+				s.notif.Notify(drv.UserId, "OVERTIME_RECORDED", "Overtime tercatat",
+					"Overtime Anda tercatat "+itoa(overtimeMins)+" menit", map[string]any{"bookingId": id})
+			}
+			s.notif.NotifyAdmins("OVERTIME_RECORDED", "Overtime supir",
+				"Overtime supir tercatat pada booking", map[string]any{"bookingId": id})
+		}
+	}
 	out := serializeBookingByID(full)
 	s.attachOvertime(ctx, out, id)
 	return out, nil
@@ -767,6 +812,13 @@ func (s *BookingService) RateDriver(ctx context.Context, bookingID int32, req Ra
 	})
 	if err != nil {
 		return nil, err
+	}
+	// Notifikasi: supir menerima penilaian.
+	if s.notif != nil {
+		if drv, derr := s.q.GetDriverByID(ctx, b.AssignedDriverId.Int32); derr == nil {
+			s.notif.Notify(drv.UserId, "DRIVER_RATED", "Penilaian diterima",
+				"Anda menerima rating "+itoa(int32(req.Rating))+" bintang", map[string]any{"bookingId": bookingID})
+		}
 	}
 	return map[string]any{
 		"id":        r.ID,
@@ -908,6 +960,11 @@ func (s *BookingService) SubstituteResource(ctx context.Context, id int32, req S
 	})
 
 	full, _ := s.q.GetBookingByID(ctx, id)
+	// Notifikasi: resource dialihkan → pemohon.
+	if s.notif != nil {
+		s.notif.Notify(b.UserId, "BOOKING_SUBSTITUTED", "Resource dialihkan",
+			"Kendaraan/ruangan booking Anda dialihkan admin", map[string]any{"bookingId": id})
+	}
 	return serializeBookingByID(full), nil
 }
 
@@ -1102,6 +1159,18 @@ func (s *BookingService) MergeBookings(ctx context.Context, primaryID int32, req
 		Description: sql.NullString{String: "Booking merged into primary #" + itoa(primaryID), Valid: true},
 	})
 
+	// Notifikasi: pemilik booking sekunder & supir trip utama.
+	if s.notif != nil {
+		s.notif.Notify(target.UserId, "BOOKING_MERGED", "Booking digabung",
+			"Booking Anda digabung ke trip lain", map[string]any{"bookingId": req.TargetBookingID})
+		if primary.AssignedDriverId.Valid {
+			if drv, derr := s.q.GetDriverByID(ctx, primary.AssignedDriverId.Int32); derr == nil {
+				s.notif.Notify(drv.UserId, "BOOKING_MERGED", "Trip digabung",
+					"Ada booking tambahan digabung ke trip Anda", map[string]any{"bookingId": primaryID})
+			}
+		}
+	}
+
 	return map[string]any{
 		"mergeId":            merge.ID,
 		"primaryBookingId":   merge.PrimaryBookingId,
@@ -1198,6 +1267,11 @@ func (s *BookingService) SubmitReturnReport(
 		EntityId:    sql.NullInt32{Int32: bookingID, Valid: true},
 		Description: sql.NullString{String: "Driver submitted return report", Valid: true},
 	})
+	// Notifikasi: laporan pengembalian masuk → admin.
+	if s.notif != nil {
+		s.notif.NotifyAdmins("RETURN_REPORT", "Laporan pengembalian",
+			"Driver mengirim laporan pengembalian", map[string]any{"bookingId": bookingID})
+	}
 	return nil
 }
 
