@@ -27,8 +27,8 @@ type Config struct {
 	SMTPPass string
 	SMTPFrom string
 
-	UploadDir      string
-	MaxFileSizeMB  int64
+	UploadDir     string
+	MaxFileSizeMB int64
 
 	FrontendOrigin string
 
@@ -47,7 +47,7 @@ func Load() {
 	C = Config{
 		AppEnv:               getEnv("APP_ENV", "development"),
 		AppPort:              getEnv("APP_PORT", "8080"),
-		DatabaseURL:          getEnv("DATABASE_URL", "postgres://postgres:postgres@localhost:5432/reservation_system"),
+		DatabaseURL:          getEnv("DATABASE_URL", "postgres://postgres:postgres@localhost:5432/reservation"),
 		JWTSecret:            getEnv("JWT_SECRET", "changeme"),
 		JWTAccessExpireMin:   getEnvInt("JWT_ACCESS_EXPIRE_MINUTES", 15),
 		JWTRefreshExpireDays: getEnvInt("JWT_REFRESH_EXPIRE_DAYS", 7),

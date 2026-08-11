@@ -10,27 +10,35 @@ import (
 )
 
 type UserService struct {
-	q repository.ExtendedQuerier
+	q  repository.ExtendedQuerier
+	db *sql.DB
 }
 
 func NewUserService(db *sql.DB) *UserService {
-	return &UserService{q: repository.New(db)}
+	return &UserService{
+		q:  repository.New(db),
+		db: db,
+	}
 }
 
 type CreateUserRequest struct {
-	EmployeeID   string `json:"employeeId"   validate:"required"`
-	Name         string `json:"name"         validate:"required"`
-	Email        string `json:"email"        validate:"required,email"`
-	Password     string `json:"password"     validate:"required,min=8"`
-	RoleID       int32  `json:"roleId"       validate:"required"`
-	DepartmentID int32  `json:"departmentId" validate:"required"`
+	EmployeeID    string `json:"employeeId"    validate:"required"`
+	Name          string `json:"name"          validate:"required"`
+	Email         string `json:"email"         validate:"required,email"`
+	Password      string `json:"password"      validate:"required,min=8"`
+	RoleID        int32  `json:"roleId"        validate:"required"`
+	DepartmentID  int32  `json:"departmentId"  validate:"required"`
+	LicenseNumber string `json:"licenseNumber" validate:"required"`
+	PhoneNumber   string `json:"phoneNumber"   validate:"required"`
 }
 
 type UpdateUserRequest struct {
-	Name         string `json:"name"         validate:"required"`
-	Email        string `json:"email"        validate:"required,email"`
-	RoleID       int32  `json:"roleId"       validate:"required"`
-	DepartmentID int32  `json:"departmentId" validate:"required"`
+	Name          string `json:"name"          validate:"required"`
+	Email         string `json:"email"         validate:"required,email"`
+	RoleID        int32  `json:"roleId"        validate:"required"`
+	DepartmentID  int32  `json:"departmentId"  validate:"required"`
+	LicenseNumber string `json:"licenseNumber" validate:"required"`
+	PhoneNumber   string `json:"phoneNumber"   validate:"required"`
 }
 
 func serializeUser(u repository.ListUsersRow) map[string]any {
@@ -88,7 +96,8 @@ func (s *UserService) GetByID(ctx context.Context, id int32) (map[string]any, er
 	if err != nil {
 		return nil, util.ErrNotFound
 	}
-	return map[string]any{
+
+	out := map[string]any{
 		"id":           u.ID,
 		"employeeId":   u.EmployeeId,
 		"name":         u.Name,
@@ -98,7 +107,16 @@ func (s *UserService) GetByID(ctx context.Context, id int32) (map[string]any, er
 		"role":         map[string]any{"id": u.RoleId, "name": string(u.RoleName)},
 		"department":   map[string]any{"id": u.DepartmentId, "name": u.DepartmentName},
 		"createdAt":    u.CreatedAt,
-	}, nil
+	}
+
+	if string(u.RoleName) == "DRIVER" {
+		if d, err := s.q.GetDriverByUserID(ctx, id); err == nil {
+			out["licenseNumber"] = d.LicenseNumber
+			out["phoneNumber"] = d.PhoneNumber
+		}
+	}
+
+	return out, nil
 }
 
 func (s *UserService) Create(ctx context.Context, req CreateUserRequest) (map[string]any, error) {
@@ -109,7 +127,17 @@ func (s *UserService) Create(ctx context.Context, req CreateUserRequest) (map[st
 	if err != nil {
 		return nil, err
 	}
-	user, err := s.q.CreateUser(ctx, repository.CreateUserParams{
+
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	defer tx.Rollback()
+
+	qtx := repository.New(tx)
+
+	user, err := qtx.CreateUser(ctx, repository.CreateUserParams{
 		EmployeeId:   req.EmployeeID,
 		Name:         req.Name,
 		Email:        req.Email,
@@ -121,7 +149,28 @@ func (s *UserService) Create(ctx context.Context, req CreateUserRequest) (map[st
 	if err != nil {
 		return nil, err
 	}
-	full, _ := s.q.GetUserByID(ctx, user.ID)
+	full, _ := qtx.GetUserByID(ctx, user.ID)
+
+	if string(full.RoleName) == "DRIVER" {
+		if req.LicenseNumber == "" || req.PhoneNumber == "" {
+			return nil, util.NewError(400, "licenseNumber and phoneNumber are required for DRIVER role", util.ErrBadRequest)
+		}
+
+		_, err = qtx.CreateDriver(ctx, repository.CreateDriverParams{
+			UserId:        full.ID,
+			LicenseNumber: req.LicenseNumber,
+			PhoneNumber:   req.PhoneNumber,
+		})
+
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
+
 	return map[string]any{
 		"id":         full.ID,
 		"employeeId": full.EmployeeId,
@@ -136,13 +185,55 @@ func (s *UserService) Update(ctx context.Context, id int32, req UpdateUserReques
 	if _, err := s.q.GetUserByID(ctx, id); err != nil {
 		return nil, util.ErrNotFound
 	}
-	_, err := s.q.UpdateUser(ctx, repository.UpdateUserParams{
+
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
+
+	qtx := repository.New(tx)
+
+	_, err = qtx.UpdateUser(ctx, repository.UpdateUserParams{
 		ID: id, Name: req.Name, Email: req.Email,
 		RoleId: req.RoleID, DepartmentId: req.DepartmentID,
 	})
 	if err != nil {
 		return nil, err
 	}
+
+	full, _ := qtx.GetUserByID(ctx, id)
+
+	if string(full.RoleName) == "DRIVER" {
+		if req.LicenseNumber == "" || req.PhoneNumber == "" {
+			return nil, util.NewError(400, "licenseNumber dan phoneNumber wajib diisi khusus untuk role Driver", nil)
+		}
+
+		if d, err := qtx.GetDriverByUserID(ctx, id); err == nil {
+			_, err = qtx.UpdateDriver(ctx, repository.UpdateDriverParams{
+				ID:            d.ID,
+				LicenseNumber: req.LicenseNumber,
+				PhoneNumber:   req.PhoneNumber,
+			})
+			if err != nil {
+				return nil, err
+			}
+		} else {
+			_, err = qtx.CreateDriver(ctx, repository.CreateDriverParams{
+				UserId:        id,
+				LicenseNumber: req.LicenseNumber,
+				PhoneNumber:   req.PhoneNumber,
+			})
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
+
 	return s.GetByID(ctx, id)
 }
 
@@ -221,7 +312,7 @@ const DefaultBulkPassword = "Password123!"
 
 // BulkUserRow = satu baris data dari Excel (role & department berupa NAMA, bukan id).
 type BulkUserRow struct {
-	Row            int    // nomor baris di file Excel (untuk pesan error)
+	Row            int // nomor baris di file Excel (untuk pesan error)
 	EmployeeID     string
 	Name           string
 	Email          string
