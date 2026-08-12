@@ -460,9 +460,9 @@ func (s *BookingService) Approve(ctx context.Context, id int32, req ApproveBooki
 		if err == nil {
 			overlapCount, _ := s.q.GetOverlappingPassengerCount(ctx, repository.GetOverlappingPassengerCountParams{
 				AssignedVehicleId: b.AssignedVehicleId,
-				StartDate:         b.StartDate,
-				EndDate:           b.EndDate,
-				ID:                b.ID,
+				CheckStart:         b.StartDate,
+				CheckEnd:           b.EndDate,
+				ExcludeID:               b.ID,
 			})
 			if int(overlapCount) + int(b.PassengerCount) > int(v.Capacity) {
 				warningMsg = "Warning: Vehicle capacity overload! (Remaining capacity is negative). Please substitute vehicle if needed."
@@ -590,9 +590,9 @@ func (s *BookingService) AssignVehicle(ctx context.Context, id int32, req Assign
 
 	count, _ := s.q.CheckVehicleConflict(ctx, repository.CheckVehicleConflictParams{
 		AssignedVehicleId: sql.NullInt32{Int32: req.VehicleID, Valid: true},
-		StartDate:         b.StartDate,
-		EndDate:           b.EndDate,
-		ID:                id,
+		CheckStart:        b.StartDate,
+		CheckEnd:          b.EndDate,
+		ExcludeID:         id,
 	})
 	if count > 0 {
 		return nil, util.NewError(409, "vehicle is already assigned to another booking in this period", util.ErrConflict)
@@ -933,8 +933,8 @@ func (s *BookingService) SubstituteResource(ctx context.Context, id int32, req S
 
 	count, _ := s.q.CheckBookingConflict(ctx, repository.CheckBookingConflictParams{
 		ResourceId: req.ResourceID,
-		StartDate:  b.StartDate,
-		EndDate:    b.EndDate,
+		CheckStart:  b.StartDate,
+		CheckEnd:    b.EndDate,
 	})
 	if count > 0 {
 		return nil, util.NewError(409, "new resource has a schedule conflict in this period", util.ErrConflict)
@@ -1062,8 +1062,8 @@ func (s *BookingService) MergeBookings(ctx context.Context, primaryID int32, req
 	// Check that the expanded time window doesn't conflict with another booking on the same resource.
 	conflictCount, _ := s.q.CheckBookingConflict(ctx, repository.CheckBookingConflictParams{
 		ResourceId: primary.ResourceId,
-		StartDate:  effectiveStart,
-		EndDate:    effectiveEnd,
+		CheckStart:  effectiveStart,
+		CheckEnd:    effectiveEnd,
 		ExcludeID:  sql.NullInt32{Int32: primaryID, Valid: true},
 	})
 	// The TARGET booking is the merge partner, not a real conflict. When target and

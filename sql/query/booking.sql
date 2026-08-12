@@ -127,17 +127,17 @@ UPDATE bookings SET status = 'CANCELLED', "updatedAt" = NOW() WHERE id = $1 RETU
 SELECT COUNT(*) FROM bookings
 WHERE "resourceId" = $1
   AND status IN ('PENDING', 'APPROVED', 'ONGOING')
-  AND "startDate" < $3
-  AND "endDate" > $2
+  AND "startDate" < sqlc.arg(check_end)
+  AND "endDate" > sqlc.arg(check_start)
   AND (sqlc.narg(exclude_id)::int IS NULL OR id != sqlc.narg(exclude_id)::int);
 
 -- name: CheckVehicleConflict :one
 SELECT COUNT(*) FROM bookings
 WHERE "assignedVehicleId" = $1
   AND status IN ('APPROVED', 'ONGOING')
-  AND "startDate" < $3
-  AND "endDate" > $2
-  AND id != $4;
+  AND "startDate" < sqlc.arg(check_end)
+  AND "endDate" > sqlc.arg(check_start)
+  AND id != sqlc.arg(exclude_id);
 
 -- name: CreateApprovalLog :one
 INSERT INTO approval_logs ("bookingId", "approverId", action, note)
@@ -196,6 +196,6 @@ WHERE id = $1 RETURNING *;
 SELECT COALESCE(SUM("passengerCount"), 0)::int FROM bookings
 WHERE "assignedVehicleId" = $1
   AND status IN ('APPROVED', 'ONGOING')
-  AND "startDate" < $3
-  AND "endDate" > $2
-  AND id != $4;
+  AND "startDate" < sqlc.arg(check_end)
+  AND "endDate" > sqlc.arg(check_start)
+  AND id != sqlc.arg(exclude_id);
