@@ -117,6 +117,12 @@ func (s *UserService) GetByID(ctx context.Context, id int32) (map[string]any, er
 		}
 	}
 
+	if string(u.RoleName) == "ROOM_KEEPER" {
+		if rk, err := s.q.GetRoomKeeperByUserID(ctx, id); err == nil {
+			out["phoneNumber"] = rk.PhoneNumber
+		}
+	}
+
 	return out, nil
 }
 
@@ -161,6 +167,21 @@ func (s *UserService) Create(ctx context.Context, req CreateUserRequest) (map[st
 			UserId:        full.ID,
 			LicenseNumber: req.LicenseNumber,
 			PhoneNumber:   req.PhoneNumber,
+		})
+
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	if string(full.RoleName) == "ROOM_KEEPER" {
+		if req.PhoneNumber == "" {
+			return nil, util.NewError(400, "phoneNumber is required for ROOM_KEEPER role", util.ErrBadRequest)
+		}
+
+		_, err = qtx.CreateRoomKeeper(ctx, repository.CreateRoomKeeperParams{
+			UserId:      full.ID,
+			PhoneNumber: req.PhoneNumber,
 		})
 
 		if err != nil {
@@ -224,6 +245,30 @@ func (s *UserService) Update(ctx context.Context, id int32, req UpdateUserReques
 				UserId:        id,
 				LicenseNumber: req.LicenseNumber,
 				PhoneNumber:   req.PhoneNumber,
+			})
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+
+	if string(full.RoleName) == "ROOM_KEEPER" {
+		if req.PhoneNumber == "" {
+			return nil, util.NewError(400, "phoneNumber wajib diisi khusus untuk role Room Keeper", util.ErrBadRequest)
+		}
+
+		if rk, err := qtx.GetRoomKeeperByUserID(ctx, id); err == nil {
+			_, err = qtx.UpdateRoomKeeper(ctx, repository.UpdateRoomKeeperParams{
+				ID:          rk.ID,
+				PhoneNumber: req.PhoneNumber,
+			})
+			if err != nil {
+				return nil, err
+			}
+		} else {
+			_, err = qtx.CreateRoomKeeper(ctx, repository.CreateRoomKeeperParams{
+				UserId:      id,
+				PhoneNumber: req.PhoneNumber,
 			})
 			if err != nil {
 				return nil, err

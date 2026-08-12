@@ -40,7 +40,8 @@ CREATE TYPE resource_type AS ENUM (
 CREATE TYPE resource_status AS ENUM (
     'AVAILABLE',
     'MAINTENANCE',
-    'INACTIVE'
+    'INACTIVE',
+    'IN_USE'
 );
 
 CREATE TYPE booking_status AS ENUM (

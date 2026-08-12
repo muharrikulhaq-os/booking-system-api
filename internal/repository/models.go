@@ -279,6 +279,7 @@ const (
 	ResourceStatusAVAILABLE   ResourceStatus = "AVAILABLE"
 	ResourceStatusMAINTENANCE ResourceStatus = "MAINTENANCE"
 	ResourceStatusINACTIVE    ResourceStatus = "INACTIVE"
+	ResourceStatusINUSE       ResourceStatus = "IN_USE"
 )
 
 func (e *ResourceStatus) Scan(src interface{}) error {

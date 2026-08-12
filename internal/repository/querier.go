@@ -27,6 +27,7 @@ type Querier interface {
 	CountGuestBookings(ctx context.Context, status NullBookingStatus) (int64, error)
 	CountMaintenance(ctx context.Context, vehicleID sql.NullInt32) (int64, error)
 	CountNotificationsByUserID(ctx context.Context, userID int32) (int64, error)
+	CountRoomKeepers(ctx context.Context, isActive sql.NullBool) (int64, error)
 	CountRooms(ctx context.Context, arg CountRoomsParams) (int64, error)
 	CountUsers(ctx context.Context, arg CountUsersParams) (int64, error)
 	CountVehicles(ctx context.Context, arg CountVehiclesParams) (int64, error)
@@ -49,6 +50,7 @@ type Querier interface {
 	CreateRefreshToken(ctx context.Context, arg CreateRefreshTokenParams) (RefreshToken, error)
 	CreateResource(ctx context.Context, arg CreateResourceParams) (Resource, error)
 	CreateRoom(ctx context.Context, arg CreateRoomParams) (Room, error)
+	CreateRoomKeeper(ctx context.Context, arg CreateRoomKeeperParams) (RoomKeeper, error)
 	CreateUser(ctx context.Context, arg CreateUserParams) (User, error)
 	CreateVehicle(ctx context.Context, arg CreateVehicleParams) (Vehicle, error)
 	CreateVehicleCategory(ctx context.Context, name string) (VehicleCategory, error)
@@ -87,6 +89,7 @@ type Querier interface {
 	GetRefreshToken(ctx context.Context, arg GetRefreshTokenParams) (RefreshToken, error)
 	GetResourceByID(ctx context.Context, id int32) (Resource, error)
 	GetRoomByID(ctx context.Context, id int32) (GetRoomByIDRow, error)
+	GetRoomKeeperByID(ctx context.Context, id int32) (GetRoomKeeperByIDRow, error)
 	GetUserByEmail(ctx context.Context, email string) (GetUserByEmailRow, error)
 	GetUserByEmployeeID(ctx context.Context, employeeid string) (User, error)
 	GetUserByID(ctx context.Context, id int32) (GetUserByIDRow, error)
@@ -122,9 +125,16 @@ type Querier interface {
 	ListNotificationsByUserID(ctx context.Context, arg ListNotificationsByUserIDParams) ([]Notification, error)
 	ListOvertimeByDriver(ctx context.Context, driverid int32) ([]ListOvertimeByDriverRow, error)
 	ListRoles(ctx context.Context) ([]Role, error)
+	ListRoomKeepers(ctx context.Context, arg ListRoomKeepersParams) ([]ListRoomKeepersRow, error)
+	// Saat status filter = AVAILABLE, resource yang punya booking APPROVED/ONGOING
+	// yang overlap dengan waktu sekarang ikut disembunyikan — lihat catatan di ListVehicles.
 	ListRooms(ctx context.Context, arg ListRoomsParams) ([]ListRoomsRow, error)
 	ListUsers(ctx context.Context, arg ListUsersParams) ([]ListUsersRow, error)
 	ListVehicleCategories(ctx context.Context) ([]VehicleCategory, error)
+	// Saat status filter = AVAILABLE, resource yang punya booking APPROVED/ONGOING
+	// yang overlap dengan waktu sekarang ikut disembunyikan — bukan cuma yang sudah
+	// di-Start (resources.status = IN_USE), tapi juga yang baru APPROVED tapi jadwalnya
+	// sudah berjalan. Filter status lain (MAINTENANCE/INACTIVE/IN_USE) tidak terpengaruh.
 	ListVehicles(ctx context.Context, arg ListVehiclesParams) ([]ListVehiclesRow, error)
 	MarkAllNotificationsAsRead(ctx context.Context, userID int32) error
 	// Booking APPROVED tapi tidak pernah dimulai (tidak jadi ONGOING) selama masa bookingnya → EXPIRED
@@ -152,6 +162,7 @@ type Querier interface {
 	StartBooking(ctx context.Context, id int32) (Booking, error)
 	StartGuestBooking(ctx context.Context, id int32) (GuestBooking, error)
 	ToggleDriverActive(ctx context.Context, id int32) (Driver, error)
+	ToggleRoomKeeperActive(ctx context.Context, id int32) (RoomKeeper, error)
 	ToggleUserActive(ctx context.Context, id int32) (User, error)
 	UpdateBookingResource(ctx context.Context, arg UpdateBookingResourceParams) (Booking, error)
 	UpdateBookingStatus(ctx context.Context, arg UpdateBookingStatusParams) (Booking, error)
@@ -166,6 +177,7 @@ type Querier interface {
 	UpdateResourceName(ctx context.Context, arg UpdateResourceNameParams) error
 	UpdateResourceStatus(ctx context.Context, arg UpdateResourceStatusParams) (Resource, error)
 	UpdateRoom(ctx context.Context, arg UpdateRoomParams) (Room, error)
+	UpdateRoomKeeper(ctx context.Context, arg UpdateRoomKeeperParams) (RoomKeeper, error)
 	UpdateRoomPhoto(ctx context.Context, arg UpdateRoomPhotoParams) (Room, error)
 	UpdateUser(ctx context.Context, arg UpdateUserParams) (User, error)
 	UpdateUserPassword(ctx context.Context, arg UpdateUserPasswordParams) error

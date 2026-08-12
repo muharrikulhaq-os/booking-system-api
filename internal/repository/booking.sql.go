@@ -129,23 +129,23 @@ const checkBookingConflict = `-- name: CheckBookingConflict :one
 SELECT COUNT(*) FROM bookings
 WHERE "resourceId" = $1
   AND status IN ('PENDING', 'APPROVED', 'ONGOING')
-  AND "startDate" < $3
-  AND "endDate" > $2
+  AND "startDate" < $2
+  AND "endDate" > $3
   AND ($4::int IS NULL OR id != $4::int)
 `
 
 type CheckBookingConflictParams struct {
 	ResourceId int32         `json:"resourceId"`
-	EndDate    time.Time     `json:"endDate"`
-	StartDate  time.Time     `json:"startDate"`
+	CheckEnd   time.Time     `json:"check_end"`
+	CheckStart time.Time     `json:"check_start"`
 	ExcludeID  sql.NullInt32 `json:"exclude_id"`
 }
 
 func (q *Queries) CheckBookingConflict(ctx context.Context, arg CheckBookingConflictParams) (int64, error) {
 	row := q.db.QueryRowContext(ctx, checkBookingConflict,
 		arg.ResourceId,
-		arg.EndDate,
-		arg.StartDate,
+		arg.CheckEnd,
+		arg.CheckStart,
 		arg.ExcludeID,
 	)
 	var count int64
@@ -157,24 +157,24 @@ const checkVehicleConflict = `-- name: CheckVehicleConflict :one
 SELECT COUNT(*) FROM bookings
 WHERE "assignedVehicleId" = $1
   AND status IN ('APPROVED', 'ONGOING')
-  AND "startDate" < $3
-  AND "endDate" > $2
+  AND "startDate" < $2
+  AND "endDate" > $3
   AND id != $4
 `
 
 type CheckVehicleConflictParams struct {
 	AssignedVehicleId sql.NullInt32 `json:"assignedVehicleId"`
-	EndDate           time.Time     `json:"endDate"`
-	StartDate         time.Time     `json:"startDate"`
-	ID                int32         `json:"id"`
+	CheckEnd          time.Time     `json:"check_end"`
+	CheckStart        time.Time     `json:"check_start"`
+	ExcludeID         int32         `json:"exclude_id"`
 }
 
 func (q *Queries) CheckVehicleConflict(ctx context.Context, arg CheckVehicleConflictParams) (int64, error) {
 	row := q.db.QueryRowContext(ctx, checkVehicleConflict,
 		arg.AssignedVehicleId,
-		arg.EndDate,
-		arg.StartDate,
-		arg.ID,
+		arg.CheckEnd,
+		arg.CheckStart,
+		arg.ExcludeID,
 	)
 	var count int64
 	err := row.Scan(&count)
@@ -633,24 +633,24 @@ const getOverlappingPassengerCount = `-- name: GetOverlappingPassengerCount :one
 SELECT COALESCE(SUM("passengerCount"), 0)::int FROM bookings
 WHERE "assignedVehicleId" = $1
   AND status IN ('APPROVED', 'ONGOING')
-  AND "startDate" < $3
-  AND "endDate" > $2
+  AND "startDate" < $2
+  AND "endDate" > $3
   AND id != $4
 `
 
 type GetOverlappingPassengerCountParams struct {
 	AssignedVehicleId sql.NullInt32 `json:"assignedVehicleId"`
-	EndDate           time.Time     `json:"endDate"`
-	StartDate         time.Time     `json:"startDate"`
-	ID                int32         `json:"id"`
+	CheckEnd          time.Time     `json:"check_end"`
+	CheckStart        time.Time     `json:"check_start"`
+	ExcludeID         int32         `json:"exclude_id"`
 }
 
 func (q *Queries) GetOverlappingPassengerCount(ctx context.Context, arg GetOverlappingPassengerCountParams) (int32, error) {
 	row := q.db.QueryRowContext(ctx, getOverlappingPassengerCount,
 		arg.AssignedVehicleId,
-		arg.EndDate,
-		arg.StartDate,
-		arg.ID,
+		arg.CheckEnd,
+		arg.CheckStart,
+		arg.ExcludeID,
 	)
 	var column_1 int32
 	err := row.Scan(&column_1)

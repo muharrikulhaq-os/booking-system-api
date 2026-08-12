@@ -171,8 +171,8 @@ func (s *MaintenanceService) Create(ctx context.Context, req CreateMaintenanceRe
 	// Check overlapping bookings on the resource
 	overlapCount, _ := s.q.CheckBookingConflict(ctx, repository.CheckBookingConflictParams{
 		ResourceId: vehicle.ResourceId,
-		StartDate:  req.StartDate,
-		EndDate:    endDate,
+		CheckStart:  req.StartDate,
+		CheckEnd:    endDate,
 	})
 
 	warningMsg := ""
