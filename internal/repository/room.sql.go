@@ -16,6 +16,13 @@ JOIN resources r ON r.id = rm."resourceId"
 WHERE ($1::text IS NULL
        OR r.name ILIKE '%' || $1::text || '%')
   AND ($2::resource_status IS NULL OR r.status = $2::resource_status)
+  AND ($2::resource_status IS DISTINCT FROM 'AVAILABLE'::resource_status
+       OR NOT EXISTS (
+           SELECT 1 FROM bookings bk
+           WHERE bk."resourceId" = r.id
+             AND bk.status IN ('APPROVED', 'ONGOING')
+             AND NOW() BETWEEN bk."startDate" AND bk."endDate"
+       ))
 `
 
 type CountRoomsParams struct {
@@ -93,6 +100,13 @@ WHERE ($3::text IS NULL
        OR r.name ILIKE '%' || $3::text || '%'
        OR rm.location ILIKE '%' || $3::text || '%')
   AND ($4::resource_status IS NULL OR r.status = $4::resource_status)
+  AND ($4::resource_status IS DISTINCT FROM 'AVAILABLE'::resource_status
+       OR NOT EXISTS (
+           SELECT 1 FROM bookings bk
+           WHERE bk."resourceId" = r.id
+             AND bk.status IN ('APPROVED', 'ONGOING')
+             AND NOW() BETWEEN bk."startDate" AND bk."endDate"
+       ))
 ORDER BY r."createdAt" DESC
 LIMIT $1 OFFSET $2
 `
@@ -114,6 +128,8 @@ type ListRoomsRow struct {
 	ResourceStatus ResourceStatus `json:"resource_status"`
 }
 
+// Saat status filter = AVAILABLE, resource yang punya booking APPROVED/ONGOING
+// yang overlap dengan waktu sekarang ikut disembunyikan — lihat catatan di ListVehicles.
 func (q *Queries) ListRooms(ctx context.Context, arg ListRoomsParams) ([]ListRoomsRow, error) {
 	rows, err := q.db.QueryContext(ctx, listRooms,
 		arg.Limit,

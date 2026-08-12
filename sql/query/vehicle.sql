@@ -1,4 +1,8 @@
 -- name: ListVehicles :many
+-- Saat status filter = AVAILABLE, resource yang punya booking APPROVED/ONGOING
+-- yang overlap dengan waktu sekarang ikut disembunyikan — bukan cuma yang sudah
+-- di-Start (resources.status = IN_USE), tapi juga yang baru APPROVED tapi jadwalnya
+-- sudah berjalan. Filter status lain (MAINTENANCE/INACTIVE/IN_USE) tidak terpengaruh.
 SELECT v.*, r.name AS resource_name, r.status AS resource_status,
        vc.name AS category_name
 FROM vehicles v
@@ -10,6 +14,13 @@ WHERE (sqlc.narg(search)::text IS NULL
        OR v.brand ILIKE '%' || sqlc.narg(search)::text || '%')
   AND (sqlc.narg(category_id)::int IS NULL OR v."categoryId" = sqlc.narg(category_id)::int)
   AND (sqlc.narg(status)::resource_status IS NULL OR r.status = sqlc.narg(status)::resource_status)
+  AND (sqlc.narg(status)::resource_status IS DISTINCT FROM 'AVAILABLE'::resource_status
+       OR NOT EXISTS (
+           SELECT 1 FROM bookings bk
+           WHERE bk."resourceId" = r.id
+             AND bk.status IN ('APPROVED', 'ONGOING')
+             AND NOW() BETWEEN bk."startDate" AND bk."endDate"
+       ))
 ORDER BY r."createdAt" DESC
 LIMIT $1 OFFSET $2;
 
@@ -20,7 +31,14 @@ WHERE (sqlc.narg(search)::text IS NULL
        OR r.name ILIKE '%' || sqlc.narg(search)::text || '%'
        OR v."plateNumber" ILIKE '%' || sqlc.narg(search)::text || '%')
   AND (sqlc.narg(category_id)::int IS NULL OR v."categoryId" = sqlc.narg(category_id)::int)
-  AND (sqlc.narg(status)::resource_status IS NULL OR r.status = sqlc.narg(status)::resource_status);
+  AND (sqlc.narg(status)::resource_status IS NULL OR r.status = sqlc.narg(status)::resource_status)
+  AND (sqlc.narg(status)::resource_status IS DISTINCT FROM 'AVAILABLE'::resource_status
+       OR NOT EXISTS (
+           SELECT 1 FROM bookings bk
+           WHERE bk."resourceId" = r.id
+             AND bk.status IN ('APPROVED', 'ONGOING')
+             AND NOW() BETWEEN bk."startDate" AND bk."endDate"
+       ));
 
 -- name: GetVehicleByID :one
 SELECT v.*, r.name AS resource_name, r.status AS resource_status,

@@ -18,6 +18,13 @@ WHERE ($1::text IS NULL
        OR v."plateNumber" ILIKE '%' || $1::text || '%')
   AND ($2::int IS NULL OR v."categoryId" = $2::int)
   AND ($3::resource_status IS NULL OR r.status = $3::resource_status)
+  AND ($3::resource_status IS DISTINCT FROM 'AVAILABLE'::resource_status
+       OR NOT EXISTS (
+           SELECT 1 FROM bookings bk
+           WHERE bk."resourceId" = r.id
+             AND bk.status IN ('APPROVED', 'ONGOING')
+             AND NOW() BETWEEN bk."startDate" AND bk."endDate"
+       ))
 `
 
 type CountVehiclesParams struct {
@@ -277,6 +284,13 @@ WHERE ($3::text IS NULL
        OR v.brand ILIKE '%' || $3::text || '%')
   AND ($4::int IS NULL OR v."categoryId" = $4::int)
   AND ($5::resource_status IS NULL OR r.status = $5::resource_status)
+  AND ($5::resource_status IS DISTINCT FROM 'AVAILABLE'::resource_status
+       OR NOT EXISTS (
+           SELECT 1 FROM bookings bk
+           WHERE bk."resourceId" = r.id
+             AND bk.status IN ('APPROVED', 'ONGOING')
+             AND NOW() BETWEEN bk."startDate" AND bk."endDate"
+       ))
 ORDER BY r."createdAt" DESC
 LIMIT $1 OFFSET $2
 `
@@ -308,6 +322,10 @@ type ListVehiclesRow struct {
 	CategoryName            string         `json:"category_name"`
 }
 
+// Saat status filter = AVAILABLE, resource yang punya booking APPROVED/ONGOING
+// yang overlap dengan waktu sekarang ikut disembunyikan — bukan cuma yang sudah
+// di-Start (resources.status = IN_USE), tapi juga yang baru APPROVED tapi jadwalnya
+// sudah berjalan. Filter status lain (MAINTENANCE/INACTIVE/IN_USE) tidak terpengaruh.
 func (q *Queries) ListVehicles(ctx context.Context, arg ListVehiclesParams) ([]ListVehiclesRow, error) {
 	rows, err := q.db.QueryContext(ctx, listVehicles,
 		arg.Limit,

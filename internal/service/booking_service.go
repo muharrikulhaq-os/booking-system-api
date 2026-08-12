@@ -671,6 +671,11 @@ func (s *BookingService) Start(ctx context.Context, id int32, odometer *int32, l
 	if _, err = s.q.StartBooking(ctx, id); err != nil {
 		return nil, err
 	}
+	// Resource dianggap sedang dipakai selama booking ONGOING — dikembalikan ke
+	// AVAILABLE otomatis saat Complete(). Lihat resource_status enum (IN_USE).
+	_, _ = s.q.UpdateResourceStatus(ctx, repository.UpdateResourceStatusParams{
+		ID: b.ResourceId, Status: repository.ResourceStatusINUSE,
+	})
 	// Simpan odometer awal + lokasi + foto (khusus booking kendaraan).
 	if b.ResourceType == repository.ResourceTypeVEHICLE && (odometer != nil || location != "" || photoURL != "") {
 		var odo sql.NullInt32
@@ -720,6 +725,10 @@ func (s *BookingService) Complete(ctx context.Context, id int32, userID int, rol
 	if _, err = s.q.CompleteBooking(ctx, id); err != nil {
 		return nil, err
 	}
+	// Resource kembali AVAILABLE setelah booking selesai.
+	_, _ = s.q.UpdateResourceStatus(ctx, repository.UpdateResourceStatusParams{
+		ID: b.ResourceId, Status: repository.ResourceStatusAVAILABLE,
+	})
 
 	// Overtime (Non-SPD only): jam kerja normal mengikuti jadwal booking
 	// (endDate). Kendaraan yang baru selesai dipakai setelah endDate dicatat
