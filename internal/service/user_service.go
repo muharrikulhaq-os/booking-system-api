@@ -29,8 +29,8 @@ type CreateUserRequest struct {
 	Password      string `json:"password"      validate:"required,min=8"`
 	RoleID        int32  `json:"roleId"        validate:"required"`
 	DepartmentID  int32  `json:"departmentId"  validate:"required"`
-	LicenseNumber string `json:"licenseNumber" validate:"required"`
-	PhoneNumber   string `json:"phoneNumber"   validate:"required"`
+	LicenseNumber string `json:"licenseNumber"`
+	PhoneNumber   string `json:"phoneNumber"`
 }
 
 type UpdateUserRequest struct {
@@ -38,8 +38,8 @@ type UpdateUserRequest struct {
 	Email         string `json:"email"         validate:"required,email"`
 	RoleID        int32  `json:"roleId"        validate:"required"`
 	DepartmentID  int32  `json:"departmentId"  validate:"required"`
-	LicenseNumber string `json:"licenseNumber" validate:"required"`
-	PhoneNumber   string `json:"phoneNumber"   validate:"required"`
+	LicenseNumber string `json:"licenseNumber"`
+	PhoneNumber   string `json:"phoneNumber"`
 }
 
 func serializeUser(u repository.ListUsersRow) map[string]any {
