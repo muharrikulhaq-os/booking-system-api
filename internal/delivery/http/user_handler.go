@@ -30,6 +30,7 @@ func (h *UserHandler) Register(r fiber.Router) {
 	g := r.Group("/users", auth)
 	g.Get("", admin, h.List)
 	g.Get("/me", h.GetMe)
+	g.Get("/summary", admin, h.Summary)
 	g.Get("/roles", h.ListRoles)
 	g.Get("/departments", h.ListDepartments)
 	g.Post("/departments", admin, h.CreateDepartment)
@@ -126,6 +127,16 @@ func (h *UserHandler) Delete(c *fiber.Ctx) error {
 		return err
 	}
 	return util.OK(c, "User deleted", nil)
+}
+
+// Summary mengembalikan rangkuman jumlah user: total, per role, per departemen,
+// dan matriks role × departemen.
+func (h *UserHandler) Summary(c *fiber.Ctx) error {
+	data, err := h.svc.Summary(c.Context())
+	if err != nil {
+		return err
+	}
+	return util.OK(c, "User summary retrieved", data)
 }
 
 func (h *UserHandler) ListRoles(c *fiber.Ctx) error {

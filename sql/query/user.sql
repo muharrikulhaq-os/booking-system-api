@@ -23,6 +23,57 @@ WHERE (sqlc.narg(search)::text IS NULL
   AND (sqlc.narg(is_active)::boolean IS NULL OR u."isActive" = sqlc.narg(is_active)::boolean)
   AND (sqlc.narg(department_id)::int IS NULL OR u."departmentId" = sqlc.narg(department_id)::int);
 
+-- name: UserSummaryTotals :one
+SELECT
+    COUNT(*)                                        AS total_users,
+    COUNT(*) FILTER (WHERE u."isActive")            AS active_users,
+    COUNT(*) FILTER (WHERE NOT u."isActive")        AS inactive_users,
+    COUNT(*) FILTER (WHERE u."profilePhoto" IS NOT NULL) AS with_photo,
+    COUNT(*) FILTER (WHERE u."createdAt" >= date_trunc('month', NOW())) AS new_this_month,
+    COUNT(*) FILTER (WHERE u."createdAt" >= NOW() - INTERVAL '30 days')  AS new_last_30_days
+FROM users u;
+
+-- name: UserSummaryByRole :many
+-- LEFT JOIN dari roles supaya role yang belum punya user tetap muncul dengan total 0.
+SELECT
+    r.id                                     AS role_id,
+    r.name                                   AS role_name,
+    COUNT(u.id)                              AS total,
+    COUNT(u.id) FILTER (WHERE u."isActive")  AS active,
+    COUNT(u.id) FILTER (WHERE NOT u."isActive") AS inactive
+FROM roles r
+LEFT JOIN users u ON u."roleId" = r.id
+GROUP BY r.id, r.name
+ORDER BY r.id;
+
+-- name: UserSummaryByDepartment :many
+SELECT
+    d.id                                     AS department_id,
+    d.name                                   AS department_name,
+    COUNT(u.id)                              AS total,
+    COUNT(u.id) FILTER (WHERE u."isActive")  AS active,
+    COUNT(u.id) FILTER (WHERE NOT u."isActive") AS inactive
+FROM departments d
+LEFT JOIN users u ON u."departmentId" = d.id
+GROUP BY d.id, d.name
+ORDER BY COUNT(u.id) DESC, d.name;
+
+-- name: UserSummaryByRoleDepartment :many
+-- Matriks role x department, hanya kombinasi yang benar-benar punya user.
+SELECT
+    r.id     AS role_id,
+    r.name   AS role_name,
+    d.id     AS department_id,
+    d.name   AS department_name,
+    COUNT(u.id)                                 AS total,
+    COUNT(u.id) FILTER (WHERE u."isActive")     AS active,
+    COUNT(u.id) FILTER (WHERE NOT u."isActive") AS inactive
+FROM users u
+JOIN roles r       ON r.id = u."roleId"
+JOIN departments d ON d.id = u."departmentId"
+GROUP BY r.id, r.name, d.id, d.name
+ORDER BY r.id, COUNT(u.id) DESC, d.name;
+
 -- name: CreateUser :one
 INSERT INTO users ("employeeId", name, email, password, "isActive", "roleId", "departmentId")
 VALUES ($1, $2, $3, $4, $5, $6, $7)

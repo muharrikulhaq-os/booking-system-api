@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"database/sql"
+	"math"
 	"strings"
 
 	"booking-system-api/internal/repository"
@@ -269,6 +270,114 @@ func (s *UserService) UpdateProfilePhoto(ctx context.Context, id int32, path str
 func (s *UserService) DeleteProfilePhoto(ctx context.Context, id int32) error {
 	_, err := s.q.DeleteProfilePhoto(ctx, id)
 	return err
+}
+
+// ─── Summary ──────────────────────────────────────────────────────────────────
+
+// percentOf mengembalikan porsi n terhadap total dalam persen (2 desimal).
+func percentOf(n, total int64) float64 {
+	if total == 0 {
+		return 0
+	}
+	return math.Round(float64(n)/float64(total)*10000) / 100
+}
+
+// Summary merangkum jumlah user: total keseluruhan, rincian per role,
+// per departemen, dan matriks role × departemen.
+func (s *UserService) Summary(ctx context.Context) (map[string]any, error) {
+	totals, err := s.q.UserSummaryTotals(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	roleRows, err := s.q.UserSummaryByRole(ctx)
+	if err != nil {
+		return nil, err
+	}
+	deptRows, err := s.q.UserSummaryByDepartment(ctx)
+	if err != nil {
+		return nil, err
+	}
+	matrixRows, err := s.q.UserSummaryByRoleDepartment(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	// Rincian per role + versi ringkas {ROLE: total} agar mudah dipakai front-end.
+	byRole := make([]map[string]any, len(roleRows))
+	roleCount := make(map[string]int64, len(roleRows))
+	for i, r := range roleRows {
+		roleCount[string(r.RoleName)] = r.Total
+		byRole[i] = map[string]any{
+			"roleId":     r.RoleID,
+			"role":       string(r.RoleName),
+			"total":      r.Total,
+			"active":     r.Active,
+			"inactive":   r.Inactive,
+			"percentage": percentOf(r.Total, totals.TotalUsers),
+		}
+	}
+
+	byDepartment := make([]map[string]any, len(deptRows))
+	for i, d := range deptRows {
+		byDepartment[i] = map[string]any{
+			"departmentId": d.DepartmentID,
+			"department":   d.DepartmentName,
+			"total":        d.Total,
+			"active":       d.Active,
+			"inactive":     d.Inactive,
+			"percentage":   percentOf(d.Total, totals.TotalUsers),
+		}
+	}
+
+	// Matriks digabung menjadi satu entri per role berisi daftar departemennya.
+	type roleGroup struct {
+		payload map[string]any
+		depts   []map[string]any
+	}
+	groups := make(map[int32]*roleGroup, len(roleRows))
+	order := make([]int32, 0, len(roleRows))
+	for _, m := range matrixRows {
+		g, ok := groups[m.RoleID]
+		if !ok {
+			g = &roleGroup{payload: map[string]any{
+				"roleId": m.RoleID,
+				"role":   string(m.RoleName),
+			}}
+			groups[m.RoleID] = g
+			order = append(order, m.RoleID)
+		}
+		g.depts = append(g.depts, map[string]any{
+			"departmentId": m.DepartmentID,
+			"department":   m.DepartmentName,
+			"total":        m.Total,
+			"active":       m.Active,
+			"inactive":     m.Inactive,
+		})
+	}
+	byRoleDepartment := make([]map[string]any, 0, len(order))
+	for _, id := range order {
+		g := groups[id]
+		g.payload["departments"] = g.depts
+		byRoleDepartment = append(byRoleDepartment, g.payload)
+	}
+
+	return map[string]any{
+		"totals": map[string]any{
+			"total":            totals.TotalUsers,
+			"active":           totals.ActiveUsers,
+			"inactive":         totals.InactiveUsers,
+			"withProfilePhoto": totals.WithPhoto,
+			"newThisMonth":     totals.NewThisMonth,
+			"newLast30Days":    totals.NewLast30Days,
+			"totalRoles":       len(roleRows),
+			"totalDepartments": len(deptRows),
+		},
+		"roleCount":        roleCount,
+		"byRole":           byRole,
+		"byDepartment":     byDepartment,
+		"byRoleDepartment": byRoleDepartment,
+	}, nil
 }
 
 func (s *UserService) ListRoles(ctx context.Context) (any, error) {

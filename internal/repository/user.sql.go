@@ -418,3 +418,196 @@ func (q *Queries) UpdateUser(ctx context.Context, arg UpdateUserParams) (User, e
 	)
 	return i, err
 }
+
+const userSummaryByDepartment = `-- name: UserSummaryByDepartment :many
+SELECT
+    d.id                                     AS department_id,
+    d.name                                   AS department_name,
+    COUNT(u.id)                              AS total,
+    COUNT(u.id) FILTER (WHERE u."isActive")  AS active,
+    COUNT(u.id) FILTER (WHERE NOT u."isActive") AS inactive
+FROM departments d
+LEFT JOIN users u ON u."departmentId" = d.id
+GROUP BY d.id, d.name
+ORDER BY COUNT(u.id) DESC, d.name
+`
+
+type UserSummaryByDepartmentRow struct {
+	DepartmentID   int32  `json:"department_id"`
+	DepartmentName string `json:"department_name"`
+	Total          int64  `json:"total"`
+	Active         int64  `json:"active"`
+	Inactive       int64  `json:"inactive"`
+}
+
+func (q *Queries) UserSummaryByDepartment(ctx context.Context) ([]UserSummaryByDepartmentRow, error) {
+	rows, err := q.db.QueryContext(ctx, userSummaryByDepartment)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []UserSummaryByDepartmentRow
+	for rows.Next() {
+		var i UserSummaryByDepartmentRow
+		if err := rows.Scan(
+			&i.DepartmentID,
+			&i.DepartmentName,
+			&i.Total,
+			&i.Active,
+			&i.Inactive,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const userSummaryByRole = `-- name: UserSummaryByRole :many
+SELECT
+    r.id                                     AS role_id,
+    r.name                                   AS role_name,
+    COUNT(u.id)                              AS total,
+    COUNT(u.id) FILTER (WHERE u."isActive")  AS active,
+    COUNT(u.id) FILTER (WHERE NOT u."isActive") AS inactive
+FROM roles r
+LEFT JOIN users u ON u."roleId" = r.id
+GROUP BY r.id, r.name
+ORDER BY r.id
+`
+
+type UserSummaryByRoleRow struct {
+	RoleID   int32    `json:"role_id"`
+	RoleName RoleName `json:"role_name"`
+	Total    int64    `json:"total"`
+	Active   int64    `json:"active"`
+	Inactive int64    `json:"inactive"`
+}
+
+// LEFT JOIN dari roles supaya role yang belum punya user tetap muncul dengan total 0.
+func (q *Queries) UserSummaryByRole(ctx context.Context) ([]UserSummaryByRoleRow, error) {
+	rows, err := q.db.QueryContext(ctx, userSummaryByRole)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []UserSummaryByRoleRow
+	for rows.Next() {
+		var i UserSummaryByRoleRow
+		if err := rows.Scan(
+			&i.RoleID,
+			&i.RoleName,
+			&i.Total,
+			&i.Active,
+			&i.Inactive,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const userSummaryByRoleDepartment = `-- name: UserSummaryByRoleDepartment :many
+SELECT
+    r.id     AS role_id,
+    r.name   AS role_name,
+    d.id     AS department_id,
+    d.name   AS department_name,
+    COUNT(u.id)                                 AS total,
+    COUNT(u.id) FILTER (WHERE u."isActive")     AS active,
+    COUNT(u.id) FILTER (WHERE NOT u."isActive") AS inactive
+FROM users u
+JOIN roles r       ON r.id = u."roleId"
+JOIN departments d ON d.id = u."departmentId"
+GROUP BY r.id, r.name, d.id, d.name
+ORDER BY r.id, COUNT(u.id) DESC, d.name
+`
+
+type UserSummaryByRoleDepartmentRow struct {
+	RoleID         int32    `json:"role_id"`
+	RoleName       RoleName `json:"role_name"`
+	DepartmentID   int32    `json:"department_id"`
+	DepartmentName string   `json:"department_name"`
+	Total          int64    `json:"total"`
+	Active         int64    `json:"active"`
+	Inactive       int64    `json:"inactive"`
+}
+
+// Matriks role x department, hanya kombinasi yang benar-benar punya user.
+func (q *Queries) UserSummaryByRoleDepartment(ctx context.Context) ([]UserSummaryByRoleDepartmentRow, error) {
+	rows, err := q.db.QueryContext(ctx, userSummaryByRoleDepartment)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []UserSummaryByRoleDepartmentRow
+	for rows.Next() {
+		var i UserSummaryByRoleDepartmentRow
+		if err := rows.Scan(
+			&i.RoleID,
+			&i.RoleName,
+			&i.DepartmentID,
+			&i.DepartmentName,
+			&i.Total,
+			&i.Active,
+			&i.Inactive,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const userSummaryTotals = `-- name: UserSummaryTotals :one
+SELECT
+    COUNT(*)                                        AS total_users,
+    COUNT(*) FILTER (WHERE u."isActive")            AS active_users,
+    COUNT(*) FILTER (WHERE NOT u."isActive")        AS inactive_users,
+    COUNT(*) FILTER (WHERE u."profilePhoto" IS NOT NULL) AS with_photo,
+    COUNT(*) FILTER (WHERE u."createdAt" >= date_trunc('month', NOW())) AS new_this_month,
+    COUNT(*) FILTER (WHERE u."createdAt" >= NOW() - INTERVAL '30 days')  AS new_last_30_days
+FROM users u
+`
+
+type UserSummaryTotalsRow struct {
+	TotalUsers    int64 `json:"total_users"`
+	ActiveUsers   int64 `json:"active_users"`
+	InactiveUsers int64 `json:"inactive_users"`
+	WithPhoto     int64 `json:"with_photo"`
+	NewThisMonth  int64 `json:"new_this_month"`
+	NewLast30Days int64 `json:"new_last_30_days"`
+}
+
+func (q *Queries) UserSummaryTotals(ctx context.Context) (UserSummaryTotalsRow, error) {
+	row := q.db.QueryRowContext(ctx, userSummaryTotals)
+	var i UserSummaryTotalsRow
+	err := row.Scan(
+		&i.TotalUsers,
+		&i.ActiveUsers,
+		&i.InactiveUsers,
+		&i.WithPhoto,
+		&i.NewThisMonth,
+		&i.NewLast30Days,
+	)
+	return i, err
+}

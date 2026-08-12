@@ -175,6 +175,12 @@ type Querier interface {
 	UpdateVehicleOdometer(ctx context.Context, arg UpdateVehicleOdometerParams) (Vehicle, error)
 	UpdateVehiclePhoto(ctx context.Context, arg UpdateVehiclePhotoParams) (Vehicle, error)
 	UpsertMasterSetting(ctx context.Context, arg UpsertMasterSettingParams) (MasterSetting, error)
+	UserSummaryByDepartment(ctx context.Context) ([]UserSummaryByDepartmentRow, error)
+	// LEFT JOIN dari roles supaya role yang belum punya user tetap muncul dengan total 0.
+	UserSummaryByRole(ctx context.Context) ([]UserSummaryByRoleRow, error)
+	// Matriks role x department, hanya kombinasi yang benar-benar punya user.
+	UserSummaryByRoleDepartment(ctx context.Context) ([]UserSummaryByRoleDepartmentRow, error)
+	UserSummaryTotals(ctx context.Context) (UserSummaryTotalsRow, error)
 }
 
 var _ Querier = (*Queries)(nil)
