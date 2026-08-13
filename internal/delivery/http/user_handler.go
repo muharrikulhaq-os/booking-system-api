@@ -42,6 +42,7 @@ func (h *UserHandler) Register(r fiber.Router) {
 	g.Post("", admin, h.Create)
 	g.Put("/:id", admin, h.Update)
 	g.Patch("/:id/toggle-active", admin, h.ToggleActive)
+	g.Patch("/:id/reset-password", admin, h.ResetPassword)
 	g.Delete("/:id", admin, h.Delete)
 	g.Put("/me/profile-photo", h.UploadMyPhoto)
 	g.Delete("/me/profile-photo", h.DeleteMyPhoto)
@@ -116,6 +117,22 @@ func (h *UserHandler) ToggleActive(c *fiber.Ctx) error {
 		return err
 	}
 	return util.OK(c, "User status toggled", data)
+}
+
+// ResetPassword — admin mengganti password user secara langsung (tanpa OTP).
+func (h *UserHandler) ResetPassword(c *fiber.Ctx) error {
+	id, err := parseID(c, "id")
+	if err != nil {
+		return err
+	}
+	var req service.AdminResetPasswordRequest
+	if err := bindAndValidate(c, &req); err != nil {
+		return err
+	}
+	if err := h.svc.ResetPassword(c.Context(), id, req.NewPassword); err != nil {
+		return err
+	}
+	return util.OK(c, "Password reset", nil)
 }
 
 func (h *UserHandler) Delete(c *fiber.Ctx) error {

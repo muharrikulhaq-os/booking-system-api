@@ -283,6 +283,28 @@ func (s *UserService) Update(ctx context.Context, id int32, req UpdateUserReques
 	return s.GetByID(ctx, id)
 }
 
+// ResetPasswordRequest — reset password oleh ADMIN (tanpa OTP).
+// Alur user biasa (lupa password) tetap lewat /auth: forgot-password → verify-otp → reset-password.
+type AdminResetPasswordRequest struct {
+	NewPassword string `json:"newPassword" validate:"required,min=8"`
+}
+
+// ResetPassword mengganti password user secara langsung. Hanya untuk ADMIN —
+// tidak ada verifikasi OTP karena admin dianggap sudah terautentikasi & berwenang.
+func (s *UserService) ResetPassword(ctx context.Context, id int32, newPassword string) error {
+	if _, err := s.q.GetUserByID(ctx, id); err != nil {
+		return util.ErrNotFound
+	}
+	hashed, err := util.HashPassword(newPassword)
+	if err != nil {
+		return err
+	}
+	return s.q.UpdateUserPassword(ctx, repository.UpdateUserPasswordParams{
+		Password: hashed,
+		ID:       id,
+	})
+}
+
 func (s *UserService) ToggleActive(ctx context.Context, id int32) (map[string]any, error) {
 	if _, err := s.q.GetUserByID(ctx, id); err != nil {
 		return nil, util.ErrNotFound
