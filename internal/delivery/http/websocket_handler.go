@@ -31,9 +31,9 @@ func (h *WebsocketHandler) Register(r fiber.Router) {
 	// If the frontend sends token via query parameter ?token=xxx, the Auth middleware
 	// should support parsing from query param.
 	r.Get("/ws", middleware.Auth(), websocket.New(func(c *websocket.Conn) {
-		// middleware.Auth() should have set these in Locals
-		userID := c.Locals("user_id").(int)
-		userRole := c.Locals("user_role").(string)
+		// middleware.Auth() sets LocalUserID ("userID") & LocalUserRole ("userRole") in Locals
+		userID, _ := c.Locals(middleware.LocalUserID).(int)
+		userRole, _ := c.Locals(middleware.LocalUserRole).(string)
 
 		client := &ws.Client{
 			Conn:     c,

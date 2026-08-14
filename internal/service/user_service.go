@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"math"
 	"strings"
 
@@ -477,6 +478,12 @@ func (s *UserService) UpdateDepartment(ctx context.Context, id int32, name strin
 func (s *UserService) DeleteDepartment(ctx context.Context, id int32) error {
 	if _, err := s.q.GetDepartmentByID(ctx, id); err != nil {
 		return util.ErrNotFound
+	}
+	userCount, _ := s.q.CountUsers(ctx, repository.CountUsersParams{
+		DepartmentID: sql.NullInt32{Int32: id, Valid: true},
+	})
+	if userCount > 0 {
+		return util.NewError(400, fmt.Sprintf("tidak dapat menghapus departemen: masih ada %d pengguna yang terhubung", userCount), util.ErrBadRequest)
 	}
 	return s.q.DeleteDepartment(ctx, id)
 }

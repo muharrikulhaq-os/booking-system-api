@@ -97,13 +97,13 @@ func (q *Queries) ReportAuditLogs(ctx context.Context, arg ReportAuditLogsParams
 const reportBookingSummary = `-- name: ReportBookingSummary :one
 SELECT
     COUNT(*) AS total,
-    SUM(CASE WHEN status = 'COMPLETED' THEN 1 ELSE 0 END) AS completed,
-    SUM(CASE WHEN status = 'PENDING'   THEN 1 ELSE 0 END) AS pending,
-    SUM(CASE WHEN status = 'APPROVED'  THEN 1 ELSE 0 END) AS approved,
-    SUM(CASE WHEN status = 'ONGOING'   THEN 1 ELSE 0 END) AS ongoing,
-    SUM(CASE WHEN status = 'CANCELLED' THEN 1 ELSE 0 END) AS cancelled,
-    SUM(CASE WHEN status = 'REJECTED'  THEN 1 ELSE 0 END) AS rejected,
-    SUM(CASE WHEN status = 'OVERDUE'   THEN 1 ELSE 0 END) AS overdue
+    COALESCE(SUM(CASE WHEN status = 'COMPLETED' THEN 1 ELSE 0 END), 0)::bigint AS completed,
+    COALESCE(SUM(CASE WHEN status = 'PENDING'   THEN 1 ELSE 0 END), 0)::bigint AS pending,
+    COALESCE(SUM(CASE WHEN status = 'APPROVED'  THEN 1 ELSE 0 END), 0)::bigint AS approved,
+    COALESCE(SUM(CASE WHEN status = 'ONGOING'   THEN 1 ELSE 0 END), 0)::bigint AS ongoing,
+    COALESCE(SUM(CASE WHEN status = 'CANCELLED' THEN 1 ELSE 0 END), 0)::bigint AS cancelled,
+    COALESCE(SUM(CASE WHEN status = 'REJECTED'  THEN 1 ELSE 0 END), 0)::bigint AS rejected,
+    COALESCE(SUM(CASE WHEN status = 'OVERDUE'   THEN 1 ELSE 0 END), 0)::bigint AS overdue
 FROM bookings
 WHERE ($1::timestamptz IS NULL OR "startDate" >= $1::timestamptz)
   AND ($2::timestamptz IS NULL OR "endDate" <= $2::timestamptz)
@@ -144,7 +144,7 @@ func (q *Queries) ReportBookingSummary(ctx context.Context, arg ReportBookingSum
 const reportDriverActivity = `-- name: ReportDriverActivity :many
 SELECT d.id AS driver_id, u.name AS driver_name, u."employeeId",
        COUNT(DISTINCT b.id) AS total_bookings,
-       SUM(CASE WHEN b.status = 'COMPLETED' THEN 1 ELSE 0 END) AS completed_bookings,
+       COALESCE(SUM(CASE WHEN b.status = 'COMPLETED' THEN 1 ELSE 0 END), 0)::bigint AS completed_bookings,
        COALESCE(SUM(fe."totalCost"), 0) AS total_fuel_expenses
 FROM drivers d
 JOIN users u ON u.id = d."userId"

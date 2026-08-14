@@ -330,8 +330,8 @@ func (s *BookingService) Create(ctx context.Context, req CreateBookingRequest, u
 	if err != nil {
 		return nil, util.ErrNotFound
 	}
-	if resource.Status != repository.ResourceStatusAVAILABLE {
-		return nil, util.NewError(409, "resource is not available", util.ErrConflict)
+	if resource.Status == repository.ResourceStatusMAINTENANCE {
+		return nil, util.NewError(409, "resource is currently under maintenance", util.ErrConflict)
 	}
 
 	var driverID sql.NullInt32
@@ -661,8 +661,9 @@ func (s *BookingService) Start(ctx context.Context, id int32, odometer *int32, l
 	}
 
 	now := time.Now().UTC()
-	if now.Before(b.StartDate) {
-		return nil, util.NewError(400, "cannot start before scheduled time", util.ErrBadRequest)
+	// Beri toleransi mulai hingga 30 menit sebelum jadwal untuk persiapan supir / ruangan.
+	if now.Add(30 * time.Minute).Before(b.StartDate) {
+		return nil, util.NewError(400, "jadwal booking belum dapat dimulai (maksimal 30 menit sebelum jadwal)", util.ErrBadRequest)
 	}
 	if now.After(b.EndDate) {
 		return nil, util.NewError(400, "booking period has already ended", util.ErrBadRequest)
@@ -936,8 +937,8 @@ func (s *BookingService) SubstituteResource(ctx context.Context, id int32, req S
 	if newResource.Type != b.ResourceType {
 		return nil, util.NewError(400, "resource type mismatch: cannot substitute with a different resource type", util.ErrBadRequest)
 	}
-	if newResource.Status != repository.ResourceStatusAVAILABLE {
-		return nil, util.NewError(409, "new resource is not available", util.ErrConflict)
+	if newResource.Status == repository.ResourceStatusMAINTENANCE {
+		return nil, util.NewError(409, "new resource is currently under maintenance", util.ErrConflict)
 	}
 
 	count, _ := s.q.CheckBookingConflict(ctx, repository.CheckBookingConflictParams{
@@ -1295,7 +1296,11 @@ func (s *BookingService) GetReturnReport(ctx context.Context, bookingID int32, c
 		if dErr != nil || !b.AssignedDriverId.Valid || b.AssignedDriverId.Int32 != d.ID {
 			return nil, util.ErrForbidden
 		}
-	} else if callerRole != "ADMIN" {
+	} else if callerRole == "EMPLOYEE" {
+		if int(b.UserId) != callerID {
+			return nil, util.ErrForbidden
+		}
+	} else if callerRole != "ADMIN" && callerRole != "ROOM_KEEPER" {
 		return nil, util.ErrForbidden
 	}
 

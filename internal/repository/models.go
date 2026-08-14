@@ -704,17 +704,17 @@ type VActiveBooking struct {
 }
 
 type VDriverRatingsSummary struct {
-	DriverID      int32  `json:"driver_id"`
-	DriverName    string `json:"driver_name"`
-	EmployeeId    string `json:"employeeId"`
-	IsActive      bool   `json:"isActive"`
-	TotalRatings  int64  `json:"total_ratings"`
-	AverageRating string `json:"average_rating"`
-	Bintang5      int64  `json:"bintang_5"`
-	Bintang4      int64  `json:"bintang_4"`
-	Bintang3      int64  `json:"bintang_3"`
-	Bintang2      int64  `json:"bintang_2"`
-	Bintang1      int64  `json:"bintang_1"`
+	DriverID      int32       `json:"driver_id"`
+	DriverName    string      `json:"driver_name"`
+	EmployeeId    string      `json:"employeeId"`
+	IsActive      bool        `json:"isActive"`
+	TotalRatings  int64       `json:"total_ratings"`
+	AverageRating interface{} `json:"average_rating"`
+	Bintang5      int64       `json:"bintang_5"`
+	Bintang4      int64       `json:"bintang_4"`
+	Bintang3      int64       `json:"bintang_3"`
+	Bintang2      int64       `json:"bintang_2"`
+	Bintang1      int64       `json:"bintang_1"`
 }
 
 type VFuelExpenseSummary struct {
