@@ -35,9 +35,12 @@ func (h *FuelExpenseHandler) Register(r fiber.Router) {
 func (h *FuelExpenseHandler) List(c *fiber.Ctx) error {
 	page := queryInt(c, "page", 1)
 	limit := queryInt(c, "limit", 20)
+	role := middleware.GetUserRole(c)
+	actorID := int32(middleware.GetUserID(c))
+
 	data, total, err := h.svc.List(c.Context(), page, limit,
 		queryInt32(c, "driverId"), queryInt32(c, "vehicleId"), queryString(c, "fuelType"),
-		queryInt32(c, "bookingId"))
+		queryInt32(c, "bookingId"), actorID, role)
 	if err != nil {
 		return err
 	}

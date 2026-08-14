@@ -75,7 +75,7 @@ func serializeFuelExpenseRow(fe repository.ListFuelExpensesRow) map[string]any {
 			"plateNumber": fe.PlateNumber,
 		},
 		"fuelTypeId":     fe.FuelTypeId,
-		"fuelCategory":   fe.FuelCategoryName,
+		"fuelType":       fe.FuelCategoryName,
 		"fuelGrade":      fe.FuelGrade.String,
 		"bookingId":      fe.BookingId.Int32,
 		"driverId":       fe.DriverId.Int32,
@@ -95,7 +95,14 @@ func serializeFuelExpenseRow(fe repository.ListFuelExpensesRow) map[string]any {
 	}
 }
 
-func (s *FuelExpenseService) List(ctx context.Context, page, limit int, driverID, vehicleID *int32, fuelType *string, bookingID *int32) ([]map[string]any, int64, error) {
+func (s *FuelExpenseService) List(ctx context.Context, page, limit int, driverID, vehicleID *int32, fuelType *string, bookingID *int32, actorID int32, role string) ([]map[string]any, int64, error) {
+	if role == "DRIVER" {
+		driver, err := s.q.GetDriverByUserID(ctx, actorID)
+		if err == nil {
+			driverID = &driver.ID
+		}
+	}
+
 	params := repository.ListFuelExpensesParams{
 		Limit:  int32(limit),
 		Offset: int32((page - 1) * limit),
