@@ -2,6 +2,7 @@ package util
 
 import (
 	"fmt"
+	"io"
 	"mime/multipart"
 	"os"
 	"path/filepath"
@@ -57,19 +58,26 @@ func SaveUploadedFile(fh *multipart.FileHeader, category string) (filePath strin
 	if err != nil {
 		return "", err
 	}
-	defer out.Close()
 
-	buf := make([]byte, 32*1024)
-	for {
-		n, readErr := src.Read(buf)
-		if n > 0 {
-			if _, werr := out.Write(buf[:n]); werr != nil {
-				return "", werr
-			}
-		}
-		if readErr != nil {
-			break
-		}
+	written, copyErr := io.Copy(out, src)
+	closeErr := out.Close()
+
+	// io.Copy stops on the first non-EOF error and returns it directly (unlike
+	// the old manual read/write loop here, which treated every readErr —
+	// including a genuine failed read, e.g. client aborted mid-upload — as a
+	// normal end-of-file and returned success with a truncated/empty file on
+	// disk while the DB row still got created).
+	if copyErr != nil {
+		os.Remove(dst)
+		return "", fmt.Errorf("failed to save file: %w", copyErr)
+	}
+	if closeErr != nil {
+		os.Remove(dst)
+		return "", fmt.Errorf("failed to save file: %w", closeErr)
+	}
+	if written != fh.Size {
+		os.Remove(dst)
+		return "", fmt.Errorf("incomplete upload: wrote %d of %d bytes", written, fh.Size)
 	}
 
 	// return relative path from uploads root — SELALU pakai forward slash agar
