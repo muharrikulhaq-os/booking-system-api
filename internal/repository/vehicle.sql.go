@@ -65,19 +65,20 @@ func (q *Queries) CreateResource(ctx context.Context, arg CreateResourceParams) 
 
 const createVehicle = `-- name: CreateVehicle :one
 INSERT INTO vehicles ("resourceId", "plateNumber", brand, model, year,
-                       "currentOdometer", "categoryId", capacity)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id, "resourceId", "plateNumber", brand, model, year, "currentOdometer", "categoryId", capacity, "photoUrl", energy_type, "maintenanceIntervalKm", "lastMaintenanceOdometer"
+                       "currentOdometer", "categoryId", capacity, energy_type)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id, "resourceId", "plateNumber", brand, model, year, "currentOdometer", "categoryId", capacity, "photoUrl", energy_type, "maintenanceIntervalKm", "lastMaintenanceOdometer"
 `
 
 type CreateVehicleParams struct {
-	ResourceId      int32  `json:"resourceId"`
-	PlateNumber     string `json:"plateNumber"`
-	Brand           string `json:"brand"`
-	Model           string `json:"model"`
-	Year            int16  `json:"year"`
-	CurrentOdometer int32  `json:"currentOdometer"`
-	CategoryId      int32  `json:"categoryId"`
-	Capacity        int16  `json:"capacity"`
+	ResourceId      int32      `json:"resourceId"`
+	PlateNumber     string     `json:"plateNumber"`
+	Brand           string     `json:"brand"`
+	Model           string     `json:"model"`
+	Year            int16      `json:"year"`
+	CurrentOdometer int32      `json:"currentOdometer"`
+	CategoryId      int32      `json:"categoryId"`
+	Capacity        int16      `json:"capacity"`
+	EnergyType      EnergyType `json:"energy_type"`
 }
 
 func (q *Queries) CreateVehicle(ctx context.Context, arg CreateVehicleParams) (Vehicle, error) {
@@ -90,6 +91,7 @@ func (q *Queries) CreateVehicle(ctx context.Context, arg CreateVehicleParams) (V
 		arg.CurrentOdometer,
 		arg.CategoryId,
 		arg.Capacity,
+		arg.EnergyType,
 	)
 	var i Vehicle
 	err := row.Scan(
@@ -412,19 +414,20 @@ func (q *Queries) UpdateResourceStatus(ctx context.Context, arg UpdateResourceSt
 const updateVehicle = `-- name: UpdateVehicle :one
 UPDATE vehicles
 SET "plateNumber" = $2, brand = $3, model = $4, year = $5,
-    "currentOdometer" = $6, "categoryId" = $7, capacity = $8
+    "currentOdometer" = $6, "categoryId" = $7, capacity = $8, energy_type = $9
 WHERE id = $1 RETURNING id, "resourceId", "plateNumber", brand, model, year, "currentOdometer", "categoryId", capacity, "photoUrl", energy_type, "maintenanceIntervalKm", "lastMaintenanceOdometer"
 `
 
 type UpdateVehicleParams struct {
-	ID              int32  `json:"id"`
-	PlateNumber     string `json:"plateNumber"`
-	Brand           string `json:"brand"`
-	Model           string `json:"model"`
-	Year            int16  `json:"year"`
-	CurrentOdometer int32  `json:"currentOdometer"`
-	CategoryId      int32  `json:"categoryId"`
-	Capacity        int16  `json:"capacity"`
+	ID              int32      `json:"id"`
+	PlateNumber     string     `json:"plateNumber"`
+	Brand           string     `json:"brand"`
+	Model           string     `json:"model"`
+	Year            int16      `json:"year"`
+	CurrentOdometer int32      `json:"currentOdometer"`
+	CategoryId      int32      `json:"categoryId"`
+	Capacity        int16      `json:"capacity"`
+	EnergyType      EnergyType `json:"energy_type"`
 }
 
 func (q *Queries) UpdateVehicle(ctx context.Context, arg UpdateVehicleParams) (Vehicle, error) {
@@ -437,6 +440,7 @@ func (q *Queries) UpdateVehicle(ctx context.Context, arg UpdateVehicleParams) (V
 		arg.CurrentOdometer,
 		arg.CategoryId,
 		arg.Capacity,
+		arg.EnergyType,
 	)
 	var i Vehicle
 	err := row.Scan(

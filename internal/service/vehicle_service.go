@@ -25,6 +25,7 @@ type CreateVehicleRequest struct {
 	CurrentOdometer int32  `json:"currentOdometer"`
 	CategoryID      int32  `json:"categoryId"      validate:"required"`
 	Capacity        int16  `json:"capacity"        validate:"required,min=1"`
+	EnergyType      string `json:"energyType"      validate:"omitempty,oneof=BBM LISTRIK HYBRID"`
 }
 
 type UpdateVehicleRequest struct {
@@ -36,6 +37,7 @@ type UpdateVehicleRequest struct {
 	CurrentOdometer int32  `json:"currentOdometer"`
 	CategoryID      int32  `json:"categoryId"  validate:"required"`
 	Capacity        int16  `json:"capacity"    validate:"required,min=1"`
+	EnergyType      string `json:"energyType"  validate:"omitempty,oneof=BBM LISTRIK HYBRID"`
 }
 
 type UpdateStatusRequest struct {
@@ -56,6 +58,7 @@ func serializeVehicleRow(v repository.ListVehiclesRow) map[string]any {
 		"category":        map[string]any{"id": v.CategoryId, "name": v.CategoryName},
 		"status":          string(v.ResourceStatus),
 		"photoUrl":        nullStr(v.PhotoUrl),
+		"energyType":      string(v.EnergyType),
 	}
 }
 
@@ -73,6 +76,7 @@ func serializeVehicleByID(v repository.GetVehicleByIDRow) map[string]any {
 		"category":        map[string]any{"id": v.CategoryId, "name": v.CategoryName},
 		"status":          string(v.ResourceStatus),
 		"photoUrl":        nullStr(v.PhotoUrl),
+		"energyType":      string(v.EnergyType),
 	}
 }
 
@@ -128,10 +132,15 @@ func (s *VehicleService) Create(ctx context.Context, req CreateVehicleRequest) (
 		return nil, err
 	}
 
+	energyType := req.EnergyType
+	if energyType == "" {
+		energyType = string(repository.EnergyTypeBBM)
+	}
 	_, err = s.q.CreateVehicle(ctx, repository.CreateVehicleParams{
 		ResourceId: r.ID, PlateNumber: req.PlateNumber, Brand: req.Brand,
 		Model: req.Model, Year: req.Year, CurrentOdometer: req.CurrentOdometer,
 		CategoryId: req.CategoryID, Capacity: req.Capacity,
+		EnergyType: repository.EnergyType(energyType),
 	})
 	if err != nil {
 		return nil, err
@@ -150,10 +159,15 @@ func (s *VehicleService) Update(ctx context.Context, id int32, req UpdateVehicle
 	_ = s.q.UpdateResourceName(ctx, repository.UpdateResourceNameParams{
 		ID: v.ResourceId, Name: req.Name,
 	})
+	energyType := repository.EnergyType(req.EnergyType)
+	if req.EnergyType == "" {
+		energyType = v.EnergyType
+	}
 	_, err = s.q.UpdateVehicle(ctx, repository.UpdateVehicleParams{
 		ID: id, PlateNumber: req.PlateNumber, Brand: req.Brand,
 		Model: req.Model, Year: req.Year, CurrentOdometer: req.CurrentOdometer,
 		CategoryId: req.CategoryID, Capacity: req.Capacity,
+		EnergyType: energyType,
 	})
 	if err != nil {
 		return nil, err

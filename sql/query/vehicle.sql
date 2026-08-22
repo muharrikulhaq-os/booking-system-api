@@ -56,13 +56,13 @@ INSERT INTO resources (name, type, status) VALUES ($1, $2, 'AVAILABLE') RETURNIN
 
 -- name: CreateVehicle :one
 INSERT INTO vehicles ("resourceId", "plateNumber", brand, model, year,
-                       "currentOdometer", "categoryId", capacity)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *;
+                       "currentOdometer", "categoryId", capacity, energy_type)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *;
 
 -- name: UpdateVehicle :one
 UPDATE vehicles
 SET "plateNumber" = $2, brand = $3, model = $4, year = $5,
-    "currentOdometer" = $6, "categoryId" = $7, capacity = $8
+    "currentOdometer" = $6, "categoryId" = $7, capacity = $8, energy_type = $9
 WHERE id = $1 RETURNING *;
 
 -- name: UpdateResourceName :exec
