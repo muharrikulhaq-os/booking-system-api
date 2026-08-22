@@ -217,9 +217,18 @@ func (s *BookingService) List(ctx context.Context,
 	search *string,
 ) ([]map[string]any, int64, error) {
 	// Auto-transition stale bookings on every list call (lightweight)
-	_, _ = s.q.MarkOverdueBookings(ctx)  // ONGOING + endDate passed → OVERDUE
-	_, _ = s.q.MarkExpiredBookings(ctx)  // APPROVED + endDate passed, never started → EXPIRED
-	_, _ = s.q.MarkIgnoredBookings(ctx)  // PENDING + endDate passed, admin didn't respond → IGNORED
+	if overdue, err := s.q.MarkOverdueBookings(ctx); err == nil { // ONGOING + endDate passed → OVERDUE
+		for _, b := range overdue {
+			_, _ = s.q.CreateAuditLog(ctx, repository.CreateAuditLogParams{
+				Action:      "OVERDUE",
+				EntityType:  "Booking",
+				EntityId:    sql.NullInt32{Int32: b.ID, Valid: true},
+				Description: sql.NullString{String: "Booking belum diselesaikan setelah waktu selesai terlewati", Valid: true},
+			})
+		}
+	}
+	_, _ = s.q.MarkExpiredBookings(ctx) // APPROVED + endDate passed, never started → EXPIRED
+	_, _ = s.q.MarkIgnoredBookings(ctx) // PENDING + endDate passed, admin didn't respond → IGNORED
 
 	params := repository.ListBookingsParams{
 		Limit:  int32(limit),
