@@ -236,8 +236,15 @@ func (s *ReportService) DepartmentSummary(ctx context.Context, start, end *time.
 }
 
 // DriverTrips reports, per driver, how many completed trips were SPD (surat
-// perintah dinas) vs NON_SPD, plus how many of those NON_SPD trips ran into
-// overtime and the total overtime accrued.
+// perintah dinas) vs NON_SPD, plus two DISTINCT overtime-adjacent metrics
+// that must not be conflated:
+//   - "overtime" (keterlambatan): the trip finished after its OWN booking
+//     endDate - driver_overtimes, NON_SPD only, relative to that trip's plan.
+//   - "lembur": the trip finished after the fixed 18:00 WIB workday cutoff,
+//     regardless of the booking's own schedule. NON_SPD only, same as
+//     "overtime" - SPD never counts toward lembur, by explicit business rule.
+// Also reports average rating - unlike DriverPerformance.avgRating (all-time),
+// this one is scoped to the same [start, end) window as everything else here.
 func (s *ReportService) DriverTrips(ctx context.Context, start, end *time.Time) (any, error) {
 	rows, err := s.q.ReportDriverTrips(ctx, repository.ReportDriverTripsParams{
 		StartFrom: nullableTime(start), EndTo: nullableTime(end),
@@ -257,6 +264,11 @@ func (s *ReportService) DriverTrips(ctx context.Context, start, end *time.Time) 
 			"overtimeTrips":        r.OvertimeTrips,
 			"totalOvertimeMinutes": r.TotalOvertimeMinutes,
 			"totalOvertimeHours":   float64(r.TotalOvertimeMinutes) / 60,
+			"lemburTrips":          r.LemburTrips,
+			"totalLemburMinutes":   r.TotalLemburMinutes,
+			"totalLemburHours":     float64(r.TotalLemburMinutes) / 60,
+			"avgRating":            r.AvgRating,
+			"totalReviews":         r.TotalReviews,
 		}
 	}
 	return out, nil

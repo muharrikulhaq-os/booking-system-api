@@ -68,13 +68,39 @@ WHERE (sqlc.narg(entity_type)::text IS NULL OR "entityType" = sqlc.narg(entity_t
   AND (sqlc.narg(user_id)::int IS NULL OR "userId" = sqlc.narg(user_id)::int);
 
 -- name: ReportDriverTrips :many
--- Rekap jumlah trip SPD vs Non-SPD dan total overtime per driver.
+-- Rekap per driver, di-scope ke rentang tanggal yang sama (booking COMPLETED
+-- di periode ini):
+--   - spd_trips / non_spd_trips: jumlah trip per tipe.
+--   - overtime_trips / total_overtime_minutes: KETERLAMBATAN pengembalian -
+--     selesai lewat dari endDate booking itu sendiri (tabel driver_overtimes,
+--     NON_SPD only, lihat komentar di Complete()). Relatif ke jadwal booking.
+--   - lembur_trips / total_lembur_minutes: LEMBUR - selesai lewat jam kerja
+--     tetap 18:00 WIB, TERLEPAS dari jadwal booking-nya. NON_SPD saja (sama
+--     seperti keterlambatan) - SPD tidak menghitung lembur sama sekali,
+--     ini keputusan bisnis eksplisit, bukan kelalaian.
+--   - avg_rating / total_reviews: beda dari ReportDriverPerformance yang
+--     sepanjang masa (join langsung ke driverId) - di sini ikut rentang
+--     tanggal karena join-nya lewat booking (b.id) yang sudah difilter.
+-- driver_overtimes/driver_ratings."bookingId" UNIQUE -> aman di-LEFT JOIN
+-- lewat b.id, tidak menambah fan-out baru.
 SELECT
     d.id AS driver_id, u.name AS driver_name, u."employeeId",
     COUNT(DISTINCT b.id) FILTER (WHERE b."bookingType" = 'SPD')     AS spd_trips,
     COUNT(DISTINCT b.id) FILTER (WHERE b."bookingType" = 'NON_SPD') AS non_spd_trips,
     COUNT(DISTINCT ot.id)                                           AS overtime_trips,
-    COALESCE(SUM(ot."overtimeMinutes"), 0)::int                     AS total_overtime_minutes
+    COALESCE(SUM(ot."overtimeMinutes"), 0)::int                     AS total_overtime_minutes,
+    COUNT(DISTINCT b.id) FILTER (
+        WHERE b."bookingType" = 'NON_SPD'
+          AND (EXTRACT(HOUR FROM (b."returnedAt" AT TIME ZONE 'Asia/Jakarta')) * 60
+               + EXTRACT(MINUTE FROM (b."returnedAt" AT TIME ZONE 'Asia/Jakarta'))) > 18 * 60
+    )                                                                AS lembur_trips,
+    COALESCE(SUM(CASE WHEN b."bookingType" = 'NON_SPD' THEN GREATEST(
+        (EXTRACT(HOUR FROM (b."returnedAt" AT TIME ZONE 'Asia/Jakarta')) * 60
+         + EXTRACT(MINUTE FROM (b."returnedAt" AT TIME ZONE 'Asia/Jakarta'))) - 18 * 60,
+        0
+    ) ELSE 0 END), 0)::int                                          AS total_lembur_minutes,
+    COALESCE(AVG(dr.rating::float8), 0)::float8                     AS avg_rating,
+    COUNT(DISTINCT dr.id)                                           AS total_reviews
 FROM drivers d
 JOIN users u ON u.id = d."userId"
 LEFT JOIN bookings b ON b."assignedDriverId" = d.id
@@ -82,5 +108,6 @@ LEFT JOIN bookings b ON b."assignedDriverId" = d.id
     AND (sqlc.narg(start_from)::timestamptz IS NULL OR b."startDate" >= sqlc.narg(start_from)::timestamptz)
     AND (sqlc.narg(end_to)::timestamptz IS NULL OR b."endDate" <= sqlc.narg(end_to)::timestamptz)
 LEFT JOIN driver_overtimes ot ON ot."bookingId" = b.id
+LEFT JOIN driver_ratings dr ON dr."bookingId" = b.id
 GROUP BY d.id, u.name, u."employeeId"
 ORDER BY (spd_trips + non_spd_trips) DESC;

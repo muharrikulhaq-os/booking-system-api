@@ -154,7 +154,21 @@ type Querier interface {
 	ReportBookingSummary(ctx context.Context, arg ReportBookingSummaryParams) (ReportBookingSummaryRow, error)
 	ReportDriverActivity(ctx context.Context) ([]ReportDriverActivityRow, error)
 	ReportDriverRatings(ctx context.Context) ([]VDriverRatingsSummary, error)
-	// Rekap jumlah trip SPD vs Non-SPD dan total overtime per driver.
+	// Rekap per driver, di-scope ke rentang tanggal yang sama (booking COMPLETED
+	// di periode ini):
+	//   - spd_trips / non_spd_trips: jumlah trip per tipe.
+	//   - overtime_trips / total_overtime_minutes: KETERLAMBATAN pengembalian -
+	//     selesai lewat dari endDate booking itu sendiri (tabel driver_overtimes,
+	//     NON_SPD only, lihat komentar di Complete()). Relatif ke jadwal booking.
+	//   - lembur_trips / total_lembur_minutes: LEMBUR - selesai lewat jam kerja
+	//     tetap 18:00 WIB, TERLEPAS dari jadwal booking-nya. NON_SPD saja (sama
+	//     seperti keterlambatan) - SPD tidak menghitung lembur sama sekali,
+	//     ini keputusan bisnis eksplisit, bukan kelalaian.
+	//   - avg_rating / total_reviews: beda dari ReportDriverPerformance yang
+	//     sepanjang masa (join langsung ke driverId) - di sini ikut rentang
+	//     tanggal karena join-nya lewat booking (b.id) yang sudah difilter.
+	// driver_overtimes/driver_ratings."bookingId" UNIQUE -> aman di-LEFT JOIN
+	// lewat b.id, tidak menambah fan-out baru.
 	ReportDriverTrips(ctx context.Context, arg ReportDriverTripsParams) ([]ReportDriverTripsRow, error)
 	ReportFuelExpenses(ctx context.Context) ([]VFuelExpenseSummary, error)
 	ReportMaintenanceCost(ctx context.Context) ([]ReportMaintenanceCostRow, error)
