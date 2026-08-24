@@ -37,6 +37,9 @@ func NewBookingHandler(svc *service.BookingService, attachSvc *service.Attachmen
 func (h *BookingHandler) Register(r fiber.Router) {
 	auth := middleware.Auth()
 	admin := middleware.RequireRole("ADMIN")
+	// Booking hanya dibuat oleh ADMIN atau EMPLOYEE - DRIVER menjalankan
+	// booking (bukan membuatnya), ROOM_KEEPER cuma checkin/checkout ruangan.
+	adminOrEmployee := middleware.RequireRole("ADMIN", "EMPLOYEE")
 	// EMPLOYEE included so the booking owner can self-serve start/complete on
 	// room bookings; scoped to room + ownership inside Start()/Complete().
 	adminOrDriver := middleware.RequireRole("ADMIN", "DRIVER", "ROOM_KEEPER", "EMPLOYEE")
@@ -46,7 +49,7 @@ func (h *BookingHandler) Register(r fiber.Router) {
 	g.Get("", h.List)
 	g.Get("/drivers/:driver_id/ratings", admin, h.GetDriverRatings)
 	g.Get("/:id", h.GetByID)
-	g.Post("", h.Create)
+	g.Post("", adminOrEmployee, h.Create)
 	g.Patch("/:id/cancel", h.Cancel)
 	g.Post("/:id/approve", admin, h.Approve)
 	g.Post("/:id/reject", admin, h.Reject)
