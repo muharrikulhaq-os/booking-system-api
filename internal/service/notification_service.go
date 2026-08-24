@@ -190,8 +190,25 @@ func (s *NotificationService) GetMyNotifications(ctx context.Context, userID int
 		return nil, err
 	}
 
+	// rows datang langsung dari sqlc (repository.Notification) - kalau di-
+	// serialize apa adanya, RelatedEntityID (sql.NullInt32) jadi objek Go
+	// mentah ({"Int32":.., "Valid":..}) di JSON, bukan angka/null. Ratakan
+	// manual, konsisten dengan pola nullInt32() di booking_service.go.
+	data := make([]map[string]any, len(rows))
+	for i, n := range rows {
+		data[i] = map[string]any{
+			"id":              n.ID,
+			"title":           n.Title,
+			"body":            n.Body,
+			"type":            n.Type,
+			"relatedEntityId": nullInt32(n.RelatedEntityID),
+			"isRead":          n.IsRead,
+			"createdAt":       n.CreatedAt,
+		}
+	}
+
 	return map[string]any{
-		"data": rows,
+		"data": data,
 		"pagination": map[string]any{
 			"total":      total,
 			"page":       page,
