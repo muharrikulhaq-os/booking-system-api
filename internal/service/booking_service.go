@@ -78,6 +78,7 @@ func serializeBookingRow(b repository.ListBookingsRow) map[string]any {
 		"resource": map[string]any{
 			"id": b.ResourceId, "name": b.ResourceName,
 			"type": string(b.ResourceType), "status": string(b.ResourceStatus),
+			"photoUrl": nullStr(b.ResourcePhotoUrl),
 		},
 		"startDate":       b.StartDate,
 		"endDate":         b.EndDate,
@@ -135,6 +136,7 @@ func serializeBookingByID(b repository.GetBookingByIDRow) map[string]any {
 		"resource": map[string]any{
 			"id": b.ResourceId, "name": b.ResourceName,
 			"type": string(b.ResourceType), "status": string(b.ResourceStatus),
+			"photoUrl": nullStr(b.ResourcePhotoUrl),
 		},
 		"startDate":        b.StartDate,
 		"endDate":          b.EndDate,

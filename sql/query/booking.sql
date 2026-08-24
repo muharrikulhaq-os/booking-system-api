@@ -2,14 +2,15 @@
 SELECT b.*,
        u.name AS user_name, u."employeeId", dept.name AS department_name,
        r.name AS resource_name, r.type AS resource_type, r.status AS resource_status,
+       COALESCE(rv."photoUrl", rr."photoUrl") AS resource_photo_url,
        ab.name AS approver_name,
        drv.id AS driver_id, du.name AS driver_name, drv."phoneNumber" AS driver_phone,
        v.id AS vehicle_id, v."plateNumber", v.brand, v.model, v.capacity,
        (
            SELECT EXISTS (
-               SELECT 1 FROM bookings b2 
-               WHERE b2.id != b.id 
-                 AND b2.status = 'PENDING' 
+               SELECT 1 FROM bookings b2
+               WHERE b2.id != b.id
+                 AND b2.status = 'PENDING'
                  AND b.status = 'PENDING'
                  AND b2."resourceId" = b."resourceId"
                  AND (
@@ -24,6 +25,8 @@ FROM bookings b
 JOIN users u ON u.id = b."userId"
 JOIN departments dept ON dept.id = u."departmentId"
 JOIN resources r ON r.id = b."resourceId"
+LEFT JOIN vehicles rv ON rv."resourceId" = r.id
+LEFT JOIN rooms rr ON rr."resourceId" = r.id
 LEFT JOIN resources orig ON orig.id = b."originalResourceId"
 LEFT JOIN users ab ON ab.id = b."approvedById"
 LEFT JOIN drivers drv ON drv.id = b."assignedDriverId"
@@ -58,14 +61,15 @@ WHERE (sqlc.narg(user_id)::int IS NULL OR b."userId" = sqlc.narg(user_id)::int)
 SELECT b.*,
        u.name AS user_name, u."employeeId", dept.name AS department_name,
        r.name AS resource_name, r.type AS resource_type, r.status AS resource_status,
+       COALESCE(rv."photoUrl", rr."photoUrl") AS resource_photo_url,
        ab.name AS approver_name,
        drv.id AS driver_id, du.name AS driver_name, drv."phoneNumber" AS driver_phone,
        v.id AS vehicle_id, v."plateNumber", v.brand, v.model, v.capacity,
        (
            SELECT EXISTS (
-               SELECT 1 FROM bookings b2 
-               WHERE b2.id != b.id 
-                 AND b2.status = 'PENDING' 
+               SELECT 1 FROM bookings b2
+               WHERE b2.id != b.id
+                 AND b2.status = 'PENDING'
                  AND b.status = 'PENDING'
                  AND b2."resourceId" = b."resourceId"
                  AND (
@@ -80,6 +84,8 @@ FROM bookings b
 JOIN users u ON u.id = b."userId"
 JOIN departments dept ON dept.id = u."departmentId"
 JOIN resources r ON r.id = b."resourceId"
+LEFT JOIN vehicles rv ON rv."resourceId" = r.id
+LEFT JOIN rooms rr ON rr."resourceId" = r.id
 LEFT JOIN resources orig ON orig.id = b."originalResourceId"
 LEFT JOIN users ab ON ab.id = b."approvedById"
 LEFT JOIN drivers drv ON drv.id = b."assignedDriverId"

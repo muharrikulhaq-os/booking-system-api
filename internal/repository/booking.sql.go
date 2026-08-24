@@ -434,14 +434,15 @@ const getBookingByID = `-- name: GetBookingByID :one
 SELECT b.id, b."userId", b."resourceId", b."startDate", b."endDate", b.purpose, b."passengerCount", b.status, b."approvedById", b."approvedAt", b."assignedDriverId", b."assignedVehicleId", b."assignedAt", b."returnedAt", b."createdAt", b."updatedAt", b."originalResourceId", b."bookingType", b."odometerStart", b."startLocation", b."startPhotoUrl",
        u.name AS user_name, u."employeeId", dept.name AS department_name,
        r.name AS resource_name, r.type AS resource_type, r.status AS resource_status,
+       COALESCE(rv."photoUrl", rr."photoUrl") AS resource_photo_url,
        ab.name AS approver_name,
        drv.id AS driver_id, du.name AS driver_name, drv."phoneNumber" AS driver_phone,
        v.id AS vehicle_id, v."plateNumber", v.brand, v.model, v.capacity,
        (
            SELECT EXISTS (
-               SELECT 1 FROM bookings b2 
-               WHERE b2.id != b.id 
-                 AND b2.status = 'PENDING' 
+               SELECT 1 FROM bookings b2
+               WHERE b2.id != b.id
+                 AND b2.status = 'PENDING'
                  AND b.status = 'PENDING'
                  AND b2."resourceId" = b."resourceId"
                  AND (
@@ -456,6 +457,8 @@ FROM bookings b
 JOIN users u ON u.id = b."userId"
 JOIN departments dept ON dept.id = u."departmentId"
 JOIN resources r ON r.id = b."resourceId"
+LEFT JOIN vehicles rv ON rv."resourceId" = r.id
+LEFT JOIN rooms rr ON rr."resourceId" = r.id
 LEFT JOIN resources orig ON orig.id = b."originalResourceId"
 LEFT JOIN users ab ON ab.id = b."approvedById"
 LEFT JOIN drivers drv ON drv.id = b."assignedDriverId"
@@ -492,6 +495,7 @@ type GetBookingByIDRow struct {
 	ResourceName         string           `json:"resource_name"`
 	ResourceType         ResourceType     `json:"resource_type"`
 	ResourceStatus       ResourceStatus   `json:"resource_status"`
+	ResourcePhotoUrl     sql.NullString   `json:"resource_photo_url"`
 	ApproverName         sql.NullString   `json:"approver_name"`
 	DriverID             sql.NullInt32    `json:"driver_id"`
 	DriverName           sql.NullString   `json:"driver_name"`
@@ -540,6 +544,7 @@ func (q *Queries) GetBookingByID(ctx context.Context, id int32) (GetBookingByIDR
 		&i.ResourceName,
 		&i.ResourceType,
 		&i.ResourceStatus,
+		&i.ResourcePhotoUrl,
 		&i.ApproverName,
 		&i.DriverID,
 		&i.DriverName,
@@ -661,14 +666,15 @@ const listBookings = `-- name: ListBookings :many
 SELECT b.id, b."userId", b."resourceId", b."startDate", b."endDate", b.purpose, b."passengerCount", b.status, b."approvedById", b."approvedAt", b."assignedDriverId", b."assignedVehicleId", b."assignedAt", b."returnedAt", b."createdAt", b."updatedAt", b."originalResourceId", b."bookingType", b."odometerStart", b."startLocation", b."startPhotoUrl",
        u.name AS user_name, u."employeeId", dept.name AS department_name,
        r.name AS resource_name, r.type AS resource_type, r.status AS resource_status,
+       COALESCE(rv."photoUrl", rr."photoUrl") AS resource_photo_url,
        ab.name AS approver_name,
        drv.id AS driver_id, du.name AS driver_name, drv."phoneNumber" AS driver_phone,
        v.id AS vehicle_id, v."plateNumber", v.brand, v.model, v.capacity,
        (
            SELECT EXISTS (
-               SELECT 1 FROM bookings b2 
-               WHERE b2.id != b.id 
-                 AND b2.status = 'PENDING' 
+               SELECT 1 FROM bookings b2
+               WHERE b2.id != b.id
+                 AND b2.status = 'PENDING'
                  AND b.status = 'PENDING'
                  AND b2."resourceId" = b."resourceId"
                  AND (
@@ -683,6 +689,8 @@ FROM bookings b
 JOIN users u ON u.id = b."userId"
 JOIN departments dept ON dept.id = u."departmentId"
 JOIN resources r ON r.id = b."resourceId"
+LEFT JOIN vehicles rv ON rv."resourceId" = r.id
+LEFT JOIN rooms rr ON rr."resourceId" = r.id
 LEFT JOIN resources orig ON orig.id = b."originalResourceId"
 LEFT JOIN users ab ON ab.id = b."approvedById"
 LEFT JOIN drivers drv ON drv.id = b."assignedDriverId"
@@ -742,6 +750,7 @@ type ListBookingsRow struct {
 	ResourceName         string         `json:"resource_name"`
 	ResourceType         ResourceType   `json:"resource_type"`
 	ResourceStatus       ResourceStatus `json:"resource_status"`
+	ResourcePhotoUrl     sql.NullString `json:"resource_photo_url"`
 	ApproverName         sql.NullString `json:"approver_name"`
 	DriverID             sql.NullInt32  `json:"driver_id"`
 	DriverName           sql.NullString `json:"driver_name"`
@@ -805,6 +814,7 @@ func (q *Queries) ListBookings(ctx context.Context, arg ListBookingsParams) ([]L
 			&i.ResourceName,
 			&i.ResourceType,
 			&i.ResourceStatus,
+			&i.ResourcePhotoUrl,
 			&i.ApproverName,
 			&i.DriverID,
 			&i.DriverName,
