@@ -452,6 +452,40 @@ type ApproveBookingResponse struct {
 	Warning string         `json:"warning,omitempty"`
 }
 
+// hasUnresolvedVehicleConflict reports whether b's assigned vehicle already
+// has another APPROVED/ONGOING booking overlapping b's time window. Bookings
+// already linked to b via merge are discounted - they're meant to share the
+// vehicle (same pattern as MergeBookings' own conflict check).
+func (s *BookingService) hasUnresolvedVehicleConflict(ctx context.Context, b repository.GetBookingByIDRow) (bool, error) {
+	if !b.AssignedVehicleId.Valid {
+		return false, nil
+	}
+	count, err := s.q.CheckVehicleConflict(ctx, repository.CheckVehicleConflictParams{
+		AssignedVehicleId: b.AssignedVehicleId,
+		CheckStart:        b.StartDate,
+		CheckEnd:          b.EndDate,
+		ExcludeID:         b.ID,
+	})
+	if err != nil {
+		return false, err
+	}
+	if count == 0 {
+		return false, nil
+	}
+	merges, _ := s.q.GetBookingMerges(ctx, b.ID)
+	for _, m := range merges {
+		other, err := s.q.GetBookingByID(ctx, m.OtherBookingID)
+		if err != nil {
+			continue
+		}
+		if other.AssignedVehicleId.Valid && other.AssignedVehicleId.Int32 == b.AssignedVehicleId.Int32 &&
+			other.StartDate.Before(b.EndDate) && other.EndDate.After(b.StartDate) {
+			count--
+		}
+	}
+	return count > 0, nil
+}
+
 func (s *BookingService) Approve(ctx context.Context, id int32, req ApproveBookingRequest, approverID int) (ApproveBookingResponse, error) {
 	b, err := s.q.GetBookingByID(ctx, id)
 	if err != nil {
@@ -459,6 +493,26 @@ func (s *BookingService) Approve(ctx context.Context, id int32, req ApproveBooki
 	}
 	if b.Status != repository.BookingStatusPENDING {
 		return ApproveBookingResponse{}, util.ErrBookingNotPending
+	}
+
+	// Menyetujui tidak boleh menabrak kendaraan/supir yang sudah dipakai booking
+	// lain yang bentrok jadwalnya - admin harus gabungkan (merge) atau alihkan
+	// resource-nya dulu. Booking yang sudah ter-merge dikecualikan (lihat helper).
+	conflict, err := s.hasUnresolvedVehicleConflict(ctx, b)
+	if err != nil {
+		return ApproveBookingResponse{}, err
+	}
+	if conflict {
+		return ApproveBookingResponse{}, util.NewError(409,
+			"kendaraan ini sudah dipakai booking lain yang bentrok jadwalnya - gabungkan (merge) atau alihkan ke kendaraan lain sebelum menyetujui",
+			util.ErrConflict)
+	}
+	if b.AssignedDriverId.Valid && b.AssignedVehicleId.Valid {
+		if holder, herr := s.q.GetVehicleCurrentAssignment(ctx, b.AssignedVehicleId.Int32); herr == nil && holder.DriverId != b.AssignedDriverId.Int32 {
+			return ApproveBookingResponse{}, util.NewError(409,
+				"kendaraan ini sedang dipegang supir lain - gabungkan (merge) atau alihkan ke kendaraan lain sebelum menyetujui",
+				util.ErrConflict)
+		}
 	}
 
 	warningMsg := ""
@@ -712,6 +766,7 @@ func (s *BookingService) Start(ctx context.Context, id int32, odometer *int32, l
 		EntityId:    sql.NullInt32{Int32: id, Valid: true},
 		Description: sql.NullString{String: "Booking started", Valid: true},
 	})
+	s.syncMergedBookingStatus(ctx, id, repository.BookingStatusONGOING)
 
 	full, _ := s.q.GetBookingByID(ctx, id)
 	// Notifikasi: perjalanan dimulai → pemohon.
@@ -720,6 +775,65 @@ func (s *BookingService) Start(ctx context.Context, id int32, odometer *int32, l
 			"Perjalanan booking Anda telah dimulai", map[string]any{"bookingId": id})
 	}
 	return serializeBookingByID(full), nil
+}
+
+// syncMergedBookingStatus mirrors a status transition onto a booking's merge
+// partner(s) - a merged pair rides one trip, so starting/completing either
+// side means the other is happening too, not staying behind at its old
+// status. Skips the acted-upon booking's own side effects (overtime, trip
+// photos, notifications) to avoid double-counting; the partner just needs
+// its status and resource to reflect reality.
+func (s *BookingService) syncMergedBookingStatus(ctx context.Context, bookingID int32, newStatus repository.BookingStatus) {
+	merges, err := s.q.GetBookingMerges(ctx, bookingID)
+	if err != nil {
+		return
+	}
+	for _, m := range merges {
+		partnerID := m.OtherBookingID
+		partner, err := s.q.GetBookingByID(ctx, partnerID)
+		if err != nil {
+			continue
+		}
+		switch newStatus {
+		case repository.BookingStatusONGOING:
+			if partner.Status != repository.BookingStatusAPPROVED {
+				continue
+			}
+			if _, err := s.q.StartBooking(ctx, partnerID); err != nil {
+				continue
+			}
+			_, _ = s.q.UpdateResourceStatus(ctx, repository.UpdateResourceStatusParams{
+				ID: partner.ResourceId, Status: repository.ResourceStatusINUSE,
+			})
+		case repository.BookingStatusCOMPLETED:
+			if partner.Status != repository.BookingStatusONGOING && partner.Status != repository.BookingStatusOVERDUE {
+				continue
+			}
+			if _, err := s.q.CompleteBooking(ctx, partnerID); err != nil {
+				continue
+			}
+			_, _ = s.q.UpdateResourceStatus(ctx, repository.UpdateResourceStatusParams{
+				ID: partner.ResourceId, Status: repository.ResourceStatusAVAILABLE,
+			})
+		default:
+			continue
+		}
+		_, _ = s.q.CreateAuditLog(ctx, repository.CreateAuditLogParams{
+			Action:      string(newStatus),
+			EntityType:  "Booking",
+			EntityId:    sql.NullInt32{Int32: partnerID, Valid: true},
+			Description: sql.NullString{String: "Auto-sinkron dari booking gabungan #" + itoa(bookingID), Valid: true},
+		})
+		if s.notif != nil {
+			label := "Perjalanan dimulai"
+			code := "BOOKING_STARTED"
+			if newStatus == repository.BookingStatusCOMPLETED {
+				label, code = "Booking selesai", "BOOKING_COMPLETED"
+			}
+			s.notif.Notify(partner.UserId, code, label,
+				label+" (booking gabungan)", map[string]any{"bookingId": partnerID})
+		}
+	}
 }
 
 func (s *BookingService) Complete(ctx context.Context, id int32, userID int, role string) (map[string]any, error) {
@@ -785,16 +899,6 @@ func (s *BookingService) Complete(ctx context.Context, id int32, userID int, rol
 		}
 	}
 
-	// Lepas kepemilikan kendaraan supir bila ia tak punya booking aktif lain.
-	// (Kalau masih ada booking APPROVED/ONGOING lain — mis. hasil merge di
-	// kendaraan yang sama — kepemilikan dipertahankan.)
-	if b.AssignedDriverId.Valid {
-		other, _ := s.q.CountActiveBookingsByDriver(ctx, b.AssignedDriverId.Int32, b.ID)
-		if other == 0 {
-			_ = s.q.ReleaseDriver(ctx, b.AssignedDriverId.Int32)
-		}
-	}
-
 	_, _ = s.q.CreateAuditLog(ctx, repository.CreateAuditLogParams{
 		UserId:      sql.NullInt32{Int32: int32(userID), Valid: true},
 		Action:      "COMPLETE",
@@ -802,6 +906,20 @@ func (s *BookingService) Complete(ctx context.Context, id int32, userID int, rol
 		EntityId:    sql.NullInt32{Int32: id, Valid: true},
 		Description: sql.NullString{String: "Booking completed", Valid: true},
 	})
+	// Sinkronkan pasangan merge SEBELUM cek pelepasan supir di bawah, supaya
+	// "booking aktif lain" milik supir ini sudah menghitung status terbaru
+	// pasangannya (bukan status ONGOING lama yang bikin supir tidak dilepas).
+	s.syncMergedBookingStatus(ctx, id, repository.BookingStatusCOMPLETED)
+
+	// Lepas kepemilikan kendaraan supir bila ia tak punya booking aktif lain.
+	// (Kalau masih ada booking APPROVED/ONGOING lain — mis. hasil merge di
+	// kendaraan yang sama yang belum ikut selesai — kepemilikan dipertahankan.)
+	if b.AssignedDriverId.Valid {
+		other, _ := s.q.CountActiveBookingsByDriver(ctx, b.AssignedDriverId.Int32, b.ID)
+		if other == 0 {
+			_ = s.q.ReleaseDriver(ctx, b.AssignedDriverId.Int32)
+		}
+	}
 
 	full, _ := s.q.GetBookingByID(ctx, id)
 	// Notifikasi penyelesaian + overtime.
@@ -838,6 +956,18 @@ func (s *BookingService) RateDriver(ctx context.Context, bookingID int32, req Ra
 	}
 	if !b.AssignedDriverId.Valid {
 		return nil, util.NewError(400, "no driver was assigned to this booking", util.ErrBadRequest)
+	}
+	// Booking yang di-merge (bukan primary) berbagi supir & trip yang sama
+	// dengan booking primary - rating cuma diisi sekali, dari sisi primary,
+	// supaya supir tidak dinilai dua kali untuk satu perjalanan yang sama.
+	if merges, _ := s.q.GetBookingMerges(ctx, bookingID); len(merges) > 0 {
+		for _, m := range merges {
+			if !m.IsPrimary {
+				return nil, util.NewError(400,
+					"booking ini digabung (merge) - beri rating dari booking utama #"+itoa(m.OtherBookingID),
+					util.ErrBadRequest)
+			}
+		}
 	}
 	if _, err = s.q.GetDriverRatingByBooking(ctx, bookingID); err == nil {
 		return nil, util.NewError(409, "you have already rated this booking", util.ErrConflict)

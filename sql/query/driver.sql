@@ -73,6 +73,11 @@ FROM driver_assignments da
 JOIN vehicles v ON v.id = da."vehicleId"
 WHERE da."driverId" = $1 AND da."releasedAt" IS NULL LIMIT 1;
 
+-- name: GetVehicleCurrentAssignment :one
+-- Supir yang sedang aktif memegang kendaraan ini sekarang (kalau ada).
+SELECT * FROM driver_assignments
+WHERE "vehicleId" = $1 AND "releasedAt" IS NULL LIMIT 1;
+
 -- name: GetDriverAssignmentHistory :many
 SELECT da.*, v."plateNumber", v.brand, v.model
 FROM driver_assignments da

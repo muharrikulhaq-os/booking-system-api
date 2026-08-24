@@ -223,6 +223,25 @@ func (q *Queries) GetDriverCurrentAssignment(ctx context.Context, driverid int32
 	return i, err
 }
 
+const getVehicleCurrentAssignment = `-- name: GetVehicleCurrentAssignment :one
+SELECT id, "driverId", "vehicleId", "assignedAt", "releasedAt" FROM driver_assignments
+WHERE "vehicleId" = $1 AND "releasedAt" IS NULL LIMIT 1
+`
+
+// Supir yang sedang aktif memegang kendaraan ini sekarang (kalau ada).
+func (q *Queries) GetVehicleCurrentAssignment(ctx context.Context, vehicleid int32) (DriverAssignment, error) {
+	row := q.db.QueryRowContext(ctx, getVehicleCurrentAssignment, vehicleid)
+	var i DriverAssignment
+	err := row.Scan(
+		&i.ID,
+		&i.DriverId,
+		&i.VehicleId,
+		&i.AssignedAt,
+		&i.ReleasedAt,
+	)
+	return i, err
+}
+
 const listAvailableDrivers = `-- name: ListAvailableDrivers :many
 SELECT d.id AS driver_id, u.name AS driver_name, u."employeeId",
        v.id AS vehicle_id, v."plateNumber", v.capacity,
