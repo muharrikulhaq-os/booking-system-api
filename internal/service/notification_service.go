@@ -167,7 +167,11 @@ func (s *NotificationService) NotifyUser(userID int32, message string, data map[
 	s.createAndSend(context.Background(), userID, "Booking Update", message, "BOOKING_APPROVED", entityID, data)
 }
 
-func (s *NotificationService) GetMyNotifications(ctx context.Context, userID int32, page, limit int) (any, error) {
+// GetMyNotifications returns (rows, total, error) - dipisah (bukan map
+// gabungan) supaya handler bisa lewat util.Paginated() dan hasilkan
+// amplop {success,message,data,pagination} yang SAMA seperti semua list
+// endpoint lain (bukan pagination bersarang di dalam data).
+func (s *NotificationService) GetMyNotifications(ctx context.Context, userID int32, page, limit int) ([]map[string]any, int64, error) {
 	if page < 1 {
 		page = 1
 	}
@@ -182,12 +186,12 @@ func (s *NotificationService) GetMyNotifications(ctx context.Context, userID int
 		Offset: int32(offset),
 	})
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 
 	total, err := s.q.CountNotificationsByUserID(ctx, userID)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 
 	// rows datang langsung dari sqlc (repository.Notification) - kalau di-
@@ -207,15 +211,7 @@ func (s *NotificationService) GetMyNotifications(ctx context.Context, userID int
 		}
 	}
 
-	return map[string]any{
-		"data": data,
-		"pagination": map[string]any{
-			"total":      total,
-			"page":       page,
-			"limit":      limit,
-			"totalPages": (int(total) + limit - 1) / limit,
-		},
-	}, nil
+	return data, total, nil
 }
 
 func (s *NotificationService) MarkAsRead(ctx context.Context, notifID int32, userID int32) error {

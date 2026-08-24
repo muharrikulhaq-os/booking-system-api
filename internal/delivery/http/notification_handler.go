@@ -72,12 +72,18 @@ func (h *NotificationHandler) GetMyNotifications(c *fiber.Ctx) error {
 	userID := middleware.GetUserID(c)
 	page, _ := strconv.Atoi(c.Query("page", "1"))
 	limit, _ := strconv.Atoi(c.Query("limit", "20"))
+	if page < 1 {
+		page = 1
+	}
+	if limit < 1 {
+		limit = 20
+	}
 
-	data, err := h.svc.GetMyNotifications(c.Context(), int32(userID), page, limit)
+	data, total, err := h.svc.GetMyNotifications(c.Context(), int32(userID), page, limit)
 	if err != nil {
 		return err
 	}
-	return util.OK(c, "Notifications retrieved", data)
+	return util.Paginated(c, "Notifications retrieved", data, total, page, limit)
 }
 
 func (h *NotificationHandler) MarkAsRead(c *fiber.Ctx) error {
