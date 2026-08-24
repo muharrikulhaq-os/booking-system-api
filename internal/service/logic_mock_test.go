@@ -83,6 +83,12 @@ func (m *MockQuerier) CreateAuditLog(ctx context.Context, arg repository.CreateA
 	return repository.AuditLog{}, nil
 }
 
+// GetBookingMerges: none of these fixtures involve a merged booking, so
+// Complete()'s merge-sync (syncMergedBookingStatus) is always a no-op here.
+func (m *MockQuerier) GetBookingMerges(ctx context.Context, bookingID int32) ([]repository.BookingMergeInfoRow, error) {
+	return nil, nil
+}
+
 // ─── Maintenance Berkala (odometer-triggered) ──────────────────────────────
 
 func TestCheckAndTriggerAutoMaintenance_TriggersAtInterval(t *testing.T) {
