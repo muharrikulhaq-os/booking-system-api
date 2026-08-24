@@ -97,6 +97,8 @@ type Querier interface {
 	GetVehicleByID(ctx context.Context, id int32) (GetVehicleByIDRow, error)
 	GetVehicleByPlate(ctx context.Context, platenumber string) (Vehicle, error)
 	GetVehicleCategoryByID(ctx context.Context, id int32) (VehicleCategory, error)
+	// Supir yang sedang aktif memegang kendaraan ini sekarang (kalau ada).
+	GetVehicleCurrentAssignment(ctx context.Context, vehicleid int32) (DriverAssignment, error)
 	InvalidatePreviousOTPs(ctx context.Context, userid int32) error
 	ListAttachmentsByBooking(ctx context.Context, bookingid sql.NullInt32) ([]ListAttachmentsByBookingRow, error)
 	ListAttachmentsByRoom(ctx context.Context, roomid sql.NullInt32) ([]ListAttachmentsByRoomRow, error)
