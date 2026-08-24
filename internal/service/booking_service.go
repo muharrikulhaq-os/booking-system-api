@@ -663,6 +663,14 @@ func (s *BookingService) Start(ctx context.Context, id int32, odometer *int32, l
 		if err != nil || !rk.IsActive {
 			return nil, util.ErrForbidden
 		}
+	case "EMPLOYEE":
+		// Booking owner can self-serve room bookings (no room keeper needed on-site).
+		if b.ResourceType != repository.ResourceTypeROOM {
+			return nil, util.NewError(400, "employee can only start room bookings", util.ErrBadRequest)
+		}
+		if int(b.UserId) != userID {
+			return nil, util.ErrForbidden
+		}
 	case "ADMIN":
 		// admin can start any type
 	default:
@@ -722,7 +730,8 @@ func (s *BookingService) Complete(ctx context.Context, id int32, userID int, rol
 	if b.Status != repository.BookingStatusONGOING && b.Status != repository.BookingStatusOVERDUE {
 		return nil, util.NewError(409, "booking must be ONGOING or OVERDUE to complete", util.ErrForbidden)
 	}
-	if role == "ROOM_KEEPER" {
+	switch role {
+	case "ROOM_KEEPER":
 		if b.ResourceType != repository.ResourceTypeROOM {
 			return nil, util.NewError(400, "room keeper can only complete room bookings", util.ErrBadRequest)
 		}
@@ -730,6 +739,18 @@ func (s *BookingService) Complete(ctx context.Context, id int32, userID int, rol
 		if err != nil || !rk.IsActive {
 			return nil, util.ErrForbidden
 		}
+	case "EMPLOYEE":
+		// Booking owner can self-serve room bookings (no room keeper needed on-site).
+		if b.ResourceType != repository.ResourceTypeROOM {
+			return nil, util.NewError(400, "employee can only complete room bookings", util.ErrBadRequest)
+		}
+		if int(b.UserId) != userID {
+			return nil, util.ErrForbidden
+		}
+	case "ADMIN":
+		// admin can complete any type
+	default:
+		return nil, util.ErrForbidden
 	}
 
 	if _, err = s.q.CompleteBooking(ctx, id); err != nil {

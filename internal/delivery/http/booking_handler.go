@@ -37,8 +37,10 @@ func NewBookingHandler(svc *service.BookingService, attachSvc *service.Attachmen
 func (h *BookingHandler) Register(r fiber.Router) {
 	auth := middleware.Auth()
 	admin := middleware.RequireRole("ADMIN")
-	adminOrDriver := middleware.RequireRole("ADMIN", "DRIVER", "ROOM_KEEPER")
-	adminOrRoomKeeper := middleware.RequireRole("ADMIN", "ROOM_KEEPER")
+	// EMPLOYEE included so the booking owner can self-serve start/complete on
+	// room bookings; scoped to room + ownership inside Start()/Complete().
+	adminOrDriver := middleware.RequireRole("ADMIN", "DRIVER", "ROOM_KEEPER", "EMPLOYEE")
+	adminOrRoomKeeper := middleware.RequireRole("ADMIN", "ROOM_KEEPER", "EMPLOYEE")
 
 	g := r.Group("/bookings", auth)
 	g.Get("", h.List)
