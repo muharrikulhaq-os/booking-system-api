@@ -492,7 +492,7 @@ func (h *ReportHandler) BookingSummary(c *fiber.Ctx) error {
 }
 
 func (h *ReportHandler) ResourceUsage(c *fiber.Ctx) error {
-	data, err := h.svc.ResourceUsage(c.Context())
+	data, err := h.svc.ResourceUsage(c.Context(), parseDate(c, "startDate"), parseDate(c, "endDate"))
 	if err != nil {
 		return err
 	}
@@ -516,7 +516,7 @@ func (h *ReportHandler) MaintenanceCost(c *fiber.Ctx) error {
 }
 
 func (h *ReportHandler) DriverRatings(c *fiber.Ctx) error {
-	data, err := h.svc.DriverRatings(c.Context())
+	data, err := h.svc.DriverRatings(c.Context(), parseDate(c, "startDate"), parseDate(c, "endDate"))
 	if err != nil {
 		return err
 	}
@@ -524,7 +524,7 @@ func (h *ReportHandler) DriverRatings(c *fiber.Ctx) error {
 }
 
 func (h *ReportHandler) DriverActivity(c *fiber.Ctx) error {
-	data, err := h.svc.DriverActivity(c.Context())
+	data, err := h.svc.DriverActivity(c.Context(), parseDate(c, "startDate"), parseDate(c, "endDate"))
 	if err != nil {
 		return err
 	}
@@ -542,7 +542,9 @@ func (h *ReportHandler) OverdueBookings(c *fiber.Ctx) error {
 func (h *ReportHandler) AuditLogs(c *fiber.Ctx) error {
 	page := queryInt(c, "page", 1)
 	limit := queryInt(c, "limit", 50)
-	data, total, err := h.svc.AuditLogs(c.Context(), page, limit, queryString(c, "entityType"), queryInt32(c, "userId"))
+	data, total, err := h.svc.AuditLogs(c.Context(), page, limit,
+		queryString(c, "entityType"), queryInt32(c, "userId"),
+		parseDate(c, "startDate"), parseDate(c, "endDate"))
 	if err != nil {
 		return err
 	}
@@ -563,18 +565,33 @@ func parseDate(c *fiber.Ctx, key string) *time.Time {
 }
 
 func (h *ReportHandler) Overview(c *fiber.Ctx) error {
-	period := c.Query("period", "monthly")
-	data, err := h.svc.Overview(c.Context(), period)
+	data, err := h.svc.Overview(c.Context(), parseDate(c, "startDate"), parseDate(c, "endDate"))
 	if err != nil {
 		return err
 	}
 	return util.OK(c, "Overview report", data)
 }
 
+// rangeOrDefault resolves optional startDate/endDate query params to a
+// concrete [start, end] window, falling back to "now minus N months" when
+// either side is missing - dipakai trend chart (BookingTrend/CostTrend)
+// yang butuh bound konkret, bukan nullable, untuk generate_series-nya.
+func rangeOrDefault(c *fiber.Ctx, defaultMonthsBack int) (time.Time, time.Time) {
+	end := time.Now()
+	if e := parseDate(c, "endDate"); e != nil {
+		end = *e
+	}
+	start := end.AddDate(0, -defaultMonthsBack, 0)
+	if s := parseDate(c, "startDate"); s != nil {
+		start = *s
+	}
+	return start, end
+}
+
 func (h *ReportHandler) BookingTrend(c *fiber.Ctx) error {
 	groupBy := c.Query("groupBy", "monthly")
-	periods := queryInt(c, "periods", 12)
-	data, err := h.svc.BookingTrend(c.Context(), groupBy, periods)
+	start, end := rangeOrDefault(c, 12)
+	data, err := h.svc.BookingTrend(c.Context(), groupBy, start, end)
 	if err != nil {
 		return err
 	}
@@ -631,8 +648,8 @@ func (h *ReportHandler) CostByDepartment(c *fiber.Ctx) error {
 
 func (h *ReportHandler) CostTrend(c *fiber.Ctx) error {
 	groupBy := c.Query("groupBy", "monthly")
-	periods := queryInt(c, "periods", 6)
-	data, err := h.svc.CostTrend(c.Context(), groupBy, periods)
+	start, end := rangeOrDefault(c, 6)
+	data, err := h.svc.CostTrend(c.Context(), groupBy, start, end)
 	if err != nil {
 		return err
 	}

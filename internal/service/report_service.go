@@ -54,24 +54,12 @@ func (s *ReportService) BookingSummary(ctx context.Context, startFrom, endTo *ti
 	return s.q.ReportBookingSummary(ctx, params)
 }
 
-func (s *ReportService) ResourceUsage(ctx context.Context) (any, error) {
-	return s.q.ReportResourceUsage(ctx)
-}
-
 func (s *ReportService) FuelExpenses(ctx context.Context) (any, error) {
 	return s.q.ReportFuelExpenses(ctx)
 }
 
 func (s *ReportService) MaintenanceCost(ctx context.Context) (any, error) {
 	return s.q.ReportMaintenanceCost(ctx)
-}
-
-func (s *ReportService) DriverRatings(ctx context.Context) (any, error) {
-	return s.q.ReportDriverRatings(ctx)
-}
-
-func (s *ReportService) DriverActivity(ctx context.Context) (any, error) {
-	return s.q.ReportDriverActivity(ctx)
 }
 
 func (s *ReportService) OverdueBookings(ctx context.Context) (any, error) {
@@ -83,11 +71,14 @@ func (s *ReportService) AuditLogs(
 	page, limit int,
 	entityType *string,
 	userID *int32,
+	startFrom, endTo *time.Time,
 ) (any, int64, error) {
 
 	params := repository.ReportAuditLogsParams{
-		Limit:  int32(limit),
-		Offset: int32((page - 1) * limit),
+		Limit:     int32(limit),
+		Offset:    int32((page - 1) * limit),
+		StartFrom: nullableTime(startFrom),
+		EndTo:     nullableTime(endTo),
 	}
 
 	if entityType != nil {
@@ -117,6 +108,8 @@ func (s *ReportService) AuditLogs(
 	total, err := s.q.CountAuditLogs(ctx, repository.CountAuditLogsParams{
 		EntityType: params.EntityType,
 		UserID:     params.UserID,
+		StartFrom:  params.StartFrom,
+		EndTo:      params.EndTo,
 	})
 	if err != nil {
 		return nil, 0, err
@@ -127,11 +120,22 @@ func (s *ReportService) AuditLogs(
 
 // ─── New report methods ───────────────────────────────────────────────────────
 
-func (s *ReportService) Overview(ctx context.Context, period string) (any, error) {
-	start, end := periodBounds(period)
-	prevStart, prevEnd := start.AddDate(0, 0, -int(end.Sub(start)/24/time.Hour)), start.Add(-time.Nanosecond)
+// Overview dulu menerima period string (monthly/quarterly/yearly) dan
+// menghitung batas tanggalnya sendiri via periodBounds() - jadi tidak
+// pernah ikut filter tanggal yang dipilih user di halaman Laporan.
+// Sekarang start/end datang langsung dari filter tersebut, sama seperti
+// laporan lain (CostSummary, dst) - fallback ke bulan berjalan bila kosong
+// supaya endpoint tetap masuk akal dipanggil tanpa parameter.
+func (s *ReportService) Overview(ctx context.Context, start, end *time.Time) (any, error) {
+	rangeStart, rangeEnd := time.Time{}, time.Time{}
+	if start != nil && end != nil {
+		rangeStart, rangeEnd = *start, *end
+	} else {
+		rangeStart, rangeEnd = periodBounds("monthly")
+	}
+	prevStart, prevEnd := rangeStart.AddDate(0, 0, -int(rangeEnd.Sub(rangeStart)/24/time.Hour)), rangeStart.Add(-time.Nanosecond)
 
-	cur, err := s.q.ReportOverview(ctx, start, end)
+	cur, err := s.q.ReportOverview(ctx, rangeStart, rangeEnd)
 	if err != nil {
 		return nil, err
 	}
@@ -163,8 +167,12 @@ func (s *ReportService) Overview(ctx context.Context, period string) (any, error
 	}, nil
 }
 
-func (s *ReportService) BookingTrend(ctx context.Context, groupBy string, periods int) (any, error) {
-	return s.q.ReportBookingTrend(ctx, groupBy, periods)
+// BookingTrend dulu selalu menghitung mundur dari NOW() (periods bucket
+// terakhir), tidak peduli filter tanggal yang dipilih user. Sekarang
+// dibatasi start/end eksplisit - frontend yang menentukan groupBy
+// (daily/weekly/monthly) berdasarkan lebar rentang yang dipilih.
+func (s *ReportService) BookingTrend(ctx context.Context, groupBy string, start, end time.Time) (any, error) {
+	return s.q.ReportBookingTrend(ctx, groupBy, start, end)
 }
 
 func (s *ReportService) BookingsByDepartment(ctx context.Context, start, end *time.Time) (any, error) {
@@ -223,8 +231,10 @@ func (s *ReportService) CostByDepartment(ctx context.Context, start, end *time.T
 	return s.q.ReportCostByDepartment(ctx, nullableTime(start), nullableTime(end))
 }
 
-func (s *ReportService) CostTrend(ctx context.Context, groupBy string, periods int) (any, error) {
-	return s.q.ReportCostTrend(ctx, groupBy, periods)
+// Sama seperti BookingTrend - dulu selalu mundur dari NOW(), sekarang
+// dibatasi rentang tanggal eksplisit.
+func (s *ReportService) CostTrend(ctx context.Context, groupBy string, start, end time.Time) (any, error) {
+	return s.q.ReportCostTrend(ctx, groupBy, start, end)
 }
 
 func (s *ReportService) DriverPerformance(ctx context.Context, start, end *time.Time) (any, error) {
@@ -233,6 +243,25 @@ func (s *ReportService) DriverPerformance(ctx context.Context, start, end *time.
 
 func (s *ReportService) DepartmentSummary(ctx context.Context, start, end *time.Time) (any, error) {
 	return s.q.ReportDepartmentSummary(ctx, nullableTime(start), nullableTime(end))
+}
+
+// ResourceUsage & DriverRatings dulu SELECT * FROM view tanpa filter tanggal
+// sama sekali (v_vehicle_summary / v_driver_ratings_summary - view Postgres
+// tidak bisa menerima parameter). Sekarang direplikasi sebagai query
+// langsung dengan filter tanggal opsional pada join booking/fuel/rating-nya,
+// bypass view-nya sepenuhnya.
+func (s *ReportService) ResourceUsage(ctx context.Context, start, end *time.Time) (any, error) {
+	return s.q.ReportResourceUsageRanged(ctx, nullableTime(start), nullableTime(end))
+}
+
+func (s *ReportService) DriverRatings(ctx context.Context, start, end *time.Time) (any, error) {
+	return s.q.ReportDriverRatingsRanged(ctx, nullableTime(start), nullableTime(end))
+}
+
+// DriverActivity dulu tanpa filter tanggal - sekarang scoped ke rentang,
+// pola sama seperti DriverPerformance di atas.
+func (s *ReportService) DriverActivity(ctx context.Context, start, end *time.Time) (any, error) {
+	return s.q.ReportDriverActivityRanged(ctx, nullableTime(start), nullableTime(end))
 }
 
 // DriverTrips reports, per driver, how many completed trips were SPD (surat

@@ -3,6 +3,7 @@ package http
 import (
 	"fmt"
 	"reflect"
+	"time"
 
 	"booking-system-api/internal/service"
 	"github.com/gofiber/fiber/v2"
@@ -118,8 +119,8 @@ func (h *ExcelHandler) ExportExcel(c *fiber.Ctx) error {
 	d1, _ := h.svc.BookingSummary(ctx, nil, nil)
 	appendSheet("Booking Summary", d1)
 
-	// 2. Resource Usage
-	d2, _ := h.svc.ResourceUsage(ctx)
+	// 2. Resource Usage (export = seluruh histori, tidak difilter tanggal)
+	d2, _ := h.svc.ResourceUsage(ctx, nil, nil)
 	appendSheet("Resource Usage", d2)
 
 	// 3. Fuel Expenses
@@ -131,23 +132,25 @@ func (h *ExcelHandler) ExportExcel(c *fiber.Ctx) error {
 	appendSheet("Maintenance Cost", d4)
 
 	// 5. Driver Ratings
-	d5, _ := h.svc.DriverRatings(ctx)
+	d5, _ := h.svc.DriverRatings(ctx, nil, nil)
 	appendSheet("Driver Ratings", d5)
 
 	// 6. Driver Activity
-	d6, _ := h.svc.DriverActivity(ctx)
+	d6, _ := h.svc.DriverActivity(ctx, nil, nil)
 	appendSheet("Driver Activity", d6)
 
 	// 7. Overdue Bookings
 	d7, _ := h.svc.OverdueBookings(ctx)
 	appendSheet("Overdue Bookings", d7)
 
-	// 8. Overview
-	d8, _ := h.svc.Overview(ctx, "monthly")
+	// 8. Overview (nil,nil -> fallback bulan berjalan, lihat ReportService.Overview)
+	d8, _ := h.svc.Overview(ctx, nil, nil)
 	appendSheet("Overview", d8)
 
-	// 9. Booking Trend
-	d9, _ := h.svc.BookingTrend(ctx, "monthly", 12)
+	// 9. Booking Trend - 12 bulan terakhir dari sekarang (export tidak
+	// terikat filter tanggal UI, jadi hitung eksplisit di sini)
+	now := time.Now()
+	d9, _ := h.svc.BookingTrend(ctx, "monthly", now.AddDate(0, -12, 0), now)
 	nr9 := appendSheet("Booking Trend", d9)
 	addLineChart("Booking Trend", nr9, "Trend Booking (12 Bulan)", "A", "B", "E2")
 
@@ -178,8 +181,8 @@ func (h *ExcelHandler) ExportExcel(c *fiber.Ctx) error {
 	nr15 := appendSheet("Cost by Dept", d15)
 	addPieChart("Cost by Dept", nr15, "Biaya per Departemen", "A", "B", "E2")
 
-	// 16. Cost Trend
-	d16, _ := h.svc.CostTrend(ctx, "monthly", 12)
+	// 16. Cost Trend - 12 bulan terakhir dari sekarang
+	d16, _ := h.svc.CostTrend(ctx, "monthly", now.AddDate(0, -12, 0), now)
 	nr16 := appendSheet("Cost Trend", d16)
 	addLineChart("Cost Trend", nr16, "Trend Biaya (12 Bulan)", "A", "B", "E2")
 

@@ -59,13 +59,17 @@ FROM audit_logs al
 LEFT JOIN users u ON u.id = al."userId"
 WHERE (sqlc.narg(entity_type)::text IS NULL OR al."entityType" = sqlc.narg(entity_type)::text)
   AND (sqlc.narg(user_id)::int IS NULL OR al."userId" = sqlc.narg(user_id)::int)
+  AND (sqlc.narg(start_from)::timestamptz IS NULL OR al."createdAt" >= sqlc.narg(start_from)::timestamptz)
+  AND (sqlc.narg(end_to)::timestamptz IS NULL OR al."createdAt" <= sqlc.narg(end_to)::timestamptz)
 ORDER BY al."createdAt" DESC
 LIMIT $1 OFFSET $2;
 
 -- name: CountAuditLogs :one
 SELECT COUNT(*) FROM audit_logs
 WHERE (sqlc.narg(entity_type)::text IS NULL OR "entityType" = sqlc.narg(entity_type)::text)
-  AND (sqlc.narg(user_id)::int IS NULL OR "userId" = sqlc.narg(user_id)::int);
+  AND (sqlc.narg(user_id)::int IS NULL OR "userId" = sqlc.narg(user_id)::int)
+  AND (sqlc.narg(start_from)::timestamptz IS NULL OR "createdAt" >= sqlc.narg(start_from)::timestamptz)
+  AND (sqlc.narg(end_to)::timestamptz IS NULL OR "createdAt" <= sqlc.narg(end_to)::timestamptz);
 
 -- name: ReportDriverTrips :many
 -- Rekap per driver, di-scope ke rentang tanggal yang sama (booking COMPLETED

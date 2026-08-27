@@ -6,6 +6,20 @@ import (
 	"time"
 )
 
+// truncAndFormat maps a frontend groupBy value to the matching Postgres
+// DATE_TRUNC unit + TO_CHAR format - dipakai bareng oleh BookingTrend &
+// CostTrend supaya trend chart selalu ikut lebar rentang tanggal aktif.
+func truncAndFormat(groupBy string) (trunc, format string) {
+	switch groupBy {
+	case "daily":
+		return "day", "YYYY-MM-DD"
+	case "weekly":
+		return "week", "IYYY-\"W\"IW"
+	default:
+		return "month", "YYYY-MM"
+	}
+}
+
 // ─── Overview ────────────────────────────────────────────────────────────────
 
 type OverviewRow struct {
@@ -46,32 +60,34 @@ type BookingTrendRow struct {
 	Room    int64  `json:"room"`
 }
 
-func (q *Queries) ReportBookingTrend(ctx context.Context, groupBy string, periods int) ([]BookingTrendRow, error) {
-	var trunc string
-	var fmt string
-	switch groupBy {
-	case "daily":
-		trunc = "day"
-		fmt = "YYYY-MM-DD"
-	case "weekly":
-		trunc = "week"
-		fmt = "IYYY-\"W\"IW"
-	default:
-		trunc = "month"
-		fmt = "YYYY-MM"
-	}
+// ReportBookingTrend dulu selalu menghitung mundur `periods` bucket dari
+// NOW(), tidak peduli filter tanggal yang dipilih user di halaman Laporan.
+// Sekarang dibatasi [start, end] eksplisit - frontend yang menentukan
+// groupBy (daily/weekly/monthly) berdasar lebar rentang yang dipilih, jadi
+// grafik selalu representasi rentang yang aktif, bukan jendela tetap.
+// Pola generate_series + subquery per-bucket disamakan dengan CostTrend di
+// bawah (supaya bucket kosong tetap muncul sebagai 0, bukan hilang).
+func (q *Queries) ReportBookingTrend(ctx context.Context, groupBy string, start, end time.Time) ([]BookingTrendRow, error) {
+	trunc, fmt := truncAndFormat(groupBy)
 	query := `
+		WITH periods AS (
+		    SELECT generate_series(
+		        DATE_TRUNC($1, $3::timestamptz),
+		        DATE_TRUNC($1, $4::timestamptz),
+		        ('1 ' || $1)::INTERVAL
+		    ) AS bucket_start
+		)
 		SELECT
-		    TO_CHAR(DATE_TRUNC($1, b."startDate"), $2) AS period,
-		    COUNT(b.id)                                  AS count,
-		    COUNT(CASE WHEN r.type = 'VEHICLE' THEN 1 END) AS vehicle,
-		    COUNT(CASE WHEN r.type = 'ROOM'    THEN 1 END) AS room
-		FROM bookings b
-		JOIN resources r ON r.id = b."resourceId"
-		WHERE b."startDate" >= NOW() - ($3::int || ' ' || $1)::INTERVAL
-		GROUP BY DATE_TRUNC($1, b."startDate")
-		ORDER BY DATE_TRUNC($1, b."startDate") ASC`
-	rows, err := q.db.QueryContext(ctx, query, trunc, fmt, periods)
+		    TO_CHAR(bucket_start, $2) AS period,
+		    COALESCE((SELECT COUNT(*) FROM bookings b
+		              WHERE DATE_TRUNC($1, b."startDate") = bucket_start), 0) AS count,
+		    COALESCE((SELECT COUNT(*) FROM bookings b JOIN resources r ON r.id = b."resourceId"
+		              WHERE DATE_TRUNC($1, b."startDate") = bucket_start AND r.type = 'VEHICLE'), 0) AS vehicle,
+		    COALESCE((SELECT COUNT(*) FROM bookings b JOIN resources r ON r.id = b."resourceId"
+		              WHERE DATE_TRUNC($1, b."startDate") = bucket_start AND r.type = 'ROOM'), 0) AS room
+		FROM periods
+		ORDER BY bucket_start ASC`
+	rows, err := q.db.QueryContext(ctx, query, trunc, fmt, start, end)
 	if err != nil {
 		return nil, err
 	}
@@ -337,36 +353,27 @@ type CostTrendRow struct {
 	TotalCost       float64 `json:"totalCost"`
 }
 
-func (q *Queries) ReportCostTrend(ctx context.Context, groupBy string, periods int) ([]CostTrendRow, error) {
-	var trunc, fmtStr string
-	switch groupBy {
-	case "daily":
-		trunc = "day"
-		fmtStr = "YYYY-MM-DD"
-	case "weekly":
-		trunc = "week"
-		fmtStr = "IYYY-\"W\"IW"
-	default:
-		trunc = "month"
-		fmtStr = "YYYY-MM"
-	}
+// Sama seperti BookingTrend - dulu selalu mundur dari NOW(), sekarang
+// dibatasi [start, end] eksplisit supaya ikut filter tanggal aktif.
+func (q *Queries) ReportCostTrend(ctx context.Context, groupBy string, start, end time.Time) ([]CostTrendRow, error) {
+	trunc, fmtStr := truncAndFormat(groupBy)
 	query := `
 		WITH periods AS (
 		    SELECT generate_series(
-		        DATE_TRUNC($1, NOW() - ($3::int || ' ' || $1)::INTERVAL),
-		        DATE_TRUNC($1, NOW()),
+		        DATE_TRUNC($1, $3::timestamptz),
+		        DATE_TRUNC($1, $4::timestamptz),
 		        ('1 ' || $1)::INTERVAL
-		    ) AS p
+		    ) AS bucket_start
 		)
 		SELECT
-		    TO_CHAR(p, $2) AS period,
+		    TO_CHAR(bucket_start, $2) AS period,
 		    COALESCE((SELECT SUM(fe."totalCost")::float8 FROM fuel_expenses fe
-		              WHERE DATE_TRUNC($1, fe."createdAt") = p), 0) AS fuel_cost,
+		              WHERE DATE_TRUNC($1, fe."createdAt") = bucket_start), 0) AS fuel_cost,
 		    COALESCE((SELECT SUM(mr."totalCost")::float8 FROM maintenance_records mr
-		              WHERE DATE_TRUNC($1, mr."startDate") = p), 0) AS maint_cost
+		              WHERE DATE_TRUNC($1, mr."startDate") = bucket_start), 0) AS maint_cost
 		FROM periods
-		ORDER BY p ASC`
-	rows, err := q.db.QueryContext(ctx, query, trunc, fmtStr, periods)
+		ORDER BY bucket_start ASC`
+	rows, err := q.db.QueryContext(ctx, query, trunc, fmtStr, start, end)
 	if err != nil {
 		return nil, err
 	}
@@ -509,6 +516,172 @@ func (q *Queries) ReportDepartmentSummary(ctx context.Context, start, end sql.Nu
 			return nil, err
 		}
 		r.TotalCost = r.FuelCost + r.MaintenanceCost
+		items = append(items, r)
+	}
+	return items, rows.Err()
+}
+
+// ─── Resource Usage (ranged) ───────────────────────────────────────────────────
+// v_vehicle_summary (dipakai ReportResourceUsage) tidak bisa menerima
+// parameter - view Postgres biasa. Query ini mereplikasi persis logikanya
+// (termasuk kuirk fan-out completed_bookings dari LEFT JOIN fuel_expenses
+// yang sudah ada di view aslinya - sengaja TIDAK diperbaiki di sini supaya
+// angka yang tampil tidak berubah diam-diam sebagai efek samping fitur
+// filter tanggal) tapi dengan filter tanggal opsional pada booking & BBM.
+
+type ResourceUsageRangedRow struct {
+	ID                int32          `json:"id"`
+	VehicleName       string         `json:"vehicle_name"`
+	PlateNumber       string         `json:"plateNumber"`
+	Category          string         `json:"category"`
+	Capacity          int16          `json:"capacity"`
+	Status            ResourceStatus `json:"status"`
+	CurrentOdometer   int32          `json:"currentOdometer"`
+	TotalBookings     int64          `json:"total_bookings"`
+	CompletedBookings int64          `json:"completed_bookings"`
+	TotalLiterBbm     float64        `json:"total_liter_bbm"`
+	TotalCostBbm      float64        `json:"total_cost_bbm"`
+	TotalKwhListrik   float64        `json:"total_kwh_listrik"`
+	TotalCostListrik  float64        `json:"total_cost_listrik"`
+	TotalFuelCost     float64        `json:"total_fuel_cost"`
+}
+
+func (q *Queries) ReportResourceUsageRanged(ctx context.Context, start, end sql.NullTime) ([]ResourceUsageRangedRow, error) {
+	query := `
+		SELECT
+		    v.id, r.name, v."plateNumber",
+		    vc.name, v.capacity, r.status, v."currentOdometer",
+		    COUNT(DISTINCT b.id) AS total_bookings,
+		    COALESCE(SUM(CASE WHEN b.status = 'COMPLETED' THEN 1 ELSE 0 END), 0) AS completed_bookings,
+		    COALESCE(SUM(CASE WHEN ft.type = 'BBM' THEN fe.quantity ELSE 0 END), 0)::float8 AS total_liter_bbm,
+		    COALESCE(SUM(CASE WHEN ft.type = 'BBM' THEN fe."totalCost" ELSE 0 END), 0)::float8 AS total_cost_bbm,
+		    COALESCE(SUM(CASE WHEN ft.type = 'LISTRIK' THEN fe.quantity ELSE 0 END), 0)::float8 AS total_kwh_listrik,
+		    COALESCE(SUM(CASE WHEN ft.type = 'LISTRIK' THEN fe."totalCost" ELSE 0 END), 0)::float8 AS total_cost_listrik,
+		    COALESCE(SUM(fe."totalCost")::float8, 0) AS total_fuel_cost
+		FROM vehicles v
+		JOIN resources r ON r.id = v."resourceId"
+		JOIN vehicle_categories vc ON vc.id = v."categoryId"
+		LEFT JOIN bookings b ON b."resourceId" = r.id
+		    AND ($1::timestamptz IS NULL OR b."startDate" >= $1::timestamptz)
+		    AND ($2::timestamptz IS NULL OR b."endDate"   <= $2::timestamptz)
+		LEFT JOIN fuel_expenses fe ON fe."vehicleId" = v.id
+		    AND ($1::timestamptz IS NULL OR fe."createdAt" >= $1::timestamptz)
+		    AND ($2::timestamptz IS NULL OR fe."createdAt" <= $2::timestamptz)
+		LEFT JOIN fuel_types ft ON ft.id = fe."fuelTypeId"
+		GROUP BY v.id, r.name, v."plateNumber", vc.name, v.capacity, r.status, v."currentOdometer"
+		ORDER BY total_bookings DESC`
+	rows, err := q.db.QueryContext(ctx, query, start, end)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ResourceUsageRangedRow
+	for rows.Next() {
+		var r ResourceUsageRangedRow
+		if err := rows.Scan(&r.ID, &r.VehicleName, &r.PlateNumber, &r.Category, &r.Capacity,
+			&r.Status, &r.CurrentOdometer, &r.TotalBookings, &r.CompletedBookings,
+			&r.TotalLiterBbm, &r.TotalCostBbm, &r.TotalKwhListrik, &r.TotalCostListrik, &r.TotalFuelCost); err != nil {
+			return nil, err
+		}
+		items = append(items, r)
+	}
+	return items, rows.Err()
+}
+
+// ─── Driver Ratings (ranged) ───────────────────────────────────────────────────
+// v_driver_ratings_summary sama, tidak bisa menerima parameter - direplikasi
+// dengan filter tanggal opsional pada driver_ratings."createdAt".
+
+type DriverRatingsRangedRow struct {
+	DriverID      int32  `json:"driver_id"`
+	DriverName    string `json:"driver_name"`
+	EmployeeId    string `json:"employeeId"`
+	IsActive      bool   `json:"isActive"`
+	TotalRatings  int64  `json:"total_ratings"`
+	AverageRating string `json:"average_rating"`
+	Bintang5      int64  `json:"bintang_5"`
+	Bintang4      int64  `json:"bintang_4"`
+	Bintang3      int64  `json:"bintang_3"`
+	Bintang2      int64  `json:"bintang_2"`
+	Bintang1      int64  `json:"bintang_1"`
+}
+
+func (q *Queries) ReportDriverRatingsRanged(ctx context.Context, start, end sql.NullTime) ([]DriverRatingsRangedRow, error) {
+	query := `
+		SELECT
+		    d.id, u.name, u."employeeId", d."isActive",
+		    COUNT(dr.id) AS total_ratings,
+		    COALESCE(ROUND(AVG(dr.rating)::NUMERIC, 2)::text, '0') AS average_rating,
+		    COALESCE(SUM(CASE WHEN dr.rating = 5 THEN 1 ELSE 0 END), 0) AS bintang_5,
+		    COALESCE(SUM(CASE WHEN dr.rating = 4 THEN 1 ELSE 0 END), 0) AS bintang_4,
+		    COALESCE(SUM(CASE WHEN dr.rating = 3 THEN 1 ELSE 0 END), 0) AS bintang_3,
+		    COALESCE(SUM(CASE WHEN dr.rating = 2 THEN 1 ELSE 0 END), 0) AS bintang_2,
+		    COALESCE(SUM(CASE WHEN dr.rating = 1 THEN 1 ELSE 0 END), 0) AS bintang_1
+		FROM drivers d
+		JOIN users u ON u.id = d."userId"
+		LEFT JOIN driver_ratings dr ON dr."driverId" = d.id
+		    AND ($1::timestamptz IS NULL OR dr."createdAt" >= $1::timestamptz)
+		    AND ($2::timestamptz IS NULL OR dr."createdAt" <= $2::timestamptz)
+		GROUP BY d.id, u.name, u."employeeId", d."isActive"
+		ORDER BY AVG(dr.rating) DESC NULLS LAST`
+	rows, err := q.db.QueryContext(ctx, query, start, end)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []DriverRatingsRangedRow
+	for rows.Next() {
+		var r DriverRatingsRangedRow
+		if err := rows.Scan(&r.DriverID, &r.DriverName, &r.EmployeeId, &r.IsActive, &r.TotalRatings,
+			&r.AverageRating, &r.Bintang5, &r.Bintang4, &r.Bintang3, &r.Bintang2, &r.Bintang1); err != nil {
+			return nil, err
+		}
+		items = append(items, r)
+	}
+	return items, rows.Err()
+}
+
+// ─── Driver Activity (ranged) ──────────────────────────────────────────────────
+// Sama seperti DriverPerformance di atas - dulu tanpa filter tanggal sama
+// sekali, sekarang scoped ke [start, end] opsional.
+
+type DriverActivityRangedRow struct {
+	DriverID          int32   `json:"driver_id"`
+	DriverName        string  `json:"driver_name"`
+	EmployeeId        string  `json:"employeeId"`
+	TotalBookings     int64   `json:"total_bookings"`
+	CompletedBookings int64   `json:"completed_bookings"`
+	TotalFuelExpenses float64 `json:"total_fuel_expenses"`
+}
+
+func (q *Queries) ReportDriverActivityRanged(ctx context.Context, start, end sql.NullTime) ([]DriverActivityRangedRow, error) {
+	query := `
+		SELECT d.id, u.name, u."employeeId",
+		    COUNT(DISTINCT b.id) AS total_bookings,
+		    COALESCE(SUM(CASE WHEN b.status = 'COMPLETED' THEN 1 ELSE 0 END), 0)::bigint AS completed_bookings,
+		    COALESCE(SUM(fe."totalCost")::float8, 0) AS total_fuel_expenses
+		FROM drivers d
+		JOIN users u ON u.id = d."userId"
+		LEFT JOIN bookings b ON b."assignedDriverId" = d.id
+		    AND ($1::timestamptz IS NULL OR b."startDate" >= $1::timestamptz)
+		    AND ($2::timestamptz IS NULL OR b."endDate"   <= $2::timestamptz)
+		LEFT JOIN fuel_expenses fe ON fe."driverId" = d.id
+		    AND ($1::timestamptz IS NULL OR fe."createdAt" >= $1::timestamptz)
+		    AND ($2::timestamptz IS NULL OR fe."createdAt" <= $2::timestamptz)
+		GROUP BY d.id, u.name, u."employeeId"
+		ORDER BY total_bookings DESC`
+	rows, err := q.db.QueryContext(ctx, query, start, end)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []DriverActivityRangedRow
+	for rows.Next() {
+		var r DriverActivityRangedRow
+		if err := rows.Scan(&r.DriverID, &r.DriverName, &r.EmployeeId,
+			&r.TotalBookings, &r.CompletedBookings, &r.TotalFuelExpenses); err != nil {
+			return nil, err
+		}
 		items = append(items, r)
 	}
 	return items, rows.Err()

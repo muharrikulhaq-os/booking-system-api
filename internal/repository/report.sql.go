@@ -15,15 +15,24 @@ const countAuditLogs = `-- name: CountAuditLogs :one
 SELECT COUNT(*) FROM audit_logs
 WHERE ($1::text IS NULL OR "entityType" = $1::text)
   AND ($2::int IS NULL OR "userId" = $2::int)
+  AND ($3::timestamptz IS NULL OR "createdAt" >= $3::timestamptz)
+  AND ($4::timestamptz IS NULL OR "createdAt" <= $4::timestamptz)
 `
 
 type CountAuditLogsParams struct {
 	EntityType sql.NullString `json:"entity_type"`
 	UserID     sql.NullInt32  `json:"user_id"`
+	StartFrom  sql.NullTime   `json:"start_from"`
+	EndTo      sql.NullTime   `json:"end_to"`
 }
 
 func (q *Queries) CountAuditLogs(ctx context.Context, arg CountAuditLogsParams) (int64, error) {
-	row := q.db.QueryRowContext(ctx, countAuditLogs, arg.EntityType, arg.UserID)
+	row := q.db.QueryRowContext(ctx, countAuditLogs,
+		arg.EntityType,
+		arg.UserID,
+		arg.StartFrom,
+		arg.EndTo,
+	)
 	var count int64
 	err := row.Scan(&count)
 	return count, err
@@ -35,6 +44,8 @@ FROM audit_logs al
 LEFT JOIN users u ON u.id = al."userId"
 WHERE ($3::text IS NULL OR al."entityType" = $3::text)
   AND ($4::int IS NULL OR al."userId" = $4::int)
+  AND ($5::timestamptz IS NULL OR al."createdAt" >= $5::timestamptz)
+  AND ($6::timestamptz IS NULL OR al."createdAt" <= $6::timestamptz)
 ORDER BY al."createdAt" DESC
 LIMIT $1 OFFSET $2
 `
@@ -44,6 +55,8 @@ type ReportAuditLogsParams struct {
 	Offset     int32          `json:"offset"`
 	EntityType sql.NullString `json:"entity_type"`
 	UserID     sql.NullInt32  `json:"user_id"`
+	StartFrom  sql.NullTime   `json:"start_from"`
+	EndTo      sql.NullTime   `json:"end_to"`
 }
 
 type ReportAuditLogsRow struct {
@@ -63,6 +76,8 @@ func (q *Queries) ReportAuditLogs(ctx context.Context, arg ReportAuditLogsParams
 		arg.Offset,
 		arg.EntityType,
 		arg.UserID,
+		arg.StartFrom,
+		arg.EndTo,
 	)
 	if err != nil {
 		return nil, err
