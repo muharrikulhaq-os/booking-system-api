@@ -38,7 +38,10 @@ func (h *UserHandler) Register(r fiber.Router) {
 	g.Delete("/departments/:id", admin, h.DeleteDepartment)
 	g.Get("/bulk-template", admin, h.BulkTemplate)
 	g.Post("/bulk-import", admin, h.BulkImport)
-	g.Get("/:id", admin, h.GetByID)
+	// Profil dasar user lain (untuk modal profil klik-able di frontend) -
+	// dibuka untuk semua yang login, sama seperti GET /drivers/:driver_id.
+	// Aksi kelola (create/update/toggle/reset/delete) tetap admin-only.
+	g.Get("/:id", h.GetByID)
 	g.Post("", admin, h.Create)
 	g.Put("/:id", admin, h.Update)
 	g.Patch("/:id/toggle-active", admin, h.ToggleActive)
