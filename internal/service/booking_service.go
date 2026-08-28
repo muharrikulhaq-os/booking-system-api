@@ -237,20 +237,32 @@ func (s *BookingService) List(ctx context.Context,
 		Offset: int32((page - 1) * limit),
 	}
 
-	switch currentRole {
-	case "DRIVER":
-		d, err := s.q.GetDriverByUserID(ctx, int32(currentUserID))
-		if err != nil {
-			params.UserID = sql.NullInt32{Int32: -1, Valid: true}
-		} else {
-			params.DriverID = sql.NullInt32{Int32: d.ID, Valid: true}
+	// Booking-scoped ke resource tertentu (resourceID != nil) berarti ini
+	// query kalender ketersediaan, bukan "daftar booking saya" - semua
+	// user boleh melihat SEMUA booking resource itu (siapa pakai, kapan),
+	// terlepas dari role, supaya kalender benar-benar menunjukkan jadwal
+	// penuh. Tanpa resourceID (halaman daftar booking biasa) restriksi
+	// per-role tetap berlaku seperti sebelumnya.
+	if resourceID == nil {
+		switch currentRole {
+		case "DRIVER":
+			d, err := s.q.GetDriverByUserID(ctx, int32(currentUserID))
+			if err != nil {
+				params.UserID = sql.NullInt32{Int32: -1, Valid: true}
+			} else {
+				params.DriverID = sql.NullInt32{Int32: d.ID, Valid: true}
+			}
+		case "EMPLOYEE":
+			params.UserID = sql.NullInt32{Int32: int32(currentUserID), Valid: true}
+		default:
+			if userID != nil {
+				params.UserID = sql.NullInt32{Int32: *userID, Valid: true}
+			}
 		}
-	case "EMPLOYEE":
-		params.UserID = sql.NullInt32{Int32: int32(currentUserID), Valid: true}
-	default:
-		if userID != nil {
-			params.UserID = sql.NullInt32{Int32: *userID, Valid: true}
-		}
+	} else if userID != nil {
+		// Kalender tetap boleh dipersempit eksplisit ke satu user kalau
+		// caller memang memintanya (bukan otomatis dari role).
+		params.UserID = sql.NullInt32{Int32: *userID, Valid: true}
 	}
 
 	if status != nil {
