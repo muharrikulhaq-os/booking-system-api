@@ -387,6 +387,32 @@ func (s *BookingService) Create(ctx context.Context, req CreateBookingRequest, u
 		bookingType = repository.BookingTypeSPD
 	}
 
+	// Blokir keras kalau kendaraan/supir ini sedang dipakai SPD (atau
+	// booking BARU ini sendiri SPD dan harinya sudah terisi apa pun) - lihat
+	// vehicleSpdConflict/driverSpdConflict. Beda dari overlap biasa, ini
+	// tidak ada opsi merge, ditolak langsung sebelum sempat masuk PENDING.
+	// Supir yang di-auto-pick (bukan pilihan eksplisit) sengaja tidak
+	// dicek di sini - kalau ternyata bentrok, tertangkap lagi (hard) saat
+	// admin approve, tanpa memblokir keseluruhan booking gara-gara fallback.
+	if isVehicle && vehicleID.Valid {
+		conflict, cerr := s.vehicleSpdConflict(ctx, vehicleID.Int32, bookingType, req.StartDate, req.EndDate, 0)
+		if cerr != nil {
+			return nil, cerr
+		}
+		if conflict {
+			return nil, util.NewError(409, "kendaraan ini sedang bertugas SPD pada tanggal tersebut", util.ErrConflict)
+		}
+	}
+	if req.DriverID != nil && driverID.Valid {
+		conflict, cerr := s.driverSpdConflict(ctx, driverID.Int32, bookingType, req.StartDate, req.EndDate, 0)
+		if cerr != nil {
+			return nil, cerr
+		}
+		if conflict {
+			return nil, util.NewError(409, "supir ini sedang bertugas SPD pada tanggal tersebut", util.ErrConflict)
+		}
+	}
+
 	b, err := s.q.CreateBooking(ctx, repository.CreateBookingParams{
 		UserId:            int32(userID),
 		ResourceId:        req.ResourceID,
@@ -488,6 +514,51 @@ func (s *BookingService) hasUnresolvedVehicleConflict(ctx context.Context, b rep
 	return count > 0, nil
 }
 
+// effectiveConflictWindow expands [start,end) to full calendar day
+// boundaries when the booking is SPD. SPD represents genuine physical
+// unavailability (dinas jauh) - the vehicle/driver can't be anywhere else
+// for the WHOLE day(s) the trip touches, not just its literal hours.
+// NON_SPD bookings are returned unchanged (existing hour-precise, mergeable
+// overlap logic is untouched by this rule).
+func effectiveConflictWindow(bookingType repository.BookingType, start, end time.Time) (time.Time, time.Time) {
+	if bookingType != repository.BookingTypeSPD {
+		return start, end
+	}
+	dayStart := time.Date(start.Year(), start.Month(), start.Day(), 0, 0, 0, 0, start.Location())
+	dayEnd := time.Date(end.Year(), end.Month(), end.Day(), 0, 0, 0, 0, end.Location()).AddDate(0, 0, 1)
+	return dayStart, dayEnd
+}
+
+// vehicleSpdConflict / driverSpdConflict report whether assigning this
+// vehicle/driver for [start,end) as bookingType would violate SPD day-
+// exclusivity against another APPROVED/ONGOING booking - see
+// CheckVehicleSpdConflict's SQL comment for the exact rule. Unlike
+// hasUnresolvedVehicleConflict, there is no merge escape hatch here: SPD
+// conflicts are real-world unavailability, not a scheduling preference.
+func (s *BookingService) vehicleSpdConflict(ctx context.Context, vehicleID int32, bookingType repository.BookingType, start, end time.Time, excludeID int32) (bool, error) {
+	cs, ce := effectiveConflictWindow(bookingType, start, end)
+	count, err := s.q.CheckVehicleSpdConflict(ctx, repository.CheckVehicleSpdConflictParams{
+		VehicleID:  vehicleID,
+		ExcludeID:  excludeID,
+		NewIsSpd:   bookingType == repository.BookingTypeSPD,
+		CheckStart: cs,
+		CheckEnd:   ce,
+	})
+	return count > 0, err
+}
+
+func (s *BookingService) driverSpdConflict(ctx context.Context, driverID int32, bookingType repository.BookingType, start, end time.Time, excludeID int32) (bool, error) {
+	cs, ce := effectiveConflictWindow(bookingType, start, end)
+	count, err := s.q.CheckDriverSpdConflict(ctx, repository.CheckDriverSpdConflictParams{
+		DriverID:   driverID,
+		ExcludeID:  excludeID,
+		NewIsSpd:   bookingType == repository.BookingTypeSPD,
+		CheckStart: cs,
+		CheckEnd:   ce,
+	})
+	return count > 0, err
+}
+
 func (s *BookingService) Approve(ctx context.Context, id int32, req ApproveBookingRequest, approverID int) (ApproveBookingResponse, error) {
 	b, err := s.q.GetBookingByID(ctx, id)
 	if err != nil {
@@ -514,6 +585,24 @@ func (s *BookingService) Approve(ctx context.Context, id int32, req ApproveBooki
 			return ApproveBookingResponse{}, util.NewError(409,
 				"kendaraan ini sedang dipegang supir lain - gabungkan (merge) atau alihkan ke kendaraan lain sebelum menyetujui",
 				util.ErrConflict)
+		}
+	}
+
+	// SPD day-exclusivity - hard block, tanpa opsi merge (beda dari
+	// pengecekan di atas). Jaring pengaman kedua: Create()/AssignVehicle()
+	// sudah menolak ini lebih awal untuk jalur normal, tapi supir yang
+	// di-auto-pick saat Create() sengaja tidak dicek di sana (lihat
+	// komentar di Create()), jadi bisa saja baru ketahuan di sini.
+	if b.AssignedVehicleId.Valid {
+		if vc, cerr := s.vehicleSpdConflict(ctx, b.AssignedVehicleId.Int32, b.BookingType, b.StartDate, b.EndDate, b.ID); cerr == nil && vc {
+			return ApproveBookingResponse{}, util.NewError(409,
+				"kendaraan ini sedang bertugas SPD pada tanggal tersebut", util.ErrConflict)
+		}
+	}
+	if b.AssignedDriverId.Valid {
+		if dc, cerr := s.driverSpdConflict(ctx, b.AssignedDriverId.Int32, b.BookingType, b.StartDate, b.EndDate, b.ID); cerr == nil && dc {
+			return ApproveBookingResponse{}, util.NewError(409,
+				"supir ini sedang bertugas SPD pada tanggal tersebut", util.ErrConflict)
 		}
 	}
 
@@ -661,6 +750,16 @@ func (s *BookingService) AssignVehicle(ctx context.Context, id int32, req Assign
 	})
 	if count > 0 {
 		return nil, util.NewError(409, "vehicle is already assigned to another booking in this period", util.ErrConflict)
+	}
+
+	// SPD day-exclusivity - lihat vehicleSpdConflict/driverSpdConflict.
+	// Cek terpisah dari CheckVehicleConflict di atas karena itu jam-presisi
+	// (tidak akan menangkap SPD yang jamnya beda tapi harinya sama).
+	if vc, cerr := s.vehicleSpdConflict(ctx, req.VehicleID, b.BookingType, b.StartDate, b.EndDate, id); cerr == nil && vc {
+		return nil, util.NewError(409, "kendaraan ini sedang bertugas SPD pada tanggal tersebut", util.ErrConflict)
+	}
+	if dc, cerr := s.driverSpdConflict(ctx, req.DriverID, b.BookingType, b.StartDate, b.EndDate, id); cerr == nil && dc {
+		return nil, util.NewError(409, "supir ini sedang bertugas SPD pada tanggal tersebut", util.ErrConflict)
 	}
 
 	if err = s.q.AssignVehicleAndUpdateResource(ctx, id, req.DriverID, req.VehicleID, vehicle.ResourceId); err != nil {

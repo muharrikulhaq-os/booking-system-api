@@ -145,6 +145,42 @@ WHERE "assignedVehicleId" = $1
   AND "endDate" > sqlc.arg(check_start)
   AND id != sqlc.arg(exclude_id);
 
+-- name: CheckVehicleSpdConflict :one
+-- Konflik KHUSUS SPD - hanya menyala kalau booking existing ATAU booking
+-- yang sedang dicek (new_is_spd) adalah SPD. SPD mengklaim seluruh hari
+-- kalender yang disentuh jadwalnya, bukan cuma jam spesifik - sisi existing
+-- di-expand di sini via date_trunc, sisi baru di-expand oleh caller (lihat
+-- effectiveConflictWindow di booking_service.go) sebelum jadi check_start/
+-- check_end. Kalau kedua sisi NON_SPD, query ini sengaja tidak match apa
+-- pun - overlap jam biasa tetap lewat CheckVehicleConflict di atas (bisa
+-- di-resolve via merge). Hand-written di booking_extra.go (sqlc tidak
+-- tersedia di environment ini) - definisi di sini untuk regen berikutnya.
+SELECT COUNT(*) FROM bookings
+WHERE "assignedVehicleId" = sqlc.arg(vehicle_id)
+  AND status IN ('APPROVED', 'ONGOING')
+  AND id != sqlc.arg(exclude_id)
+  AND (sqlc.arg(new_is_spd)::bool OR "bookingType" = 'SPD')
+  AND CASE WHEN "bookingType" = 'SPD'
+        THEN date_trunc('day', "startDate")
+        ELSE "startDate" END < sqlc.arg(check_end)::timestamptz
+  AND CASE WHEN "bookingType" = 'SPD'
+        THEN date_trunc('day', "endDate") + INTERVAL '1 day'
+        ELSE "endDate" END > sqlc.arg(check_start)::timestamptz;
+
+-- name: CheckDriverSpdConflict :one
+-- Sama seperti CheckVehicleSpdConflict, untuk supir (assignedDriverId).
+SELECT COUNT(*) FROM bookings
+WHERE "assignedDriverId" = sqlc.arg(driver_id)
+  AND status IN ('APPROVED', 'ONGOING')
+  AND id != sqlc.arg(exclude_id)
+  AND (sqlc.arg(new_is_spd)::bool OR "bookingType" = 'SPD')
+  AND CASE WHEN "bookingType" = 'SPD'
+        THEN date_trunc('day', "startDate")
+        ELSE "startDate" END < sqlc.arg(check_end)::timestamptz
+  AND CASE WHEN "bookingType" = 'SPD'
+        THEN date_trunc('day', "endDate") + INTERVAL '1 day'
+        ELSE "endDate" END > sqlc.arg(check_start)::timestamptz;
+
 -- name: CreateApprovalLog :one
 INSERT INTO approval_logs ("bookingId", "approverId", action, note)
 VALUES ($1, $2, $3, $4) RETURNING *;

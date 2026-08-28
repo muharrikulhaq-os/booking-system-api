@@ -43,4 +43,7 @@ type ExtendedQuerier interface {
 	ReportResourceUsageRanged(ctx context.Context, start, end sql.NullTime) ([]ResourceUsageRangedRow, error)
 	ReportDriverRatingsRanged(ctx context.Context, start, end sql.NullTime) ([]DriverRatingsRangedRow, error)
 	ReportDriverActivityRanged(ctx context.Context, start, end sql.NullTime) ([]DriverActivityRangedRow, error)
+	CheckVehicleSpdConflict(ctx context.Context, arg CheckVehicleSpdConflictParams) (int64, error)
+	CheckDriverSpdConflict(ctx context.Context, arg CheckDriverSpdConflictParams) (int64, error)
+	GetVehicleIDsWithActiveSpd(ctx context.Context) ([]int32, error)
 }

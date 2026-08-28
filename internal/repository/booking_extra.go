@@ -331,3 +331,102 @@ func (q *Queries) GetRoomKeeperByUserID(ctx context.Context, userID int32) (Room
 	)
 	return rk, err
 }
+
+// ─── SPD day-exclusivity conflict ─────────────────────────────────────────────
+// SPD (Surat Perintah Dinas / dinas jauh) represents genuine physical
+// unavailability - unlike a normal overlap (resolvable via merge/reassign),
+// a vehicle or driver on SPD cannot be anywhere else, for the WHOLE calendar
+// day(s) the trip touches, not just its literal hours. These two checks only
+// fire when at least one side (the existing row, or the booking being
+// checked - newIsSpd) is SPD; two NON_SPD bookings never match here and keep
+// going through the existing hour-precise CheckVehicleConflict (soft,
+// mergeable). Effective-window logic: the existing row expands to a full
+// day via date_trunc when it's SPD; the "new" side is expanded by the
+// caller (see effectiveConflictWindow in booking_service.go) before being
+// passed in as checkStart/checkEnd.
+
+type CheckVehicleSpdConflictParams struct {
+	VehicleID  int32     `json:"vehicle_id"`
+	ExcludeID  int32     `json:"exclude_id"`
+	NewIsSpd   bool      `json:"new_is_spd"`
+	CheckStart time.Time `json:"check_start"`
+	CheckEnd   time.Time `json:"check_end"`
+}
+
+func (q *Queries) CheckVehicleSpdConflict(ctx context.Context, arg CheckVehicleSpdConflictParams) (int64, error) {
+	query := `
+		SELECT COUNT(*) FROM bookings
+		WHERE "assignedVehicleId" = $1
+		  AND status IN ('APPROVED', 'ONGOING')
+		  AND id != $2
+		  AND ($3::bool OR "bookingType" = 'SPD')
+		  AND CASE WHEN "bookingType" = 'SPD'
+		        THEN date_trunc('day', "startDate")
+		        ELSE "startDate" END < $4::timestamptz
+		  AND CASE WHEN "bookingType" = 'SPD'
+		        THEN date_trunc('day', "endDate") + INTERVAL '1 day'
+		        ELSE "endDate" END > $5::timestamptz`
+	var count int64
+	err := q.db.QueryRowContext(ctx, query,
+		arg.VehicleID, arg.ExcludeID, arg.NewIsSpd, arg.CheckEnd, arg.CheckStart,
+	).Scan(&count)
+	return count, err
+}
+
+// GetVehicleIDsWithActiveSpd returns vehicle IDs currently blocked by an
+// APPROVED/ONGOING SPD booking whose calendar-day range (WIB) includes
+// today - used to badge "Digunakan SPD" in the vehicle picker/list. Same
+// APPROVED-counts-as-blocking rule as the conflict checks above (an SPD
+// trip approved for today already claims the whole day, even before it
+// physically starts).
+func (q *Queries) GetVehicleIDsWithActiveSpd(ctx context.Context) ([]int32, error) {
+	query := `
+		SELECT DISTINCT "assignedVehicleId" FROM bookings
+		WHERE "bookingType" = 'SPD'
+		  AND status IN ('APPROVED', 'ONGOING')
+		  AND "assignedVehicleId" IS NOT NULL
+		  AND date_trunc('day', "startDate" AT TIME ZONE 'Asia/Jakarta') <= date_trunc('day', NOW() AT TIME ZONE 'Asia/Jakarta')
+		  AND date_trunc('day', "endDate" AT TIME ZONE 'Asia/Jakarta')   >= date_trunc('day', NOW() AT TIME ZONE 'Asia/Jakarta')`
+	rows, err := q.db.QueryContext(ctx, query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var ids []int32
+	for rows.Next() {
+		var id int32
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
+}
+
+type CheckDriverSpdConflictParams struct {
+	DriverID   int32     `json:"driver_id"`
+	ExcludeID  int32     `json:"exclude_id"`
+	NewIsSpd   bool      `json:"new_is_spd"`
+	CheckStart time.Time `json:"check_start"`
+	CheckEnd   time.Time `json:"check_end"`
+}
+
+func (q *Queries) CheckDriverSpdConflict(ctx context.Context, arg CheckDriverSpdConflictParams) (int64, error) {
+	query := `
+		SELECT COUNT(*) FROM bookings
+		WHERE "assignedDriverId" = $1
+		  AND status IN ('APPROVED', 'ONGOING')
+		  AND id != $2
+		  AND ($3::bool OR "bookingType" = 'SPD')
+		  AND CASE WHEN "bookingType" = 'SPD'
+		        THEN date_trunc('day', "startDate")
+		        ELSE "startDate" END < $4::timestamptz
+		  AND CASE WHEN "bookingType" = 'SPD'
+		        THEN date_trunc('day', "endDate") + INTERVAL '1 day'
+		        ELSE "endDate" END > $5::timestamptz`
+	var count int64
+	err := q.db.QueryRowContext(ctx, query,
+		arg.DriverID, arg.ExcludeID, arg.NewIsSpd, arg.CheckEnd, arg.CheckStart,
+	).Scan(&count)
+	return count, err
+}

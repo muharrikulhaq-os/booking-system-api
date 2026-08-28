@@ -44,7 +44,7 @@ type UpdateStatusRequest struct {
 	Status string `json:"status" validate:"required,oneof=AVAILABLE MAINTENANCE INACTIVE"`
 }
 
-func serializeVehicleRow(v repository.ListVehiclesRow) map[string]any {
+func serializeVehicleRow(v repository.ListVehiclesRow, spdActive bool) map[string]any {
 	return map[string]any{
 		"id":              v.ID,
 		"resourceId":      v.ResourceId,
@@ -59,10 +59,15 @@ func serializeVehicleRow(v repository.ListVehiclesRow) map[string]any {
 		"status":          string(v.ResourceStatus),
 		"photoUrl":        nullStr(v.PhotoUrl),
 		"energyType":      string(v.EnergyType),
+		// true bila kendaraan sedang diklaim SPD hari ini (lihat
+		// GetVehicleIDsWithActiveSpd) - dipakai badge "Digunakan SPD" di
+		// picker/list, terpisah dari status resource (AVAILABLE/IN_USE/dst)
+		// yang tidak membedakan sebab pemakaiannya.
+		"isSpdActive": spdActive,
 	}
 }
 
-func serializeVehicleByID(v repository.GetVehicleByIDRow) map[string]any {
+func serializeVehicleByID(v repository.GetVehicleByIDRow, spdActive bool) map[string]any {
 	return map[string]any{
 		"id":              v.ID,
 		"resourceId":      v.ResourceId,
@@ -77,6 +82,7 @@ func serializeVehicleByID(v repository.GetVehicleByIDRow) map[string]any {
 		"status":          string(v.ResourceStatus),
 		"photoUrl":        nullStr(v.PhotoUrl),
 		"energyType":      string(v.EnergyType),
+		"isSpdActive":     spdActive,
 	}
 }
 
@@ -105,9 +111,15 @@ func (s *VehicleService) List(ctx context.Context, page, limit int, search *stri
 		Search: params.Search, CategoryID: params.CategoryID, Status: params.Status,
 	})
 
+	spdIDs, _ := s.q.GetVehicleIDsWithActiveSpd(ctx)
+	spdSet := make(map[int32]bool, len(spdIDs))
+	for _, id := range spdIDs {
+		spdSet[id] = true
+	}
+
 	out := make([]map[string]any, len(rows))
 	for i, r := range rows {
-		out[i] = serializeVehicleRow(r)
+		out[i] = serializeVehicleRow(r, spdSet[r.ID])
 	}
 	return out, total, nil
 }
@@ -117,7 +129,15 @@ func (s *VehicleService) GetByID(ctx context.Context, id int32) (map[string]any,
 	if err != nil {
 		return nil, util.ErrNotFound
 	}
-	return serializeVehicleByID(v), nil
+	spdIDs, _ := s.q.GetVehicleIDsWithActiveSpd(ctx)
+	spdActive := false
+	for _, sid := range spdIDs {
+		if sid == v.ID {
+			spdActive = true
+			break
+		}
+	}
+	return serializeVehicleByID(v, spdActive), nil
 }
 
 func (s *VehicleService) Create(ctx context.Context, req CreateVehicleRequest) (map[string]any, error) {
