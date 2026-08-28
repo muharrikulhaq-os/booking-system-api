@@ -247,34 +247,43 @@ func (q *Queries) ReportDriverRatings(ctx context.Context) ([]VDriverRatingsSumm
 	return items, nil
 }
 
+// ORDER BY dibungkus CTE, bukan langsung SELECT ... ORDER BY (spd_trips +
+// non_spd_trips) - Postgres tidak meresolusi alias kolom di dalam EKSPRESI
+// pada ORDER BY (cuma alias polos), versi langsung gagal dengan
+// "column spd_trips does not exist" (42703). Ini yang bikin seluruh
+// endpoint /reports/driver-trips 500 sejak dibuat - CTE bikin spd_trips/
+// non_spd_trips jadi kolom sungguhan di query luar.
 const reportDriverTrips = `-- name: ReportDriverTrips :many
-SELECT
-    d.id AS driver_id, u.name AS driver_name, u."employeeId",
-    COUNT(DISTINCT b.id) FILTER (WHERE b."bookingType" = 'SPD')     AS spd_trips,
-    COUNT(DISTINCT b.id) FILTER (WHERE b."bookingType" = 'NON_SPD') AS non_spd_trips,
-    COUNT(DISTINCT ot.id)                                           AS overtime_trips,
-    COALESCE(SUM(ot."overtimeMinutes"), 0)::int                     AS total_overtime_minutes,
-    COUNT(DISTINCT b.id) FILTER (
-        WHERE b."bookingType" = 'NON_SPD'
-          AND (EXTRACT(HOUR FROM (b."returnedAt" AT TIME ZONE 'Asia/Jakarta')) * 60
-               + EXTRACT(MINUTE FROM (b."returnedAt" AT TIME ZONE 'Asia/Jakarta'))) > 18 * 60
-    )                                                                AS lembur_trips,
-    COALESCE(SUM(CASE WHEN b."bookingType" = 'NON_SPD' THEN GREATEST(
-        (EXTRACT(HOUR FROM (b."returnedAt" AT TIME ZONE 'Asia/Jakarta')) * 60
-         + EXTRACT(MINUTE FROM (b."returnedAt" AT TIME ZONE 'Asia/Jakarta'))) - 18 * 60,
-        0
-    ) ELSE 0 END), 0)::int                                          AS total_lembur_minutes,
-    COALESCE(AVG(dr.rating::float8), 0)::float8                     AS avg_rating,
-    COUNT(DISTINCT dr.id)                                           AS total_reviews
-FROM drivers d
-JOIN users u ON u.id = d."userId"
-LEFT JOIN bookings b ON b."assignedDriverId" = d.id
-    AND b.status = 'COMPLETED'
-    AND ($1::timestamptz IS NULL OR b."startDate" >= $1::timestamptz)
-    AND ($2::timestamptz IS NULL OR b."endDate" <= $2::timestamptz)
-LEFT JOIN driver_overtimes ot ON ot."bookingId" = b.id
-LEFT JOIN driver_ratings dr ON dr."bookingId" = b.id
-GROUP BY d.id, u.name, u."employeeId"
+WITH driver_trip_stats AS (
+    SELECT
+        d.id AS driver_id, u.name AS driver_name, u."employeeId",
+        COUNT(DISTINCT b.id) FILTER (WHERE b."bookingType" = 'SPD')     AS spd_trips,
+        COUNT(DISTINCT b.id) FILTER (WHERE b."bookingType" = 'NON_SPD') AS non_spd_trips,
+        COUNT(DISTINCT ot.id)                                           AS overtime_trips,
+        COALESCE(SUM(ot."overtimeMinutes"), 0)::int                     AS total_overtime_minutes,
+        COUNT(DISTINCT b.id) FILTER (
+            WHERE b."bookingType" = 'NON_SPD'
+              AND (EXTRACT(HOUR FROM (b."returnedAt" AT TIME ZONE 'Asia/Jakarta')) * 60
+                   + EXTRACT(MINUTE FROM (b."returnedAt" AT TIME ZONE 'Asia/Jakarta'))) > 18 * 60
+        )                                                                AS lembur_trips,
+        COALESCE(SUM(CASE WHEN b."bookingType" = 'NON_SPD' THEN GREATEST(
+            (EXTRACT(HOUR FROM (b."returnedAt" AT TIME ZONE 'Asia/Jakarta')) * 60
+             + EXTRACT(MINUTE FROM (b."returnedAt" AT TIME ZONE 'Asia/Jakarta'))) - 18 * 60,
+            0
+        ) ELSE 0 END), 0)::int                                          AS total_lembur_minutes,
+        COALESCE(AVG(dr.rating::float8), 0)::float8                     AS avg_rating,
+        COUNT(DISTINCT dr.id)                                           AS total_reviews
+    FROM drivers d
+    JOIN users u ON u.id = d."userId"
+    LEFT JOIN bookings b ON b."assignedDriverId" = d.id
+        AND b.status = 'COMPLETED'
+        AND ($1::timestamptz IS NULL OR b."startDate" >= $1::timestamptz)
+        AND ($2::timestamptz IS NULL OR b."endDate" <= $2::timestamptz)
+    LEFT JOIN driver_overtimes ot ON ot."bookingId" = b.id
+    LEFT JOIN driver_ratings dr ON dr."bookingId" = b.id
+    GROUP BY d.id, u.name, u."employeeId"
+)
+SELECT driver_id, driver_name, "employeeId", spd_trips, non_spd_trips, overtime_trips, total_overtime_minutes, lembur_trips, total_lembur_minutes, avg_rating, total_reviews FROM driver_trip_stats
 ORDER BY (spd_trips + non_spd_trips) DESC
 `
 
