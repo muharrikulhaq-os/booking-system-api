@@ -74,10 +74,13 @@ func serializeDriverByID(d repository.GetDriverByIDRow) map[string]any {
 	}
 }
 
-func (s *DriverService) List(ctx context.Context, page, limit int, isActive *bool) ([]map[string]any, int64, error) {
+func (s *DriverService) List(ctx context.Context, page, limit int, search *string, isActive *bool) ([]map[string]any, int64, error) {
 	params := repository.ListDriversParams{
 		Limit:  int32(limit),
 		Offset: int32((page - 1) * limit),
+	}
+	if search != nil {
+		params.Search = sql.NullString{String: *search, Valid: true}
 	}
 	if isActive != nil {
 		params.IsActive = sql.NullBool{Bool: *isActive, Valid: true}
@@ -86,7 +89,11 @@ func (s *DriverService) List(ctx context.Context, page, limit int, isActive *boo
 	if err != nil {
 		return nil, 0, err
 	}
-	total, _ := s.q.CountDrivers(ctx, params.IsActive)
+	// Count wajib memakai filter yang sama persis dengan List - kalau tidak,
+	// total pagination ikut menghitung baris yang justru tersaring keluar.
+	total, _ := s.q.CountDrivers(ctx, repository.CountDriversParams{
+		Search: params.Search, IsActive: params.IsActive,
+	})
 	out := make([]map[string]any, len(rows))
 	for i, r := range rows {
 		out[i] = serializeDriverRow(r)

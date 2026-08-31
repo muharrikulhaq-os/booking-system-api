@@ -17,12 +17,27 @@ type Querier interface {
 	CancelBooking(ctx context.Context, id int32) (Booking, error)
 	CancelGuestBookingByToken(ctx context.Context, accesstoken string) (GuestBooking, error)
 	CheckBookingConflict(ctx context.Context, arg CheckBookingConflictParams) (int64, error)
+	// Sama seperti CheckVehicleSpdConflict, untuk supir (assignedDriverId).
+	CheckDriverSpdConflict(ctx context.Context, arg CheckDriverSpdConflictParams) (int64, error)
 	CheckVehicleConflict(ctx context.Context, arg CheckVehicleConflictParams) (int64, error)
+	// Konflik KHUSUS SPD - hanya menyala kalau booking existing ATAU booking
+	// yang sedang dicek (new_is_spd) adalah SPD. SPD mengklaim seluruh hari
+	// kalender yang disentuh jadwalnya, bukan cuma jam spesifik - sisi existing
+	// di-expand di sini via date_trunc, sisi baru di-expand oleh caller (lihat
+	// effectiveConflictWindow di booking_service.go) sebelum jadi check_start/
+	// check_end. Kalau kedua sisi NON_SPD, query ini sengaja tidak match apa
+	// pun - overlap jam biasa tetap lewat CheckVehicleConflict di atas (bisa
+	// di-resolve via merge). Hand-written di booking_extra.go (sqlc tidak
+	// tersedia di environment ini) - definisi di sini untuk regen berikutnya.
+	CheckVehicleSpdConflict(ctx context.Context, arg CheckVehicleSpdConflictParams) (int64, error)
 	CompleteBooking(ctx context.Context, id int32) (Booking, error)
 	CompleteGuestBookingByToken(ctx context.Context, accesstoken string) (GuestBooking, error)
 	CountAuditLogs(ctx context.Context, arg CountAuditLogsParams) (int64, error)
 	CountBookings(ctx context.Context, arg CountBookingsParams) (int64, error)
-	CountDrivers(ctx context.Context, isActive sql.NullBool) (int64, error)
+	// JOIN users wajib di sini: filter search menyentuh kolom milik users,
+	// jadi COUNT harus melewati join yang sama dengan ListDrivers supaya
+	// total pagination tetap konsisten dengan baris yang ditampilkan.
+	CountDrivers(ctx context.Context, arg CountDriversParams) (int64, error)
 	CountFuelExpenses(ctx context.Context, arg CountFuelExpensesParams) (int64, error)
 	CountGuestBookings(ctx context.Context, status NullBookingStatus) (int64, error)
 	CountMaintenance(ctx context.Context, vehicleID sql.NullInt32) (int64, error)
@@ -169,6 +184,11 @@ type Querier interface {
 	//     tanggal karena join-nya lewat booking (b.id) yang sudah difilter.
 	// driver_overtimes/driver_ratings."bookingId" UNIQUE -> aman di-LEFT JOIN
 	// lewat b.id, tidak menambah fan-out baru.
+	// ORDER BY di bawah sengaja lewat CTE, bukan langsung SELECT ... ORDER BY
+	// (spd_trips + non_spd_trips) - Postgres TIDAK meresolusi alias kolom di
+	// dalam EKSPRESI pada ORDER BY (cuma alias polos), jadi versi langsung
+	// gagal dengan "column spd_trips does not exist" (42703). Dibungkus CTE
+	// supaya spd_trips/non_spd_trips jadi kolom sungguhan di query luar.
 	ReportDriverTrips(ctx context.Context, arg ReportDriverTripsParams) ([]ReportDriverTripsRow, error)
 	ReportFuelExpenses(ctx context.Context) ([]VFuelExpenseSummary, error)
 	ReportMaintenanceCost(ctx context.Context) ([]ReportMaintenanceCostRow, error)

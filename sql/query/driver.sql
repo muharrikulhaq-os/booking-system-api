@@ -23,13 +23,25 @@ LEFT JOIN (
     WHERE ab2.status IN ('APPROVED','ONGOING')
     ORDER BY ab2."assignedDriverId", ab2."startDate" DESC
 ) ap ON ap.driver_id = d.id
-WHERE (sqlc.narg(is_active)::boolean IS NULL OR d."isActive" = sqlc.narg(is_active)::boolean)
+WHERE (sqlc.narg(search)::text IS NULL
+       OR u.name ILIKE '%' || sqlc.narg(search)::text || '%'
+       OR u.email ILIKE '%' || sqlc.narg(search)::text || '%'
+       OR u."employeeId" ILIKE '%' || sqlc.narg(search)::text || '%')
+  AND (sqlc.narg(is_active)::boolean IS NULL OR d."isActive" = sqlc.narg(is_active)::boolean)
 ORDER BY d."createdAt" DESC
 LIMIT $1 OFFSET $2;
 
 -- name: CountDrivers :one
+-- JOIN users wajib di sini: filter search menyentuh kolom milik users,
+-- jadi COUNT harus melewati join yang sama dengan ListDrivers supaya
+-- total pagination tetap konsisten dengan baris yang ditampilkan.
 SELECT COUNT(*) FROM drivers d
-WHERE (sqlc.narg(is_active)::boolean IS NULL OR d."isActive" = sqlc.narg(is_active)::boolean);
+JOIN users u ON u.id = d."userId"
+WHERE (sqlc.narg(search)::text IS NULL
+       OR u.name ILIKE '%' || sqlc.narg(search)::text || '%'
+       OR u.email ILIKE '%' || sqlc.narg(search)::text || '%'
+       OR u."employeeId" ILIKE '%' || sqlc.narg(search)::text || '%')
+  AND (sqlc.narg(is_active)::boolean IS NULL OR d."isActive" = sqlc.narg(is_active)::boolean);
 
 -- name: GetDriverByID :one
 -- See note on ListDrivers above.

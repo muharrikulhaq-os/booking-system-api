@@ -35,11 +35,24 @@ func (q *Queries) AssignDriverToVehicle(ctx context.Context, arg AssignDriverToV
 
 const countDrivers = `-- name: CountDrivers :one
 SELECT COUNT(*) FROM drivers d
-WHERE ($1::boolean IS NULL OR d."isActive" = $1::boolean)
+JOIN users u ON u.id = d."userId"
+WHERE ($1::text IS NULL
+       OR u.name ILIKE '%' || $1::text || '%'
+       OR u.email ILIKE '%' || $1::text || '%'
+       OR u."employeeId" ILIKE '%' || $1::text || '%')
+  AND ($2::boolean IS NULL OR d."isActive" = $2::boolean)
 `
 
-func (q *Queries) CountDrivers(ctx context.Context, isActive sql.NullBool) (int64, error) {
-	row := q.db.QueryRowContext(ctx, countDrivers, isActive)
+type CountDriversParams struct {
+	Search   sql.NullString `json:"search"`
+	IsActive sql.NullBool   `json:"is_active"`
+}
+
+// JOIN users wajib di sini: filter search menyentuh kolom milik users,
+// jadi COUNT harus melewati join yang sama dengan ListDrivers supaya
+// total pagination tetap konsisten dengan baris yang ditampilkan.
+func (q *Queries) CountDrivers(ctx context.Context, arg CountDriversParams) (int64, error) {
+	row := q.db.QueryRowContext(ctx, countDrivers, arg.Search, arg.IsActive)
 	var count int64
 	err := row.Scan(&count)
 	return count, err
@@ -334,15 +347,20 @@ LEFT JOIN (
     WHERE ab2.status IN ('APPROVED','ONGOING')
     ORDER BY ab2."assignedDriverId", ab2."startDate" DESC
 ) ap ON ap.driver_id = d.id
-WHERE ($3::boolean IS NULL OR d."isActive" = $3::boolean)
+WHERE ($3::text IS NULL
+       OR u.name ILIKE '%' || $3::text || '%'
+       OR u.email ILIKE '%' || $3::text || '%'
+       OR u."employeeId" ILIKE '%' || $3::text || '%')
+  AND ($4::boolean IS NULL OR d."isActive" = $4::boolean)
 ORDER BY d."createdAt" DESC
 LIMIT $1 OFFSET $2
 `
 
 type ListDriversParams struct {
-	Limit    int32        `json:"limit"`
-	Offset   int32        `json:"offset"`
-	IsActive sql.NullBool `json:"is_active"`
+	Limit    int32          `json:"limit"`
+	Offset   int32          `json:"offset"`
+	Search   sql.NullString `json:"search"`
+	IsActive sql.NullBool   `json:"is_active"`
 }
 
 type ListDriversRow struct {
@@ -371,7 +389,12 @@ type ListDriversRow struct {
 // correlation, so it joins like an ordinary table (also avoids the original
 // correlated-subquery instability).
 func (q *Queries) ListDrivers(ctx context.Context, arg ListDriversParams) ([]ListDriversRow, error) {
-	rows, err := q.db.QueryContext(ctx, listDrivers, arg.Limit, arg.Offset, arg.IsActive)
+	rows, err := q.db.QueryContext(ctx, listDrivers,
+		arg.Limit,
+		arg.Offset,
+		arg.Search,
+		arg.IsActive,
+	)
 	if err != nil {
 		return nil, err
 	}
