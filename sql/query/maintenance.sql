@@ -1,5 +1,5 @@
 -- name: ListMaintenance :many
-SELECT mr.*, r.name AS vehicle_name, v."plateNumber",
+SELECT mr.*, r.name AS vehicle_name, v."plateNumber", v."photoUrl" AS vehicle_photo_url,
        u.name AS created_by_name
 FROM maintenance_records mr
 JOIN vehicles v ON v.id = mr."vehicleId"
@@ -14,7 +14,7 @@ SELECT COUNT(*) FROM maintenance_records
 WHERE (sqlc.narg(vehicle_id)::int IS NULL OR "vehicleId" = sqlc.narg(vehicle_id)::int);
 
 -- name: GetMaintenanceByID :one
-SELECT mr.*, r.name AS vehicle_name, v."plateNumber",
+SELECT mr.*, r.name AS vehicle_name, v."plateNumber", v."photoUrl" AS vehicle_photo_url,
        u.name AS created_by_name
 FROM maintenance_records mr
 JOIN vehicles v ON v.id = mr."vehicleId"

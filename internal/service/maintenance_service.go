@@ -62,6 +62,7 @@ func serializeMaintenanceRow(m repository.ListMaintenanceRow) map[string]any {
 		"vehicleId":         m.VehicleId,
 		"vehicleName":       m.VehicleName,
 		"plateNumber":       m.PlateNumber,
+		"vehiclePhotoUrl":   nullStr(m.VehiclePhotoUrl),
 		"maintenanceTypeId": m.MaintenanceTypeId.Int32,
 		"type":              m.Type,
 		"status":            m.Status,
@@ -91,6 +92,7 @@ func serializeMaintenanceByID(m repository.GetMaintenanceByIDRow) map[string]any
 		"vehicleId":         m.VehicleId,
 		"vehicleName":       m.VehicleName,
 		"plateNumber":       m.PlateNumber,
+		"vehiclePhotoUrl":   nullStr(m.VehiclePhotoUrl),
 		"maintenanceTypeId": m.MaintenanceTypeId.Int32,
 		"type":              m.Type,
 		"status":            m.Status,
@@ -171,8 +173,8 @@ func (s *MaintenanceService) Create(ctx context.Context, req CreateMaintenanceRe
 	// Check overlapping bookings on the resource
 	overlapCount, _ := s.q.CheckBookingConflict(ctx, repository.CheckBookingConflictParams{
 		ResourceId: vehicle.ResourceId,
-		CheckStart:  req.StartDate,
-		CheckEnd:    endDate,
+		CheckStart: req.StartDate,
+		CheckEnd:   endDate,
 	})
 
 	warningMsg := ""
