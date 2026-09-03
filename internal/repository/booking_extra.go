@@ -373,6 +373,33 @@ func (q *Queries) CheckVehicleSpdConflict(ctx context.Context, arg CheckVehicleS
 	return count, err
 }
 
+// CheckMaintenanceConflict tells whether vehicleID has a non-completed
+// maintenance record whose [startDate, endDate) overlaps [checkStart,
+// checkEnd) - endDate NULL means the maintenance is open-ended and blocks
+// everything from startDate onward. This replaces relying solely on the
+// coarse resources.status=MAINTENANCE flag for booking creation/assignment,
+// since that flag is a single point-in-time snapshot that can get
+// overwritten by unrelated booking lifecycle transitions (e.g. another
+// booking's Complete() resetting it back to AVAILABLE) and doesn't know
+// about maintenance scheduled for a different date range than "right now".
+type CheckMaintenanceConflictParams struct {
+	VehicleID  int32     `json:"vehicle_id"`
+	CheckStart time.Time `json:"check_start"`
+	CheckEnd   time.Time `json:"check_end"`
+}
+
+func (q *Queries) CheckMaintenanceConflict(ctx context.Context, arg CheckMaintenanceConflictParams) (int64, error) {
+	query := `
+		SELECT COUNT(*) FROM maintenance_records
+		WHERE "vehicleId" = $1
+		  AND status != 'completed'
+		  AND "startDate" < $2
+		  AND ("endDate" IS NULL OR "endDate" > $3)`
+	var count int64
+	err := q.db.QueryRowContext(ctx, query, arg.VehicleID, arg.CheckEnd, arg.CheckStart).Scan(&count)
+	return count, err
+}
+
 // GetVehicleIDsWithActiveSpd returns vehicle IDs currently blocked by an
 // APPROVED/ONGOING SPD booking whose calendar-day range (WIB) includes
 // today - used to badge "Digunakan SPD" in the vehicle picker/list. Same

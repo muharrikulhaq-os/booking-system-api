@@ -43,3 +43,15 @@ WHERE id = $1 RETURNING *;
 
 -- name: DeleteMaintenance :exec
 DELETE FROM maintenance_records WHERE id = $1;
+
+-- name: CheckMaintenanceConflict :one
+-- Dipakai dari BookingService (bukan literal soal maintenance) untuk cek
+-- apakah rentang tanggal booking yang diminta bentrok dengan jadwal
+-- maintenance (aktif/terjadwal, bukan "completed") kendaraan tersebut -
+-- endDate NULL berarti maintenance masih terbuka tanpa batas, jadi
+-- memblokir semua tanggal setelah startDate.
+SELECT COUNT(*) FROM maintenance_records
+WHERE "vehicleId" = sqlc.arg(vehicle_id)
+  AND status != 'completed'
+  AND "startDate" < sqlc.arg(check_end)
+  AND ("endDate" IS NULL OR "endDate" > sqlc.arg(check_start));

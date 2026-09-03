@@ -366,6 +366,24 @@ func (s *BookingService) Create(ctx context.Context, req CreateBookingRequest, u
 		bookedVehicleID, isVehicle = vid, true
 	}
 
+	// Cek jadwal maintenance kendaraan ini secara presisi tanggal - beda dari
+	// pengecekan resource.Status di atas, yang cuma snapshot sesaat dan bisa
+	// ketimpa balik ke AVAILABLE oleh transisi booking lain yang tak
+	// berhubungan (mis. Complete() booking lain). Ini menangkap kasus jadwal
+	// booking yang diminta memang bentrok dengan rentang tanggal maintenance,
+	// terlepas dari status resource saat ini.
+	if isVehicle {
+		mc, merr := s.q.CheckMaintenanceConflict(ctx, repository.CheckMaintenanceConflictParams{
+			VehicleID: bookedVehicleID, CheckStart: req.StartDate, CheckEnd: req.EndDate,
+		})
+		if merr != nil {
+			return nil, merr
+		}
+		if mc > 0 {
+			return nil, util.NewError(409, "kendaraan ini sedang/akan menjalani maintenance pada tanggal tersebut", util.ErrConflict)
+		}
+	}
+
 	if req.DriverID != nil {
 		driverID = sql.NullInt32{Int32: *req.DriverID, Valid: true}
 		// Supir yang sudah "memegang" kendaraan (punya booking aktif) → pakai
@@ -618,6 +636,18 @@ func (s *BookingService) Approve(ctx context.Context, id int32, req ApproveBooki
 		}
 	}
 
+	// Jadwal maintenance - jaring pengaman kedua: bisa saja maintenance baru
+	// dijadwalkan SETELAH booking ini masuk PENDING (Create() hanya cek
+	// kondisi saat itu), jadi dicek ulang di sini sebelum benar-benar disetujui.
+	if b.AssignedVehicleId.Valid {
+		if mc, merr := s.q.CheckMaintenanceConflict(ctx, repository.CheckMaintenanceConflictParams{
+			VehicleID: b.AssignedVehicleId.Int32, CheckStart: b.StartDate, CheckEnd: b.EndDate,
+		}); merr == nil && mc > 0 {
+			return ApproveBookingResponse{}, util.NewError(409,
+				"kendaraan ini sedang/akan menjalani maintenance pada tanggal tersebut", util.ErrConflict)
+		}
+	}
+
 	warningMsg := ""
 
 	// Check if this booking has a vehicle assigned
@@ -772,6 +802,13 @@ func (s *BookingService) AssignVehicle(ctx context.Context, id int32, req Assign
 	}
 	if dc, cerr := s.driverSpdConflict(ctx, req.DriverID, b.BookingType, b.StartDate, b.EndDate, id); cerr == nil && dc {
 		return nil, util.NewError(409, "supir ini sedang bertugas SPD pada tanggal tersebut", util.ErrConflict)
+	}
+
+	// Jadwal maintenance kendaraan pengganti - lihat catatan di Create().
+	if mc, merr := s.q.CheckMaintenanceConflict(ctx, repository.CheckMaintenanceConflictParams{
+		VehicleID: req.VehicleID, CheckStart: b.StartDate, CheckEnd: b.EndDate,
+	}); merr == nil && mc > 0 {
+		return nil, util.NewError(409, "kendaraan ini sedang/akan menjalani maintenance pada tanggal tersebut", util.ErrConflict)
 	}
 
 	if err = s.q.AssignVehicleAndUpdateResource(ctx, id, req.DriverID, req.VehicleID, vehicle.ResourceId); err != nil {

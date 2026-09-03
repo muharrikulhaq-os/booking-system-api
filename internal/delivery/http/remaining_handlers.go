@@ -174,7 +174,7 @@ func (h *MaintenanceHandler) Create(c *fiber.Ctx) error {
 	}
 	if resp.Warning != "" {
 		return c.Status(fiber.StatusCreated).JSON(fiber.Map{
-			"status":  "success",
+			"success": true,
 			"message": "Maintenance record created with warning",
 			"warning": resp.Warning,
 			"data":    resp.Data,

@@ -46,4 +46,5 @@ type ExtendedQuerier interface {
 	CheckVehicleSpdConflict(ctx context.Context, arg CheckVehicleSpdConflictParams) (int64, error)
 	CheckDriverSpdConflict(ctx context.Context, arg CheckDriverSpdConflictParams) (int64, error)
 	GetVehicleIDsWithActiveSpd(ctx context.Context) ([]int32, error)
+	CheckMaintenanceConflict(ctx context.Context, arg CheckMaintenanceConflictParams) (int64, error)
 }
