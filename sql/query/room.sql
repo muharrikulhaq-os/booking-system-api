@@ -46,3 +46,17 @@ UPDATE rooms SET location = $2, capacity = $3 WHERE id = $1 RETURNING *;
 
 -- name: UpdateRoomPhoto :one
 UPDATE rooms SET "photoUrl" = $2 WHERE id = $1 RETURNING *;
+
+-- name: CreateRoomRating :one
+INSERT INTO room_ratings ("bookingId", "roomId", "ratedById", rating, review)
+VALUES ($1, $2, $3, $4, $5) RETURNING *;
+
+-- name: GetRoomRatingByBooking :one
+SELECT * FROM room_ratings WHERE "bookingId" = $1 LIMIT 1;
+
+-- name: GetRoomRatings :many
+SELECT rr.*, u.name AS rated_by_name
+FROM room_ratings rr
+JOIN users u ON u.id = rr."ratedById"
+WHERE rr."roomId" = $1
+ORDER BY rr."createdAt" DESC;

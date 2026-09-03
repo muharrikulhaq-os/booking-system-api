@@ -160,11 +160,13 @@ func (q *Queries) GetResourceByID(ctx context.Context, id int32) (Resource, erro
 }
 
 const getVehicleByID = `-- name: GetVehicleByID :one
-SELECT v.id, v."resourceId", v."plateNumber", v.brand, v.model, v.year, v."currentOdometer", v."categoryId", v.capacity, v."photoUrl", v.energy_type, v."maintenanceIntervalKm", v."lastMaintenanceOdometer", r.name AS resource_name, r.status AS resource_status,
-       vc.name AS category_name
+SELECT v.id, v."resourceId", v."plateNumber", v.brand, v.model, v.year, v."currentOdometer", v."categoryId", v.capacity, v."photoUrl", v.energy_type, v."maintenanceIntervalKm", v."lastMaintenanceOdometer", v."fixedDriverId", r.name AS resource_name, r.status AS resource_status,
+       vc.name AS category_name, fdu.name AS fixed_driver_name
 FROM vehicles v
 JOIN resources r ON r.id = v."resourceId"
 JOIN vehicle_categories vc ON vc.id = v."categoryId"
+LEFT JOIN drivers fd ON fd.id = v."fixedDriverId"
+LEFT JOIN users fdu ON fdu.id = fd."userId"
 WHERE v.id = $1 LIMIT 1
 `
 
@@ -182,9 +184,11 @@ type GetVehicleByIDRow struct {
 	EnergyType              EnergyType     `json:"energy_type"`
 	MaintenanceIntervalKm   int32          `json:"maintenanceIntervalKm"`
 	LastMaintenanceOdometer int32          `json:"lastMaintenanceOdometer"`
+	FixedDriverId           sql.NullInt32  `json:"fixedDriverId"`
 	ResourceName            string         `json:"resource_name"`
 	ResourceStatus          ResourceStatus `json:"resource_status"`
 	CategoryName            string         `json:"category_name"`
+	FixedDriverName         sql.NullString `json:"fixed_driver_name"`
 }
 
 func (q *Queries) GetVehicleByID(ctx context.Context, id int32) (GetVehicleByIDRow, error) {
@@ -204,9 +208,11 @@ func (q *Queries) GetVehicleByID(ctx context.Context, id int32) (GetVehicleByIDR
 		&i.EnergyType,
 		&i.MaintenanceIntervalKm,
 		&i.LastMaintenanceOdometer,
+		&i.FixedDriverId,
 		&i.ResourceName,
 		&i.ResourceStatus,
 		&i.CategoryName,
+		&i.FixedDriverName,
 	)
 	return i, err
 }
@@ -275,11 +281,13 @@ func (q *Queries) ListVehicleCategories(ctx context.Context) ([]VehicleCategory,
 }
 
 const listVehicles = `-- name: ListVehicles :many
-SELECT v.id, v."resourceId", v."plateNumber", v.brand, v.model, v.year, v."currentOdometer", v."categoryId", v.capacity, v."photoUrl", v.energy_type, v."maintenanceIntervalKm", v."lastMaintenanceOdometer", r.name AS resource_name, r.status AS resource_status,
-       vc.name AS category_name
+SELECT v.id, v."resourceId", v."plateNumber", v.brand, v.model, v.year, v."currentOdometer", v."categoryId", v.capacity, v."photoUrl", v.energy_type, v."maintenanceIntervalKm", v."lastMaintenanceOdometer", v."fixedDriverId", r.name AS resource_name, r.status AS resource_status,
+       vc.name AS category_name, fdu.name AS fixed_driver_name
 FROM vehicles v
 JOIN resources r ON r.id = v."resourceId"
 JOIN vehicle_categories vc ON vc.id = v."categoryId"
+LEFT JOIN drivers fd ON fd.id = v."fixedDriverId"
+LEFT JOIN users fdu ON fdu.id = fd."userId"
 WHERE ($3::text IS NULL
        OR r.name ILIKE '%' || $3::text || '%'
        OR v."plateNumber" ILIKE '%' || $3::text || '%'
@@ -319,9 +327,11 @@ type ListVehiclesRow struct {
 	EnergyType              EnergyType     `json:"energy_type"`
 	MaintenanceIntervalKm   int32          `json:"maintenanceIntervalKm"`
 	LastMaintenanceOdometer int32          `json:"lastMaintenanceOdometer"`
+	FixedDriverId           sql.NullInt32  `json:"fixedDriverId"`
 	ResourceName            string         `json:"resource_name"`
 	ResourceStatus          ResourceStatus `json:"resource_status"`
 	CategoryName            string         `json:"category_name"`
+	FixedDriverName         sql.NullString `json:"fixed_driver_name"`
 }
 
 // Saat status filter = AVAILABLE, resource yang punya booking APPROVED/ONGOING
@@ -357,9 +367,11 @@ func (q *Queries) ListVehicles(ctx context.Context, arg ListVehiclesParams) ([]L
 			&i.EnergyType,
 			&i.MaintenanceIntervalKm,
 			&i.LastMaintenanceOdometer,
+			&i.FixedDriverId,
 			&i.ResourceName,
 			&i.ResourceStatus,
 			&i.CategoryName,
+			&i.FixedDriverName,
 		); err != nil {
 			return nil, err
 		}

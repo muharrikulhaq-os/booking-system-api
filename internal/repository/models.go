@@ -762,6 +762,7 @@ type Vehicle struct {
 	EnergyType              EnergyType     `json:"energy_type"`
 	MaintenanceIntervalKm   int32          `json:"maintenanceIntervalKm"`
 	LastMaintenanceOdometer int32          `json:"lastMaintenanceOdometer"`
+	FixedDriverId           sql.NullInt32  `json:"fixedDriverId"`
 }
 
 type VehicleCategory struct {

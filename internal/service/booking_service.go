@@ -56,6 +56,11 @@ type RateDriverRequest struct {
 	Review string `json:"review"`
 }
 
+type RateRoomRequest struct {
+	Rating int16  `json:"rating" validate:"required,min=1,max=5"`
+	Review string `json:"review"`
+}
+
 type MergeBookingRequest struct {
 	TargetBookingID int32      `json:"targetBookingId" validate:"required"`
 	Reason          string     `json:"reason"`
@@ -384,16 +389,38 @@ func (s *BookingService) Create(ctx context.Context, req CreateBookingRequest, u
 		}
 	}
 
-	if req.DriverID != nil {
+	// Kendaraan yang punya supir tetap (vehicles.fixedDriverId) selalu pakai
+	// supir itu - tidak ada pilihan lain, mengalahkan req.DriverID kalau FE
+	// tetap mengirimnya. Beda dari GetFreeDriver di bawah (fallback lunak,
+	// "supir kosong mana saja"), ini pasangan permanen yang eksplisit,
+	// jadi ikut dicek SPD-nya juga (lihat explicitDriverPick di bawah).
+	var fixedDriverID int32
+	if isVehicle {
+		if v, verr := s.q.GetVehicleByID(ctx, bookedVehicleID); verr == nil && v.FixedDriverId.Valid {
+			fixedDriverID = v.FixedDriverId.Int32
+		}
+	}
+
+	explicitDriverPick := false
+	switch {
+	case fixedDriverID != 0:
+		driverID = sql.NullInt32{Int32: fixedDriverID, Valid: true}
+		explicitDriverPick = true
+		if vid, err := s.q.GetDriverActiveVehicleID(ctx, fixedDriverID); err == nil {
+			vehicleID = sql.NullInt32{Int32: vid, Valid: true}
+		}
+	case req.DriverID != nil:
 		driverID = sql.NullInt32{Int32: *req.DriverID, Valid: true}
+		explicitDriverPick = true
 		// Supir yang sudah "memegang" kendaraan (punya booking aktif) → pakai
 		// kendaraannya (jalur merge). Supir kosong → nanti pakai kendaraan yang dibooking.
 		if vid, err := s.q.GetDriverActiveVehicleID(ctx, *req.DriverID); err == nil {
 			vehicleID = sql.NullInt32{Int32: vid, Valid: true}
 		}
-	} else if isVehicle {
-		// Booking kendaraan tanpa memilih supir → tempel supir "kosong" yang senggang.
-		// Bila tak ada → booking tetap PENDING tanpa supir (admin bisa menolak).
+	case isVehicle:
+		// Booking kendaraan tanpa memilih supir & tanpa supir tetap → tempel
+		// supir "kosong" yang senggang. Bila tak ada → booking tetap PENDING
+		// tanpa supir (admin bisa menolak).
 		if free, ferr := s.q.GetFreeDriver(ctx); ferr == nil {
 			driverID = sql.NullInt32{Int32: free, Valid: true}
 		}
@@ -433,7 +460,7 @@ func (s *BookingService) Create(ctx context.Context, req CreateBookingRequest, u
 			return nil, util.NewError(409, "kendaraan ini sedang bertugas SPD pada tanggal tersebut", util.ErrConflict)
 		}
 	}
-	if req.DriverID != nil && driverID.Valid {
+	if explicitDriverPick && driverID.Valid {
 		conflict, cerr := s.driverSpdConflict(ctx, driverID.Int32, bookingType, req.StartDate, req.EndDate, 0)
 		if cerr != nil {
 			return nil, cerr
@@ -1191,6 +1218,103 @@ func (s *BookingService) GetBookingDriverRating(ctx context.Context, bookingID i
 		"id":        r.ID,
 		"bookingId": r.BookingId,
 		"driverId":  r.DriverId,
+		"rating":    r.Rating,
+		"review":    nullStr(r.Review),
+		"createdAt": r.CreatedAt,
+	}, nil
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// ROOM RATINGS
+// Mirrors RateDriver/GetDriverRatings/GetBookingDriverRating above, but the
+// rated target is the ROOM itself (roomId), not a person - room_keepers
+// aren't assigned per-room or per-booking, so there's no specific individual
+// to rate the way a driver is rated. No merge handling needed: merge is
+// vehicle-only (see MergeBookings), room bookings are never merged.
+// ─────────────────────────────────────────────────────────────────────────
+
+func (s *BookingService) RateRoom(ctx context.Context, bookingID int32, req RateRoomRequest, userID int) (map[string]any, error) {
+	b, err := s.q.GetBookingByID(ctx, bookingID)
+	if err != nil {
+		return nil, util.ErrNotFound
+	}
+	if b.Status != repository.BookingStatusCOMPLETED {
+		return nil, util.NewError(400, "can only rate completed bookings", util.ErrBadRequest)
+	}
+	if int(b.UserId) != userID {
+		return nil, util.ErrForbidden
+	}
+	if b.ResourceType != repository.ResourceTypeROOM {
+		return nil, util.NewError(400, "room rating is only for room bookings", util.ErrBadRequest)
+	}
+	roomID, err := s.q.GetRoomIDByResourceID(ctx, b.ResourceId)
+	if err != nil {
+		return nil, util.NewError(404, "room not found", util.ErrNotFound)
+	}
+	if _, err = s.q.GetRoomRatingByBooking(ctx, bookingID); err == nil {
+		return nil, util.NewError(409, "you have already rated this booking", util.ErrConflict)
+	}
+
+	r, err := s.q.CreateRoomRating(ctx, repository.CreateRoomRatingParams{
+		BookingId: bookingID,
+		RoomId:    roomID,
+		RatedById: int32(userID),
+		Rating:    req.Rating,
+		Review:    sql.NullString{String: req.Review, Valid: req.Review != ""},
+	})
+	if err != nil {
+		return nil, err
+	}
+	return map[string]any{
+		"id":        r.ID,
+		"bookingId": r.BookingId,
+		"roomId":    r.RoomId,
+		"rating":    r.Rating,
+		"review":    nullStr(r.Review),
+		"createdAt": r.CreatedAt,
+	}, nil
+}
+
+func (s *BookingService) GetRoomRatings(ctx context.Context, roomID int32) (map[string]any, error) {
+	ratings, err := s.q.GetRoomRatings(ctx, roomID)
+	if err != nil {
+		return nil, err
+	}
+	var total float64
+	items := make([]map[string]any, len(ratings))
+	for i, r := range ratings {
+		total += float64(r.Rating)
+		items[i] = map[string]any{
+			"id":        r.ID,
+			"rating":    r.Rating,
+			"review":    nullStr(r.Review),
+			"ratedBy":   map[string]any{"id": r.RatedById, "name": r.RatedByName},
+			"createdAt": r.CreatedAt,
+		}
+	}
+	var avg any
+	if len(ratings) > 0 {
+		avg = total / float64(len(ratings))
+	}
+	return map[string]any{
+		"roomId":        roomID,
+		"totalRatings":  len(ratings),
+		"averageRating": avg,
+		"ratings":       items,
+	}, nil
+}
+
+// GetBookingRoomRating returns the room rating submitted for a single booking, or a
+// 404 error when the booking has not been rated - mirrors GetBookingDriverRating.
+func (s *BookingService) GetBookingRoomRating(ctx context.Context, bookingID int32) (map[string]any, error) {
+	r, err := s.q.GetRoomRatingByBooking(ctx, bookingID)
+	if err != nil {
+		return nil, util.NewError(404, "booking has not been rated", util.ErrNotFound)
+	}
+	return map[string]any{
+		"id":        r.ID,
+		"bookingId": r.BookingId,
+		"roomId":    r.RoomId,
 		"rating":    r.Rating,
 		"review":    nullStr(r.Review),
 		"createdAt": r.CreatedAt,

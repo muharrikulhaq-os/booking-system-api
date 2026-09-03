@@ -48,6 +48,10 @@ func (h *BookingHandler) Register(r fiber.Router) {
 	g := r.Group("/bookings", auth)
 	g.Get("", h.List)
 	g.Get("/drivers/:driver_id/ratings", admin, h.GetDriverRatings)
+	// Rating ruangan tetap terbuka ke semua peran (bukan admin-only seperti
+	// driver) - rata-rata rating ruangan berguna dilihat karyawan biasa saat
+	// memilih ruangan untuk dibooking, bukan cuma keperluan evaluasi admin.
+	g.Get("/rooms/:room_id/ratings", h.GetRoomRatings)
 	g.Get("/:id", h.GetByID)
 	g.Post("", adminOrEmployee, h.Create)
 	g.Patch("/:id/cancel", h.Cancel)
@@ -61,6 +65,8 @@ func (h *BookingHandler) Register(r fiber.Router) {
 	g.Get("/:id/merge-info", auth, h.MergeInfo)
 	g.Post("/:id/rate-driver", h.RateDriver)
 	g.Get("/:id/driver-rating", auth, h.GetBookingDriverRating)
+	g.Post("/:id/rate-room", h.RateRoom)
+	g.Get("/:id/room-rating", auth, h.GetBookingRoomRating)
 	g.Get("/:id/approval-log", admin, h.ApprovalLog)
 	g.Get("/:id/activity", auth, h.Activity)
 	g.Get("/:id/attachments", h.ListAttachments)
@@ -306,6 +312,48 @@ func (h *BookingHandler) GetBookingDriverRating(c *fiber.Ctx) error {
 		return err
 	}
 	data, err := h.svc.GetBookingDriverRating(c.Context(), id)
+	if err != nil {
+		return err
+	}
+	return util.OK(c, "Booking rating retrieved", data)
+}
+
+func (h *BookingHandler) RateRoom(c *fiber.Ctx) error {
+	id, err := parseID(c, "id")
+	if err != nil {
+		return err
+	}
+	var req service.RateRoomRequest
+	if err := bindAndValidate(c, &req); err != nil {
+		return err
+	}
+	data, err := h.svc.RateRoom(c.Context(), id, req, middleware.GetUserID(c))
+	if err != nil {
+		return err
+	}
+	return util.Created(c, "Room rated", data)
+}
+
+func (h *BookingHandler) GetRoomRatings(c *fiber.Ctx) error {
+	id, err := parseID(c, "room_id")
+	if err != nil {
+		return err
+	}
+	data, err := h.svc.GetRoomRatings(c.Context(), id)
+	if err != nil {
+		return err
+	}
+	return util.OK(c, "Room ratings retrieved", data)
+}
+
+// GetBookingRoomRating returns the room rating for a single booking (or 404 if the
+// booking has not been rated yet) - mirrors GetBookingDriverRating.
+func (h *BookingHandler) GetBookingRoomRating(c *fiber.Ctx) error {
+	id, err := parseID(c, "id")
+	if err != nil {
+		return err
+	}
+	data, err := h.svc.GetBookingRoomRating(c.Context(), id)
 	if err != nil {
 		return err
 	}

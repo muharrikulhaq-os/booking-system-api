@@ -64,6 +64,7 @@ func serializeVehicleRow(v repository.ListVehiclesRow, spdActive bool) map[strin
 		// picker/list, terpisah dari status resource (AVAILABLE/IN_USE/dst)
 		// yang tidak membedakan sebab pemakaiannya.
 		"isSpdActive": spdActive,
+		"fixedDriver": fixedDriverField(v.FixedDriverId, v.FixedDriverName),
 	}
 }
 
@@ -83,7 +84,18 @@ func serializeVehicleByID(v repository.GetVehicleByIDRow, spdActive bool) map[st
 		"photoUrl":        nullStr(v.PhotoUrl),
 		"energyType":      string(v.EnergyType),
 		"isSpdActive":     spdActive,
+		"fixedDriver":     fixedDriverField(v.FixedDriverId, v.FixedDriverName),
 	}
+}
+
+// fixedDriverField builds the {id, name} object surfaced as vehicle.fixedDriver
+// (null bila kendaraan tidak punya supir tetap) - dipakai FE untuk auto-pilih
+// supir & menyembunyikan pemilihan supir manual saat kendaraan ini dibooking.
+func fixedDriverField(id sql.NullInt32, name sql.NullString) any {
+	if !id.Valid {
+		return nil
+	}
+	return map[string]any{"id": id.Int32, "name": name.String}
 }
 
 func (s *VehicleService) List(ctx context.Context, page, limit int, search *string, categoryID *int32, status *string) ([]map[string]any, int64, error) {
@@ -251,6 +263,31 @@ func (s *VehicleService) UpdatePhoto(ctx context.Context, id int32, photoURL str
 		PhotoUrl: sql.NullString{String: photoURL, Valid: true},
 	})
 	if err != nil {
+		return nil, err
+	}
+	return s.GetByID(ctx, id)
+}
+
+// SetFixedDriver assigns (driverID != nil) or clears (driverID == nil) this
+// vehicle's permanent driver pairing. Assigning first releases whatever
+// vehicle currently holds that driver as fixed - the DB UNIQUE constraint
+// only allows one vehicle per driver, so without this the second UPDATE
+// would just fail instead of "moving" the pairing like an admin expects.
+func (s *VehicleService) SetFixedDriver(ctx context.Context, id int32, driverID *int32) (map[string]any, error) {
+	if _, err := s.q.GetVehicleByID(ctx, id); err != nil {
+		return nil, util.ErrNotFound
+	}
+	var newDriver sql.NullInt32
+	if driverID != nil {
+		if _, err := s.q.GetDriverByID(ctx, *driverID); err != nil {
+			return nil, util.NewError(404, "driver not found", util.ErrNotFound)
+		}
+		_ = s.q.ClearVehicleFixedDriverByDriver(ctx, *driverID)
+		newDriver = sql.NullInt32{Int32: *driverID, Valid: true}
+	}
+	if _, err := s.q.SetVehicleFixedDriver(ctx, repository.SetVehicleFixedDriverParams{
+		VehicleID: id, DriverID: newDriver,
+	}); err != nil {
 		return nil, err
 	}
 	return s.GetByID(ctx, id)

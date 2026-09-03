@@ -126,3 +126,14 @@ LEFT JOIN driver_assignments da ON da."driverId" = d.id AND da."releasedAt" IS N
 LEFT JOIN vehicles v ON v.id = da."vehicleId"
 WHERE d."isActive" = TRUE
 ORDER BY overlapping_passengers ASC;
+
+-- name: GetDriverIDsWithActiveSpd :many
+-- Supir yang sedang terkunci tugas SPD hari ini (hari kalender penuh WIB) -
+-- sama seperti GetVehicleIDsWithActiveSpd tapi sisi supir, dipakai untuk
+-- badge "Digunakan SPD" di daftar pemilihan supir saat create booking.
+SELECT DISTINCT "assignedDriverId" FROM bookings
+WHERE "bookingType" = 'SPD'
+  AND status IN ('APPROVED', 'ONGOING')
+  AND "assignedDriverId" IS NOT NULL
+  AND date_trunc('day', "startDate" AT TIME ZONE 'Asia/Jakarta') <= date_trunc('day', NOW() AT TIME ZONE 'Asia/Jakarta')
+  AND date_trunc('day', "endDate" AT TIME ZONE 'Asia/Jakarta')   >= date_trunc('day', NOW() AT TIME ZONE 'Asia/Jakarta');

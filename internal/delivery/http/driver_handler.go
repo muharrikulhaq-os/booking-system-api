@@ -32,6 +32,7 @@ func (h *DriverHandler) Register(r fiber.Router) {
 	g.Post("/:driver_id/assign", admin, h.Assign)
 	g.Patch("/:driver_id/release", admin, h.Release)
 	g.Get("/:driver_id/assignments", admin, h.Assignments)
+	g.Patch("/:driver_id/fixed-vehicle", admin, h.SetFixedVehicle)
 }
 
 func (h *DriverHandler) List(c *fiber.Ctx) error {
@@ -134,6 +135,24 @@ func (h *DriverHandler) Assignments(c *fiber.Ctx) error {
 		return err
 	}
 	return util.OK(c, "Assignment history retrieved", data)
+}
+
+func (h *DriverHandler) SetFixedVehicle(c *fiber.Ctx) error {
+	id, err := parseID(c, "driver_id")
+	if err != nil {
+		return err
+	}
+	var body struct {
+		VehicleID *int32 `json:"vehicleId"`
+	}
+	if err := bindAndValidate(c, &body); err != nil {
+		return err
+	}
+	data, err := h.svc.SetFixedVehicle(c.Context(), id, body.VehicleID)
+	if err != nil {
+		return err
+	}
+	return util.OK(c, "Driver fixed vehicle updated", data)
 }
 
 // attach the middleware reference so it can be used in handler

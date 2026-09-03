@@ -4,10 +4,12 @@
 -- di-Start (resources.status = IN_USE), tapi juga yang baru APPROVED tapi jadwalnya
 -- sudah berjalan. Filter status lain (MAINTENANCE/INACTIVE/IN_USE) tidak terpengaruh.
 SELECT v.*, r.name AS resource_name, r.status AS resource_status,
-       vc.name AS category_name
+       vc.name AS category_name, fdu.name AS fixed_driver_name
 FROM vehicles v
 JOIN resources r ON r.id = v."resourceId"
 JOIN vehicle_categories vc ON vc.id = v."categoryId"
+LEFT JOIN drivers fd ON fd.id = v."fixedDriverId"
+LEFT JOIN users fdu ON fdu.id = fd."userId"
 WHERE (sqlc.narg(search)::text IS NULL
        OR r.name ILIKE '%' || sqlc.narg(search)::text || '%'
        OR v."plateNumber" ILIKE '%' || sqlc.narg(search)::text || '%'
@@ -42,10 +44,12 @@ WHERE (sqlc.narg(search)::text IS NULL
 
 -- name: GetVehicleByID :one
 SELECT v.*, r.name AS resource_name, r.status AS resource_status,
-       vc.name AS category_name
+       vc.name AS category_name, fdu.name AS fixed_driver_name
 FROM vehicles v
 JOIN resources r ON r.id = v."resourceId"
 JOIN vehicle_categories vc ON vc.id = v."categoryId"
+LEFT JOIN drivers fd ON fd.id = v."fixedDriverId"
+LEFT JOIN users fdu ON fdu.id = fd."userId"
 WHERE v.id = $1 LIMIT 1;
 
 -- name: GetVehicleByPlate :one
@@ -100,3 +104,15 @@ WHERE id = $1 RETURNING *;
 
 -- name: UpdateVehicleLastMaintenanceOdometer :exec
 UPDATE vehicles SET "lastMaintenanceOdometer" = $2 WHERE id = $1;
+
+-- name: SetVehicleFixedDriver :one
+UPDATE vehicles SET "fixedDriverId" = $2 WHERE id = $1 RETURNING *;
+
+-- name: ClearVehicleFixedDriverByDriver :exec
+-- Dipanggil sebelum menetapkan supir tetap baru ke kendaraan lain - UNIQUE
+-- di kolom fixedDriverId cuma izinkan satu kendaraan per supir, jadi ikatan
+-- lama harus dilepas dulu supaya UPDATE berikutnya tidak bentrok constraint.
+UPDATE vehicles SET "fixedDriverId" = NULL WHERE "fixedDriverId" = $1;
+
+-- name: GetVehicleByFixedDriverID :one
+SELECT * FROM vehicles WHERE "fixedDriverId" = $1 LIMIT 1;

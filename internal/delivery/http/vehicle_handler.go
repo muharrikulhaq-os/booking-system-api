@@ -30,6 +30,7 @@ func (h *VehicleHandler) Register(r fiber.Router) {
 	g.Put("/:id", admin, h.Update)
 	g.Patch("/:id/status", admin, h.UpdateStatus)
 	g.Patch("/:id/photo", admin, h.UpdatePhoto)
+	g.Patch("/:id/fixed-driver", admin, h.SetFixedDriver)
 	g.Delete("/:id", admin, h.Delete)
 	g.Delete("/categories/:id", admin, h.DeleteCategory)
 	g.Get("/:id/maintenance-status", h.GetMaintenanceStatus)
@@ -134,6 +135,24 @@ func (h *VehicleHandler) UpdatePhoto(c *fiber.Ctx) error {
 		return err
 	}
 	return util.OK(c, "Vehicle photo updated", data)
+}
+
+func (h *VehicleHandler) SetFixedDriver(c *fiber.Ctx) error {
+	id, err := parseID(c, "id")
+	if err != nil {
+		return err
+	}
+	var body struct {
+		DriverID *int32 `json:"driverId"`
+	}
+	if err := bindAndValidate(c, &body); err != nil {
+		return err
+	}
+	data, err := h.svc.SetFixedDriver(c.Context(), id, body.DriverID)
+	if err != nil {
+		return err
+	}
+	return util.OK(c, "Vehicle fixed driver updated", data)
 }
 
 func (h *VehicleHandler) Delete(c *fiber.Ctx) error {

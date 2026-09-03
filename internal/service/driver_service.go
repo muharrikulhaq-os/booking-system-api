@@ -32,7 +32,7 @@ type AssignDriverRequest struct {
 	VehicleID int32 `json:"vehicleId" validate:"required"`
 }
 
-func serializeDriverRow(d repository.ListDriversRow) map[string]any {
+func serializeDriverRow(d repository.ListDriversRow, fixedVehicle any) map[string]any {
 	// AssignedPlate is always a plain (never-null) string from the query —
 	// see the comment on ListDrivers in sql/query/driver.sql for why.
 	var plate any
@@ -49,10 +49,14 @@ func serializeDriverRow(d repository.ListDriversRow) map[string]any {
 		"phoneNumber":   d.PhoneNumber,
 		"isActive":      d.IsActive,
 		"assignedPlate": plate,
+		// Kendaraan tetap milik supir ini (vehicles.fixedDriverId) - beda
+		// dari assignedPlate yang mengikuti booking aktif, ini permanen
+		// sampai admin ubah.
+		"fixedVehicle": fixedVehicle,
 	}
 }
 
-func serializeDriverByID(d repository.GetDriverByIDRow) map[string]any {
+func serializeDriverByID(d repository.GetDriverByIDRow, fixedVehicle any) map[string]any {
 	var plate, photo any
 	if d.AssignedPlate != "" {
 		plate = d.AssignedPlate
@@ -71,6 +75,7 @@ func serializeDriverByID(d repository.GetDriverByIDRow) map[string]any {
 		"phoneNumber":   d.PhoneNumber,
 		"isActive":      d.IsActive,
 		"assignedPlate": plate,
+		"fixedVehicle":  fixedVehicle,
 	}
 }
 
@@ -94,9 +99,16 @@ func (s *DriverService) List(ctx context.Context, page, limit int, search *strin
 	total, _ := s.q.CountDrivers(ctx, repository.CountDriversParams{
 		Search: params.Search, IsActive: params.IsActive,
 	})
+
+	fixedRows, _ := s.q.ListVehiclesWithFixedDriver(ctx)
+	fixedByDriver := make(map[int32]any, len(fixedRows))
+	for _, fr := range fixedRows {
+		fixedByDriver[fr.DriverID] = map[string]any{"id": fr.VehicleID, "plateNumber": fr.PlateNumber}
+	}
+
 	out := make([]map[string]any, len(rows))
 	for i, r := range rows {
-		out[i] = serializeDriverRow(r)
+		out[i] = serializeDriverRow(r, fixedByDriver[r.ID])
 	}
 	return out, total, nil
 }
@@ -106,7 +118,11 @@ func (s *DriverService) GetByID(ctx context.Context, id int32) (map[string]any, 
 	if err != nil {
 		return nil, util.ErrNotFound
 	}
-	return serializeDriverByID(d), nil
+	var fixedVehicle any
+	if v, verr := s.q.GetVehicleByFixedDriverID(ctx, id); verr == nil {
+		fixedVehicle = map[string]any{"id": v.ID, "plateNumber": v.PlateNumber}
+	}
+	return serializeDriverByID(d, fixedVehicle), nil
 }
 
 func (s *DriverService) Create(ctx context.Context, req CreateDriverRequest) (map[string]any, error) {
@@ -173,6 +189,37 @@ func (s *DriverService) GetAssignments(ctx context.Context, id int32) (any, erro
 	return s.q.GetDriverAssignmentHistory(ctx, id)
 }
 
+// SetFixedVehicle assigns (vehicleID != nil) or clears (vehicleID == nil) this
+// driver's permanent vehicle pairing - the driver-side entry point for the
+// same underlying vehicles.fixedDriverId column VehicleService.SetFixedDriver
+// writes, so it stays in sync no matter which form (driver or vehicle) an
+// admin edits it from.
+func (s *DriverService) SetFixedVehicle(ctx context.Context, id int32, vehicleID *int32) (map[string]any, error) {
+	if _, err := s.q.GetDriverByID(ctx, id); err != nil {
+		return nil, util.ErrNotFound
+	}
+	// Lepas kendaraan yang SEKARANG jadi pasangan tetap supir ini (kalau ada) -
+	// baik untuk kasus "clear" (vehicleID nil) maupun "pindah ke kendaraan lain".
+	if old, err := s.q.GetVehicleByFixedDriverID(ctx, id); err == nil {
+		if _, err := s.q.SetVehicleFixedDriver(ctx, repository.SetVehicleFixedDriverParams{
+			VehicleID: old.ID, DriverID: sql.NullInt32{},
+		}); err != nil {
+			return nil, err
+		}
+	}
+	if vehicleID != nil {
+		if _, err := s.q.GetVehicleByID(ctx, *vehicleID); err != nil {
+			return nil, util.NewError(404, "vehicle not found", util.ErrNotFound)
+		}
+		if _, err := s.q.SetVehicleFixedDriver(ctx, repository.SetVehicleFixedDriverParams{
+			VehicleID: *vehicleID, DriverID: sql.NullInt32{Int32: id, Valid: true},
+		}); err != nil {
+			return nil, err
+		}
+	}
+	return s.GetByID(ctx, id)
+}
+
 func (s *DriverService) GetAvailableDrivers(ctx context.Context, start, end time.Time) ([]map[string]any, error) {
 	rows, err := s.q.ListAvailableDrivers(ctx, repository.ListAvailableDriversParams{
 		StartFrom: start,
@@ -181,7 +228,13 @@ func (s *DriverService) GetAvailableDrivers(ctx context.Context, start, end time
 	if err != nil {
 		return nil, err
 	}
-	
+
+	spdIDs, _ := s.q.GetDriverIDsWithActiveSpd(ctx)
+	spdSet := make(map[int32]bool, len(spdIDs))
+	for _, id := range spdIDs {
+		spdSet[id] = true
+	}
+
 	out := make([]map[string]any, len(rows))
 	for i, r := range rows {
 		// Supir "kosong" (belum pegang kendaraan) → vehicle null; kapasitas &
@@ -207,6 +260,9 @@ func (s *DriverService) GetAvailableDrivers(ctx context.Context, start, end time
 			"overlappingPassengers": r.OverlappingPassengers,
 			"remainingSeats":        remainingSeats,
 			"overlappingPurpose":    r.OverlappingPurpose,
+			// true bila supir ini sedang terkunci tugas SPD hari ini (lihat
+			// GetDriverIDsWithActiveSpd) - badge "Digunakan SPD" di picker.
+			"isSpdActive": spdSet[r.DriverID],
 		}
 	}
 	return out, nil
