@@ -54,6 +54,7 @@ type ExtendedQuerier interface {
 	GetRoomRatings(ctx context.Context, roomKeeperID int32) ([]GetRoomRatingsRow, error)
 	SetRoomKeeper(ctx context.Context, roomID int32, roomKeeperID sql.NullInt32) (Room, error)
 	GetRoomsByRoomKeeperID(ctx context.Context, roomKeeperID int32) ([]GetRoomsByRoomKeeperIDRow, error)
+	ListRoomsWithKeeper(ctx context.Context) ([]RoomKeeperRoomRow, error)
 	SetVehicleFixedDriver(ctx context.Context, arg SetVehicleFixedDriverParams) (Vehicle, error)
 	ClearVehicleFixedDriverByDriver(ctx context.Context, driverID int32) error
 	GetVehicleByFixedDriverID(ctx context.Context, driverID int32) (Vehicle, error)

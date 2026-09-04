@@ -25,7 +25,7 @@ type UpdateRoomKeeperRequest struct {
 	PhoneNumber string `json:"phoneNumber" validate:"required"`
 }
 
-func serializeRoomKeeperRow(rk repository.ListRoomKeepersRow) map[string]any {
+func serializeRoomKeeperRow(rk repository.ListRoomKeepersRow, rooms []map[string]any) map[string]any {
 	return map[string]any{
 		"id":          rk.ID,
 		"userId":      rk.UserId,
@@ -34,6 +34,9 @@ func serializeRoomKeeperRow(rk repository.ListRoomKeepersRow) map[string]any {
 		"email":       rk.Email,
 		"phoneNumber": rk.PhoneNumber,
 		"isActive":    rk.IsActive,
+		// Selalu array (bisa kosong) - sama seperti di serializeRoomKeeperByID,
+		// supaya FE tidak perlu beda-bedakan shape antara list dan detail.
+		"rooms": rooms,
 	}
 }
 
@@ -70,9 +73,24 @@ func (s *RoomKeeperService) List(ctx context.Context, page, limit int, isActive 
 		return nil, 0, err
 	}
 	total, _ := s.q.CountRoomKeepers(ctx, params.IsActive)
+
+	roomRows, _ := s.q.ListRoomsWithKeeper(ctx)
+	roomsByKeeper := make(map[int32][]map[string]any, len(roomRows))
+	for _, r := range roomRows {
+		roomsByKeeper[r.RoomKeeperID] = append(roomsByKeeper[r.RoomKeeperID], map[string]any{
+			"id":       r.RoomID,
+			"name":     r.ResourceName,
+			"location": r.Location,
+		})
+	}
+
 	out := make([]map[string]any, len(rows))
 	for i, r := range rows {
-		out[i] = serializeRoomKeeperRow(r)
+		rooms := roomsByKeeper[r.ID]
+		if rooms == nil {
+			rooms = []map[string]any{}
+		}
+		out[i] = serializeRoomKeeperRow(r, rooms)
 	}
 	return out, total, nil
 }

@@ -54,3 +54,35 @@ func (q *Queries) GetRoomsByRoomKeeperID(ctx context.Context, roomKeeperID int32
 	}
 	return items, rows.Err()
 }
+
+type RoomKeeperRoomRow struct {
+	RoomKeeperID int32  `json:"room_keeper_id"`
+	RoomID       int32  `json:"room_id"`
+	ResourceName string `json:"resource_name"`
+	Location     string `json:"location"`
+}
+
+// ListRoomsWithKeeper returns every (roomKeeperId, room) pair currently set -
+// batched lookup for RoomKeeperService.List so it doesn't run one
+// GetRoomsByRoomKeeperID query per row (mirrors ListVehiclesWithFixedDriver).
+func (q *Queries) ListRoomsWithKeeper(ctx context.Context) ([]RoomKeeperRoomRow, error) {
+	rows, err := q.db.QueryContext(ctx, `
+		SELECT rm."roomKeeperId", rm.id, r.name, rm.location
+		FROM rooms rm
+		JOIN resources r ON r.id = rm."resourceId"
+		WHERE rm."roomKeeperId" IS NOT NULL
+		ORDER BY r.name ASC`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []RoomKeeperRoomRow
+	for rows.Next() {
+		var i RoomKeeperRoomRow
+		if err := rows.Scan(&i.RoomKeeperID, &i.RoomID, &i.ResourceName, &i.Location); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	return items, rows.Err()
+}
