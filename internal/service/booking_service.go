@@ -908,6 +908,18 @@ func (s *BookingService) Start(ctx context.Context, id int32, odometer *int32, l
 		return nil, util.ErrForbidden
 	}
 
+	// Jadwal maintenance - jaring pengaman ketiga (setelah Create/Approve):
+	// bisa saja maintenance baru dijadwalkan SETELAH booking ini disetujui,
+	// jadi dicek ulang sebelum benar-benar dijalankan (dikerjakan/berlangsung).
+	if b.ResourceType == repository.ResourceTypeVEHICLE && b.AssignedVehicleId.Valid {
+		if mc, merr := s.q.CheckMaintenanceConflict(ctx, repository.CheckMaintenanceConflictParams{
+			VehicleID: b.AssignedVehicleId.Int32, CheckStart: b.StartDate, CheckEnd: b.EndDate,
+		}); merr == nil && mc > 0 {
+			return nil, util.NewError(409,
+				"kendaraan ini sedang/akan menjalani maintenance pada tanggal tersebut", util.ErrConflict)
+		}
+	}
+
 	now := time.Now().UTC()
 	// Beri toleransi mulai hingga 30 menit sebelum jadwal untuk persiapan supir / ruangan.
 	if now.Add(30 * time.Minute).Before(b.StartDate) {

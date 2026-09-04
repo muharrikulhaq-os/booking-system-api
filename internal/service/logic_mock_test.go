@@ -37,6 +37,16 @@ func (m *MockQuerier) GetOngoingAutoMaintenanceByVehicle(ctx context.Context, ve
 	return repository.MaintenanceRecord{}, sql.ErrNoRows
 }
 
+// checkAndTriggerAutoMaintenance now guards against ANY open maintenance
+// (not just auto-generated ones), so it calls this general query instead -
+// reuses the same ongoingAutoMaint fixture field for test scenarios.
+func (m *MockQuerier) GetOngoingMaintenanceByVehicle(ctx context.Context, vehicleID int32) (repository.MaintenanceRecord, error) {
+	if m.ongoingAutoMaint != nil {
+		return *m.ongoingAutoMaint, nil
+	}
+	return repository.MaintenanceRecord{}, sql.ErrNoRows
+}
+
 func (m *MockQuerier) CreateMaintenance(ctx context.Context, arg repository.CreateMaintenanceParams) (repository.MaintenanceRecord, error) {
 	m.createdMaintenance = &arg
 	return repository.MaintenanceRecord{ID: 1, VehicleId: arg.VehicleId}, nil

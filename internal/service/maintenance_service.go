@@ -165,6 +165,13 @@ func (s *MaintenanceService) Create(ctx context.Context, req CreateMaintenanceRe
 		return MaintenanceCreateResponse{}, util.NewError(404, "Vehicle not found", util.ErrNotFound)
 	}
 
+	// Satu kendaraan cuma boleh punya satu maintenance terbuka sekaligus -
+	// tolak kalau masih ada yang belum 'completed', jangan sampai dobel.
+	if _, err := s.q.GetOngoingMaintenanceByVehicle(ctx, req.VehicleID); err == nil {
+		return MaintenanceCreateResponse{}, util.NewError(409,
+			"kendaraan ini masih dalam maintenance yang belum selesai", util.ErrConflict)
+	}
+
 	endDate := req.StartDate.Add(24 * time.Hour) // just an estimate if EndDate is not provided
 	if req.EndDate != nil {
 		endDate = *req.EndDate
@@ -382,9 +389,10 @@ func (s *MaintenanceService) Complete(ctx context.Context, id int32, photos []*m
 // checkAndTriggerAutoMaintenance creates a scheduled maintenance record once a
 // vehicle's odometer has advanced maintenanceIntervalKm past the last
 // maintenance baseline (e.g. baseline 80,000km + interval 10,000km -> auto
-// triggers at 90,000km). It is a no-op if an auto-generated maintenance is
-// already open for the vehicle, so repeated odometer updates don't spam
-// duplicate records.
+// triggers at 90,000km). It is a no-op if the vehicle already has ANY open
+// maintenance (auto-generated or manually created by admin) - a vehicle can
+// only be under one maintenance at a time, so this must not spam a duplicate
+// record on top of one an admin is already handling.
 func checkAndTriggerAutoMaintenance(ctx context.Context, q repository.ExtendedQuerier, vehicleID, actorID int32) {
 	vehicle, err := q.GetVehicleByID(ctx, vehicleID)
 	if err != nil {
@@ -393,7 +401,7 @@ func checkAndTriggerAutoMaintenance(ctx context.Context, q repository.ExtendedQu
 	if vehicle.CurrentOdometer-vehicle.LastMaintenanceOdometer < vehicle.MaintenanceIntervalKm {
 		return
 	}
-	if _, err := q.GetOngoingAutoMaintenanceByVehicle(ctx, vehicleID); err == nil {
+	if _, err := q.GetOngoingMaintenanceByVehicle(ctx, vehicleID); err == nil {
 		return
 	}
 

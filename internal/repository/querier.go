@@ -99,6 +99,7 @@ type Querier interface {
 	GetMasterSettingByKey(ctx context.Context, key string) (MasterSetting, error)
 	// Guards against creating duplicate auto-triggered maintenance records while one is still open.
 	GetOngoingAutoMaintenanceByVehicle(ctx context.Context, vehicleid int32) (MaintenanceRecord, error)
+	GetOngoingMaintenanceByVehicle(ctx context.Context, vehicleid int32) (MaintenanceRecord, error)
 	GetOverlappingPassengerCount(ctx context.Context, arg GetOverlappingPassengerCountParams) (int32, error)
 	GetOvertimeByBooking(ctx context.Context, bookingid int32) (DriverOvertime, error)
 	GetRefreshToken(ctx context.Context, arg GetRefreshTokenParams) (RefreshToken, error)
