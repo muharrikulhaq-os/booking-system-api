@@ -1,0 +1,2 @@
+-- Deleted demo data can't be restored; this is intentionally a no-op.
+-- Nothing to reverse.
