@@ -3,9 +3,12 @@ package service
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"math"
 	"strings"
+
+	"github.com/jackc/pgx/v5/pgconn"
 
 	"booking-system-api/internal/repository"
 	"booking-system-api/internal/util"
@@ -321,7 +324,21 @@ func (s *UserService) Delete(ctx context.Context, id int32) error {
 	if _, err := s.q.GetUserByID(ctx, id); err != nil {
 		return util.ErrNotFound
 	}
-	return s.q.DeleteUser(ctx, id)
+	if err := s.q.DeleteUser(ctx, id); err != nil {
+		// User masih punya riwayat yang mereferensikannya (booking, sebagai
+		// approver, driver/room keeper, rating, log, dst - banyak tabel FK ke
+		// users tanpa ON DELETE CASCADE secara sengaja, supaya histori tidak
+		// ikut hilang). Sebelumnya ini bocor sebagai raw Postgres error ->
+		// 500 generik; sekarang jadi 409 yang jelas, arahkan ke nonaktifkan.
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "23503" {
+			return util.NewError(409,
+				"user ini masih punya riwayat terkait (booking, persetujuan, driver/room keeper, dll) dan tidak bisa dihapus - nonaktifkan saja user ini",
+				util.ErrConflict)
+		}
+		return err
+	}
+	return nil
 }
 
 func (s *UserService) UpdateProfilePhoto(ctx context.Context, id int32, path string) (map[string]any, error) {
