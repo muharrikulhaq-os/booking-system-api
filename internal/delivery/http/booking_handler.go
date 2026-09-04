@@ -48,10 +48,9 @@ func (h *BookingHandler) Register(r fiber.Router) {
 	g := r.Group("/bookings", auth)
 	g.Get("", h.List)
 	g.Get("/drivers/:driver_id/ratings", admin, h.GetDriverRatings)
-	// Rating ruangan tetap terbuka ke semua peran (bukan admin-only seperti
-	// driver) - rata-rata rating ruangan berguna dilihat karyawan biasa saat
-	// memilih ruangan untuk dibooking, bukan cuma keperluan evaluasi admin.
-	g.Get("/rooms/:room_id/ratings", h.GetRoomRatings)
+	// Rating ruangan (sekarang ditujukan ke room keeper, bukan ruangannya)
+	// tetap terbuka ke semua peran (bukan admin-only seperti driver).
+	g.Get("/room-keepers/:room_keeper_id/ratings", h.GetRoomRatings)
 	g.Get("/:id", h.GetByID)
 	g.Post("", adminOrEmployee, h.Create)
 	g.Patch("/:id/cancel", h.Cancel)
@@ -335,7 +334,7 @@ func (h *BookingHandler) RateRoom(c *fiber.Ctx) error {
 }
 
 func (h *BookingHandler) GetRoomRatings(c *fiber.Ctx) error {
-	id, err := parseID(c, "room_id")
+	id, err := parseID(c, "room_keeper_id")
 	if err != nil {
 		return err
 	}

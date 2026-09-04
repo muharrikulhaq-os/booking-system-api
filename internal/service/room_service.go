@@ -41,6 +41,10 @@ func serializeRoomRow(r repository.ListRoomsRow) map[string]any {
 }
 
 func serializeRoomByID(r repository.GetRoomByIDRow) map[string]any {
+	var roomKeeper any
+	if r.RoomKeeperId.Valid {
+		roomKeeper = map[string]any{"id": r.RoomKeeperId.Int32, "name": r.RoomKeeperName.String}
+	}
 	return map[string]any{
 		"id":         r.ID,
 		"resourceId": r.ResourceId,
@@ -49,6 +53,9 @@ func serializeRoomByID(r repository.GetRoomByIDRow) map[string]any {
 		"capacity":   r.Capacity,
 		"status":     string(r.ResourceStatus),
 		"photoUrl":   nullStr(r.PhotoUrl),
+		// Room keeper penanggung jawab ruangan ini (opsional, N:1 - satu room
+		// keeper boleh punya banyak ruangan) - dipakai untuk atribusi rating.
+		"roomKeeper": roomKeeper,
 	}
 }
 
@@ -138,6 +145,27 @@ func (s *RoomService) Delete(ctx context.Context, id int32) error {
 		return util.ErrNotFound
 	}
 	return s.q.DeleteResource(ctx, r.ResourceId)
+}
+
+// SetRoomKeeper assigns (roomKeeperID != nil) or clears (nil) this room's
+// keeper. Unlike VehicleService.SetFixedDriver, no "release the old
+// pairing" step is needed - a room keeper can be responsible for more than
+// one room, so there's no uniqueness to defend.
+func (s *RoomService) SetRoomKeeper(ctx context.Context, id int32, roomKeeperID *int32) (map[string]any, error) {
+	if _, err := s.q.GetRoomByID(ctx, id); err != nil {
+		return nil, util.ErrNotFound
+	}
+	var newKeeper sql.NullInt32
+	if roomKeeperID != nil {
+		if _, err := s.q.GetRoomKeeperByID(ctx, *roomKeeperID); err != nil {
+			return nil, util.NewError(404, "room keeper not found", util.ErrNotFound)
+		}
+		newKeeper = sql.NullInt32{Int32: *roomKeeperID, Valid: true}
+	}
+	if _, err := s.q.SetRoomKeeper(ctx, id, newKeeper); err != nil {
+		return nil, err
+	}
+	return s.GetByID(ctx, id)
 }
 
 func (s *RoomService) UpdatePhoto(ctx context.Context, id int32, photoURL string) (map[string]any, error) {

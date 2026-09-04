@@ -186,53 +186,68 @@ func (q *Queries) GetRoomIDByResourceID(ctx context.Context, resourceID int32) (
 	return id, err
 }
 
+// GetRoomKeeperIDByResourceID resolves a booking's resourceId down to the
+// room's assigned room keeper (nullable - a room may not have one). Used by
+// RateRoom to attribute the rating to the keeper, not the room.
+func (q *Queries) GetRoomKeeperIDByResourceID(ctx context.Context, resourceID int32) (sql.NullInt32, error) {
+	var roomKeeperID sql.NullInt32
+	err := q.db.QueryRowContext(ctx,
+		`SELECT "roomKeeperId" FROM rooms WHERE "resourceId" = $1 LIMIT 1`, resourceID).Scan(&roomKeeperID)
+	return roomKeeperID, err
+}
+
 // ─────────────────────────────────────────────────────────────────────────
 // ROOM RATINGS
 // Mirrors driver_ratings (CreateDriverRating/GetDriverRatingByBooking/
 // GetDriverRatings in booking.sql.go), but hand-written here rather than
 // through booking.sql.go since sqlc isn't runnable in this environment -
 // see sql/query/room.sql for the source-of-truth queries these mirror.
-// Rated target is the ROOM itself, not a person: room_keepers aren't
-// assigned per-room or per-booking (see room_keepers table), so unlike a
-// driver there's no specific individual to attribute a rating to.
+// Rated target is the room KEEPER (roomKeeperId), not the room - it
+// evaluates the person's service. roomId is kept alongside for context
+// (which room the booking was for) but isn't what ratings are grouped by.
+// roomKeeperId is nullable: a room with no assigned keeper can still be
+// rated (keeps the booking's "sudah dinilai" state), it just won't count
+// toward anyone's summary.
 // ─────────────────────────────────────────────────────────────────────────
 
 type RoomRating struct {
-	ID        int32          `json:"id"`
-	BookingId int32          `json:"bookingId"`
-	RoomId    int32          `json:"roomId"`
-	RatedById int32          `json:"ratedById"`
-	Rating    int16          `json:"rating"`
-	Review    sql.NullString `json:"review"`
-	CreatedAt time.Time      `json:"createdAt"`
+	ID           int32          `json:"id"`
+	BookingId    int32          `json:"bookingId"`
+	RoomId       int32          `json:"roomId"`
+	RoomKeeperId sql.NullInt32  `json:"roomKeeperId"`
+	RatedById    int32          `json:"ratedById"`
+	Rating       int16          `json:"rating"`
+	Review       sql.NullString `json:"review"`
+	CreatedAt    time.Time      `json:"createdAt"`
 }
 
 type CreateRoomRatingParams struct {
-	BookingId int32          `json:"bookingId"`
-	RoomId    int32          `json:"roomId"`
-	RatedById int32          `json:"ratedById"`
-	Rating    int16          `json:"rating"`
-	Review    sql.NullString `json:"review"`
+	BookingId    int32          `json:"bookingId"`
+	RoomId       int32          `json:"roomId"`
+	RoomKeeperId sql.NullInt32  `json:"roomKeeperId"`
+	RatedById    int32          `json:"ratedById"`
+	Rating       int16          `json:"rating"`
+	Review       sql.NullString `json:"review"`
 }
 
 func (q *Queries) CreateRoomRating(ctx context.Context, arg CreateRoomRatingParams) (RoomRating, error) {
 	row := q.db.QueryRowContext(ctx, `
-		INSERT INTO room_ratings ("bookingId", "roomId", "ratedById", rating, review)
-		VALUES ($1, $2, $3, $4, $5) RETURNING id, "bookingId", "roomId", "ratedById", rating, review, "createdAt"`,
-		arg.BookingId, arg.RoomId, arg.RatedById, arg.Rating, arg.Review,
+		INSERT INTO room_ratings ("bookingId", "roomId", "roomKeeperId", "ratedById", rating, review)
+		VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, "bookingId", "roomId", "roomKeeperId", "ratedById", rating, review, "createdAt"`,
+		arg.BookingId, arg.RoomId, arg.RoomKeeperId, arg.RatedById, arg.Rating, arg.Review,
 	)
 	var i RoomRating
-	err := row.Scan(&i.ID, &i.BookingId, &i.RoomId, &i.RatedById, &i.Rating, &i.Review, &i.CreatedAt)
+	err := row.Scan(&i.ID, &i.BookingId, &i.RoomId, &i.RoomKeeperId, &i.RatedById, &i.Rating, &i.Review, &i.CreatedAt)
 	return i, err
 }
 
 func (q *Queries) GetRoomRatingByBooking(ctx context.Context, bookingID int32) (RoomRating, error) {
 	row := q.db.QueryRowContext(ctx,
-		`SELECT id, "bookingId", "roomId", "ratedById", rating, review, "createdAt" FROM room_ratings WHERE "bookingId" = $1 LIMIT 1`,
+		`SELECT id, "bookingId", "roomId", "roomKeeperId", "ratedById", rating, review, "createdAt" FROM room_ratings WHERE "bookingId" = $1 LIMIT 1`,
 		bookingID,
 	)
 	var i RoomRating
-	err := row.Scan(&i.ID, &i.BookingId, &i.RoomId, &i.RatedById, &i.Rating, &i.Review, &i.CreatedAt)
+	err := row.Scan(&i.ID, &i.BookingId, &i.RoomId, &i.RoomKeeperId, &i.RatedById, &i.Rating, &i.Review, &i.CreatedAt)
 	return i, err
 }
 
@@ -247,13 +262,15 @@ type GetRoomRatingsRow struct {
 	RatedByName string         `json:"rated_by_name"`
 }
 
-func (q *Queries) GetRoomRatings(ctx context.Context, roomID int32) ([]GetRoomRatingsRow, error) {
+// GetRoomRatings lists every rating attributed to this room keeper
+// (roomKeeperId) - across all rooms they're responsible for.
+func (q *Queries) GetRoomRatings(ctx context.Context, roomKeeperID int32) ([]GetRoomRatingsRow, error) {
 	rows, err := q.db.QueryContext(ctx, `
 		SELECT rr.id, rr."bookingId", rr."roomId", rr."ratedById", rr.rating, rr.review, rr."createdAt", u.name AS rated_by_name
 		FROM room_ratings rr
 		JOIN users u ON u.id = rr."ratedById"
-		WHERE rr."roomId" = $1
-		ORDER BY rr."createdAt" DESC`, roomID)
+		WHERE rr."roomKeeperId" = $1
+		ORDER BY rr."createdAt" DESC`, roomKeeperID)
 	if err != nil {
 		return nil, err
 	}

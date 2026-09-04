@@ -1,0 +1,2 @@
+ALTER TABLE room_ratings DROP COLUMN IF EXISTS "roomKeeperId";
+ALTER TABLE rooms DROP COLUMN IF EXISTS "roomKeeperId";

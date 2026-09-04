@@ -28,6 +28,7 @@ func (h *RoomHandler) Register(r fiber.Router) {
 	g.Put("/:id", admin, h.Update)
 	g.Patch("/:id/status", admin, h.UpdateStatus)
 	g.Patch("/:id/photo", admin, h.UpdatePhoto)
+	g.Patch("/:id/room-keeper", admin, h.SetRoomKeeper)
 	g.Delete("/:id", admin, h.Delete)
 	g.Get("/:id/attachments", h.ListAttachments)
 	g.Post("/:id/attachments", admin, h.UploadAttachment)
@@ -118,6 +119,24 @@ func (h *RoomHandler) UpdatePhoto(c *fiber.Ctx) error {
 		return err
 	}
 	return util.OK(c, "Room photo updated", data)
+}
+
+func (h *RoomHandler) SetRoomKeeper(c *fiber.Ctx) error {
+	id, err := parseID(c, "id")
+	if err != nil {
+		return err
+	}
+	var body struct {
+		RoomKeeperID *int32 `json:"roomKeeperId"`
+	}
+	if err := bindAndValidate(c, &body); err != nil {
+		return err
+	}
+	data, err := h.svc.SetRoomKeeper(c.Context(), id, body.RoomKeeperID)
+	if err != nil {
+		return err
+	}
+	return util.OK(c, "Room keeper updated", data)
 }
 
 func (h *RoomHandler) Delete(c *fiber.Ctx) error {

@@ -1239,10 +1239,12 @@ func (s *BookingService) GetBookingDriverRating(ctx context.Context, bookingID i
 // ─────────────────────────────────────────────────────────────────────────
 // ROOM RATINGS
 // Mirrors RateDriver/GetDriverRatings/GetBookingDriverRating above, but the
-// rated target is the ROOM itself (roomId), not a person - room_keepers
-// aren't assigned per-room or per-booking, so there's no specific individual
-// to rate the way a driver is rated. No merge handling needed: merge is
-// vehicle-only (see MergeBookings), room bookings are never merged.
+// rated target is the room KEEPER (roomKeeperId), not the room - it evaluates
+// the person's service, not the room's condition. A room keeper can be
+// responsible for more than one room (N:1, unlike the strict 1:1
+// vehicle<->driver pairing), so ratings aggregate across every room they
+// keep. No merge handling needed: merge is vehicle-only (see MergeBookings),
+// room bookings are never merged.
 // ─────────────────────────────────────────────────────────────────────────
 
 func (s *BookingService) RateRoom(ctx context.Context, bookingID int32, req RateRoomRequest, userID int) (map[string]any, error) {
@@ -1263,32 +1265,40 @@ func (s *BookingService) RateRoom(ctx context.Context, bookingID int32, req Rate
 	if err != nil {
 		return nil, util.NewError(404, "room not found", util.ErrNotFound)
 	}
+	// Nullable on purpose - a room without an assigned keeper can still be
+	// rated (the booking still gets marked "sudah dinilai"), it just won't
+	// count toward anyone's summary.
+	roomKeeperID, _ := s.q.GetRoomKeeperIDByResourceID(ctx, b.ResourceId)
 	if _, err = s.q.GetRoomRatingByBooking(ctx, bookingID); err == nil {
 		return nil, util.NewError(409, "you have already rated this booking", util.ErrConflict)
 	}
 
 	r, err := s.q.CreateRoomRating(ctx, repository.CreateRoomRatingParams{
-		BookingId: bookingID,
-		RoomId:    roomID,
-		RatedById: int32(userID),
-		Rating:    req.Rating,
-		Review:    sql.NullString{String: req.Review, Valid: req.Review != ""},
+		BookingId:    bookingID,
+		RoomId:       roomID,
+		RoomKeeperId: roomKeeperID,
+		RatedById:    int32(userID),
+		Rating:       req.Rating,
+		Review:       sql.NullString{String: req.Review, Valid: req.Review != ""},
 	})
 	if err != nil {
 		return nil, err
 	}
 	return map[string]any{
-		"id":        r.ID,
-		"bookingId": r.BookingId,
-		"roomId":    r.RoomId,
-		"rating":    r.Rating,
-		"review":    nullStr(r.Review),
-		"createdAt": r.CreatedAt,
+		"id":           r.ID,
+		"bookingId":    r.BookingId,
+		"roomId":       r.RoomId,
+		"roomKeeperId": nullInt32(r.RoomKeeperId),
+		"rating":       r.Rating,
+		"review":       nullStr(r.Review),
+		"createdAt":    r.CreatedAt,
 	}, nil
 }
 
-func (s *BookingService) GetRoomRatings(ctx context.Context, roomID int32) (map[string]any, error) {
-	ratings, err := s.q.GetRoomRatings(ctx, roomID)
+// GetRoomRatings returns every rating attributed to this room keeper, across
+// all rooms they're responsible for.
+func (s *BookingService) GetRoomRatings(ctx context.Context, roomKeeperID int32) (map[string]any, error) {
+	ratings, err := s.q.GetRoomRatings(ctx, roomKeeperID)
 	if err != nil {
 		return nil, err
 	}
@@ -1309,7 +1319,7 @@ func (s *BookingService) GetRoomRatings(ctx context.Context, roomID int32) (map[
 		avg = total / float64(len(ratings))
 	}
 	return map[string]any{
-		"roomId":        roomID,
+		"roomKeeperId":  roomKeeperID,
 		"totalRatings":  len(ratings),
 		"averageRating": avg,
 		"ratings":       items,
@@ -1324,12 +1334,13 @@ func (s *BookingService) GetBookingRoomRating(ctx context.Context, bookingID int
 		return nil, util.NewError(404, "booking has not been rated", util.ErrNotFound)
 	}
 	return map[string]any{
-		"id":        r.ID,
-		"bookingId": r.BookingId,
-		"roomId":    r.RoomId,
-		"rating":    r.Rating,
-		"review":    nullStr(r.Review),
-		"createdAt": r.CreatedAt,
+		"id":           r.ID,
+		"bookingId":    r.BookingId,
+		"roomId":       r.RoomId,
+		"roomKeeperId": nullInt32(r.RoomKeeperId),
+		"rating":       r.Rating,
+		"review":       nullStr(r.Review),
+		"createdAt":    r.CreatedAt,
 	}, nil
 }
 

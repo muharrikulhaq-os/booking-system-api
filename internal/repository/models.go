@@ -655,11 +655,12 @@ type Role struct {
 }
 
 type Room struct {
-	ID         int32          `json:"id"`
-	ResourceId int32          `json:"resourceId"`
-	Location   string         `json:"location"`
-	Capacity   int16          `json:"capacity"`
-	PhotoUrl   sql.NullString `json:"photoUrl"`
+	ID           int32          `json:"id"`
+	ResourceId   int32          `json:"resourceId"`
+	Location     string         `json:"location"`
+	Capacity     int16          `json:"capacity"`
+	PhotoUrl     sql.NullString `json:"photoUrl"`
+	RoomKeeperId sql.NullInt32  `json:"roomKeeperId"`
 }
 
 type RoomKeeper struct {

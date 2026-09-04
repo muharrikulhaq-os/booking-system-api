@@ -33,9 +33,11 @@ WHERE (sqlc.narg(search)::text IS NULL
        ));
 
 -- name: GetRoomByID :one
-SELECT rm.*, r.name AS resource_name, r.status AS resource_status
+SELECT rm.*, r.name AS resource_name, r.status AS resource_status, rku.name AS room_keeper_name
 FROM rooms rm
 JOIN resources r ON r.id = rm."resourceId"
+LEFT JOIN room_keepers rk ON rk.id = rm."roomKeeperId"
+LEFT JOIN users rku ON rku.id = rk."userId"
 WHERE rm.id = $1 LIMIT 1;
 
 -- name: CreateRoom :one
@@ -47,16 +49,33 @@ UPDATE rooms SET location = $2, capacity = $3 WHERE id = $1 RETURNING *;
 -- name: UpdateRoomPhoto :one
 UPDATE rooms SET "photoUrl" = $2 WHERE id = $1 RETURNING *;
 
+-- name: GetRoomKeeperIDByResourceID :one
+-- Resolves a booking's resourceId down to the room's assigned room keeper
+-- (nullable - a room may not have one) - used by RateRoom to attribute the
+-- rating correctly.
+SELECT id, "roomKeeperId" FROM rooms WHERE "resourceId" = $1 LIMIT 1;
+
+-- name: SetRoomKeeper :one
+UPDATE rooms SET "roomKeeperId" = $2 WHERE id = $1 RETURNING *;
+
+-- name: GetRoomsByRoomKeeperID :many
+SELECT rm.*, r.name AS resource_name, r.status AS resource_status
+FROM rooms rm
+JOIN resources r ON r.id = rm."resourceId"
+WHERE rm."roomKeeperId" = $1
+ORDER BY r.name ASC;
+
 -- name: CreateRoomRating :one
-INSERT INTO room_ratings ("bookingId", "roomId", "ratedById", rating, review)
-VALUES ($1, $2, $3, $4, $5) RETURNING *;
+INSERT INTO room_ratings ("bookingId", "roomId", "roomKeeperId", "ratedById", rating, review)
+VALUES ($1, $2, $3, $4, $5, $6) RETURNING *;
 
 -- name: GetRoomRatingByBooking :one
 SELECT * FROM room_ratings WHERE "bookingId" = $1 LIMIT 1;
 
 -- name: GetRoomRatings :many
+-- Ratings are attributed to the room KEEPER, not the room itself.
 SELECT rr.*, u.name AS rated_by_name
 FROM room_ratings rr
 JOIN users u ON u.id = rr."ratedById"
-WHERE rr."roomId" = $1
+WHERE rr."roomKeeperId" = $1
 ORDER BY rr."createdAt" DESC;

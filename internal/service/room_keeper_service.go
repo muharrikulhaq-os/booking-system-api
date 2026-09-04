@@ -37,7 +37,7 @@ func serializeRoomKeeperRow(rk repository.ListRoomKeepersRow) map[string]any {
 	}
 }
 
-func serializeRoomKeeperByID(rk repository.GetRoomKeeperByIDRow) map[string]any {
+func serializeRoomKeeperByID(rk repository.GetRoomKeeperByIDRow, rooms []map[string]any) map[string]any {
 	var photo any
 	if rk.ProfilePhoto.Valid {
 		photo = rk.ProfilePhoto.String
@@ -51,6 +51,9 @@ func serializeRoomKeeperByID(rk repository.GetRoomKeeperByIDRow) map[string]any 
 		"profilePhoto": photo,
 		"phoneNumber":  rk.PhoneNumber,
 		"isActive":     rk.IsActive,
+		// Ruangan yang jadi tanggung jawab room keeper ini - bisa lebih dari
+		// satu (N:1, beda dari pasangan tetap supir<->kendaraan yang 1:1).
+		"rooms": rooms,
 	}
 }
 
@@ -79,7 +82,16 @@ func (s *RoomKeeperService) GetByID(ctx context.Context, id int32) (map[string]a
 	if err != nil {
 		return nil, util.ErrNotFound
 	}
-	return serializeRoomKeeperByID(rk), nil
+	roomRows, _ := s.q.GetRoomsByRoomKeeperID(ctx, id)
+	rooms := make([]map[string]any, len(roomRows))
+	for i, r := range roomRows {
+		rooms[i] = map[string]any{
+			"id":       r.ID,
+			"name":     r.ResourceName,
+			"location": r.Location,
+		}
+	}
+	return serializeRoomKeeperByID(rk, rooms), nil
 }
 
 func (s *RoomKeeperService) Create(ctx context.Context, req CreateRoomKeeperRequest) (map[string]any, error) {

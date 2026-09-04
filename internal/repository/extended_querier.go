@@ -48,9 +48,12 @@ type ExtendedQuerier interface {
 	GetVehicleIDsWithActiveSpd(ctx context.Context) ([]int32, error)
 	CheckMaintenanceConflict(ctx context.Context, arg CheckMaintenanceConflictParams) (int64, error)
 	GetRoomIDByResourceID(ctx context.Context, resourceID int32) (int32, error)
+	GetRoomKeeperIDByResourceID(ctx context.Context, resourceID int32) (sql.NullInt32, error)
 	CreateRoomRating(ctx context.Context, arg CreateRoomRatingParams) (RoomRating, error)
 	GetRoomRatingByBooking(ctx context.Context, bookingID int32) (RoomRating, error)
-	GetRoomRatings(ctx context.Context, roomID int32) ([]GetRoomRatingsRow, error)
+	GetRoomRatings(ctx context.Context, roomKeeperID int32) ([]GetRoomRatingsRow, error)
+	SetRoomKeeper(ctx context.Context, roomID int32, roomKeeperID sql.NullInt32) (Room, error)
+	GetRoomsByRoomKeeperID(ctx context.Context, roomKeeperID int32) ([]GetRoomsByRoomKeeperIDRow, error)
 	SetVehicleFixedDriver(ctx context.Context, arg SetVehicleFixedDriverParams) (Vehicle, error)
 	ClearVehicleFixedDriverByDriver(ctx context.Context, driverID int32) error
 	GetVehicleByFixedDriverID(ctx context.Context, driverID int32) (Vehicle, error)

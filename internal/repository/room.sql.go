@@ -61,9 +61,11 @@ func (q *Queries) CreateRoom(ctx context.Context, arg CreateRoomParams) (Room, e
 }
 
 const getRoomByID = `-- name: GetRoomByID :one
-SELECT rm.id, rm."resourceId", rm.location, rm.capacity, rm."photoUrl", r.name AS resource_name, r.status AS resource_status
+SELECT rm.id, rm."resourceId", rm.location, rm.capacity, rm."photoUrl", rm."roomKeeperId", r.name AS resource_name, r.status AS resource_status, rku.name AS room_keeper_name
 FROM rooms rm
 JOIN resources r ON r.id = rm."resourceId"
+LEFT JOIN room_keepers rk ON rk.id = rm."roomKeeperId"
+LEFT JOIN users rku ON rku.id = rk."userId"
 WHERE rm.id = $1 LIMIT 1
 `
 
@@ -73,8 +75,10 @@ type GetRoomByIDRow struct {
 	Location       string         `json:"location"`
 	Capacity       int16          `json:"capacity"`
 	PhotoUrl       sql.NullString `json:"photoUrl"`
+	RoomKeeperId   sql.NullInt32  `json:"roomKeeperId"`
 	ResourceName   string         `json:"resource_name"`
 	ResourceStatus ResourceStatus `json:"resource_status"`
+	RoomKeeperName sql.NullString `json:"room_keeper_name"`
 }
 
 func (q *Queries) GetRoomByID(ctx context.Context, id int32) (GetRoomByIDRow, error) {
@@ -86,8 +90,10 @@ func (q *Queries) GetRoomByID(ctx context.Context, id int32) (GetRoomByIDRow, er
 		&i.Location,
 		&i.Capacity,
 		&i.PhotoUrl,
+		&i.RoomKeeperId,
 		&i.ResourceName,
 		&i.ResourceStatus,
+		&i.RoomKeeperName,
 	)
 	return i, err
 }
