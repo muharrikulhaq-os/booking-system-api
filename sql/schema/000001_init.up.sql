@@ -573,6 +573,13 @@ INSERT INTO users ("employeeId", name, email, password, "isActive", "roleId", "d
 INSERT INTO vehicle_categories (name) VALUES
     ('MPV'), ('SUV'), ('Sedan'), ('Pickup'), ('Bus / Minibus'), ('Listrik / EV');
 
+-- Plain INSERT (no ON CONFLICT) on purpose - 000008_dedupe_fuel_types.up.sql
+-- runs after this file and adds UNIQUE(name), which doesn't exist yet the
+-- first time this statement executes, so ON CONFLICT (name) would error on
+-- every fresh deploy including the very first one. Once that constraint
+-- exists, reruns of this INSERT just fail-and-skip on the duplicate key
+-- violation (same harmless "error and move on" pattern every other
+-- re-applied CREATE TABLE/etc. in this migrate step already relies on).
 INSERT INTO fuel_types (name, type, unit, default_price, is_active) VALUES
     ('Pertalite', 'BBM', 'LITER', 10000.00, TRUE),
     ('Pertamax', 'BBM', 'LITER', 13500.00, TRUE),
