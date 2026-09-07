@@ -95,7 +95,7 @@ func serializeFuelExpenseRow(fe repository.ListFuelExpensesRow) map[string]any {
 	}
 }
 
-func (s *FuelExpenseService) List(ctx context.Context, page, limit int, driverID, vehicleID *int32, fuelType *string, bookingID *int32, actorID int32, role string) ([]map[string]any, int64, error) {
+func (s *FuelExpenseService) List(ctx context.Context, page, limit int, driverID, vehicleID *int32, fuelType *string, bookingID *int32, actorID int32, role string, sortBy, sortOrder string) ([]map[string]any, int64, error) {
 	if role == "DRIVER" {
 		driver, err := s.q.GetDriverByUserID(ctx, actorID)
 		if err == nil {
@@ -104,8 +104,10 @@ func (s *FuelExpenseService) List(ctx context.Context, page, limit int, driverID
 	}
 
 	params := repository.ListFuelExpensesParams{
-		Limit:  int32(limit),
-		Offset: int32((page - 1) * limit),
+		Limit:     int32(limit),
+		Offset:    int32((page - 1) * limit),
+		SortBy:    sortBy,
+		SortOrder: sortOrder,
 	}
 	if driverID != nil {
 		params.DriverID = sql.NullInt32{Int32: *driverID, Valid: true}

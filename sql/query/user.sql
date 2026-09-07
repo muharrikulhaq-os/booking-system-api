@@ -1,4 +1,8 @@
 -- name: ListUsers :many
+-- ORDER BY di sini cuma placeholder/default untuk dokumentasi - versi
+-- runtime-nya (internal/repository/user.sql.go) mengganti klausanya secara
+-- dinamis lewat BuildOrderBy (internal/repository/sort.go), lihat catatan di
+-- ListVehicles (sql/query/vehicle.sql).
 SELECT u.*, r.name AS role_name, d.name AS department_name
 FROM users u
 JOIN roles r ON r.id = u."roleId"

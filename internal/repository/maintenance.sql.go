@@ -8,6 +8,7 @@ package repository
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"time"
 
 	"github.com/sqlc-dev/pqtype"
@@ -237,14 +238,31 @@ JOIN vehicles v ON v.id = mr."vehicleId"
 JOIN resources r ON r.id = v."resourceId"
 JOIN users u ON u.id = mr."recordedById"
 WHERE ($3::int IS NULL OR mr."vehicleId" = $3::int)
-ORDER BY mr."startDate" DESC
+ORDER BY %s
 LIMIT $1 OFFSET $2
 `
+
+// MaintenanceSortColumns whitelists frontend sort keys to real columns for
+// BuildOrderBy (internal/repository/sort.go) - see note on ListVehicles.
+var MaintenanceSortColumns = map[string]string{
+	"vehicleName": "r.name",
+	"plateNumber": `v."plateNumber"`,
+	"type":        "mr.type",
+	"status":      "mr.status",
+	"totalCost":   `mr."totalCost"`,
+	"location":    "mr.location",
+	"startDate":   `mr."startDate"`,
+	"endDate":     `mr."endDate"`,
+	"completedAt": `mr."completedAt"`,
+	"createdAt":   `mr."createdAt"`,
+}
 
 type ListMaintenanceParams struct {
 	Limit     int32         `json:"limit"`
 	Offset    int32         `json:"offset"`
 	VehicleID sql.NullInt32 `json:"vehicle_id"`
+	SortBy    string        `json:"sort_by"`
+	SortOrder string        `json:"sort_order"`
 }
 
 type ListMaintenanceRow struct {
@@ -272,7 +290,8 @@ type ListMaintenanceRow struct {
 }
 
 func (q *Queries) ListMaintenance(ctx context.Context, arg ListMaintenanceParams) ([]ListMaintenanceRow, error) {
-	rows, err := q.db.QueryContext(ctx, listMaintenance, arg.Limit, arg.Offset, arg.VehicleID)
+	orderBy := BuildOrderBy(arg.SortBy, arg.SortOrder, MaintenanceSortColumns, `mr."startDate" DESC`)
+	rows, err := q.db.QueryContext(ctx, fmt.Sprintf(listMaintenance, orderBy), arg.Limit, arg.Offset, arg.VehicleID)
 	if err != nil {
 		return nil, err
 	}

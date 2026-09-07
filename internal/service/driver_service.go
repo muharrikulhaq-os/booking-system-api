@@ -79,10 +79,12 @@ func serializeDriverByID(d repository.GetDriverByIDRow, fixedVehicle any) map[st
 	}
 }
 
-func (s *DriverService) List(ctx context.Context, page, limit int, search *string, isActive *bool) ([]map[string]any, int64, error) {
+func (s *DriverService) List(ctx context.Context, page, limit int, search *string, isActive *bool, sortBy, sortOrder string) ([]map[string]any, int64, error) {
 	params := repository.ListDriversParams{
-		Limit:  int32(limit),
-		Offset: int32((page - 1) * limit),
+		Limit:     int32(limit),
+		Offset:    int32((page - 1) * limit),
+		SortBy:    sortBy,
+		SortOrder: sortOrder,
 	}
 	if search != nil {
 		params.Search = sql.NullString{String: *search, Valid: true}

@@ -1,4 +1,8 @@
 -- name: ListFuelExpenses :many
+-- ORDER BY di sini cuma placeholder/default untuk dokumentasi - versi
+-- runtime-nya (internal/repository/fuel_expense.sql.go) mengganti klausanya
+-- secara dinamis lewat BuildOrderBy (internal/repository/sort.go), lihat
+-- catatan di ListVehicles (sql/query/vehicle.sql).
 SELECT fe.*, d_u.name AS driver_name, v."plateNumber", r.name AS vehicle_name, ft.type AS fuel_category_name
 FROM fuel_expenses fe
 LEFT JOIN drivers d ON d.id = fe."driverId"

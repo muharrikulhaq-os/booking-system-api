@@ -60,10 +60,12 @@ func serializeUser(u repository.ListUsersRow) map[string]any {
 	}
 }
 
-func (s *UserService) List(ctx context.Context, page, limit int, search *string, roleID *int32, isActive *bool, departmentID *int32) ([]map[string]any, int64, error) {
+func (s *UserService) List(ctx context.Context, page, limit int, search *string, roleID *int32, isActive *bool, departmentID *int32, sortBy, sortOrder string) ([]map[string]any, int64, error) {
 	params := repository.ListUsersParams{
-		Limit:  int32(limit),
-		Offset: int32((page - 1) * limit),
+		Limit:     int32(limit),
+		Offset:    int32((page - 1) * limit),
+		SortBy:    sortBy,
+		SortOrder: sortOrder,
 	}
 	if search != nil {
 		params.Search = sql.NullString{String: *search, Valid: true}

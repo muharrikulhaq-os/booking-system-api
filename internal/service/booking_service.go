@@ -222,6 +222,7 @@ func (s *BookingService) List(ctx context.Context,
 	currentUserID int,
 	currentRole string,
 	search *string,
+	sortBy, sortOrder string,
 ) ([]map[string]any, int64, error) {
 	// Auto-transition stale bookings on every list call (lightweight)
 	if overdue, err := s.q.MarkOverdueBookings(ctx); err == nil { // ONGOING + endDate passed → OVERDUE
@@ -238,8 +239,10 @@ func (s *BookingService) List(ctx context.Context,
 	_, _ = s.q.MarkIgnoredBookings(ctx) // PENDING + endDate passed, admin didn't respond → IGNORED
 
 	params := repository.ListBookingsParams{
-		Limit:  int32(limit),
-		Offset: int32((page - 1) * limit),
+		Limit:     int32(limit),
+		Offset:    int32((page - 1) * limit),
+		SortBy:    sortBy,
+		SortOrder: sortOrder,
 	}
 
 	// Booking-scoped ke resource tertentu (resourceID != nil) berarti ini

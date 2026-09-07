@@ -55,7 +55,7 @@ func (h *UserHandler) Register(r fiber.Router) {
 func (h *UserHandler) List(c *fiber.Ctx) error {
 	page := queryInt(c, "page", 1)
 	limit := queryInt(c, "limit", 20)
-	data, total, err := h.svc.List(c.Context(), page, limit, queryString(c, "search"), queryInt32(c, "roleId"), nil, queryInt32(c, "departmentId"))
+	data, total, err := h.svc.List(c.Context(), page, limit, queryString(c, "search"), queryInt32(c, "roleId"), nil, queryInt32(c, "departmentId"), c.Query("sortBy"), c.Query("sortOrder"))
 	if err != nil {
 		return err
 	}

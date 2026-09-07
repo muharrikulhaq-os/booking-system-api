@@ -40,7 +40,7 @@ func (h *FuelExpenseHandler) List(c *fiber.Ctx) error {
 
 	data, total, err := h.svc.List(c.Context(), page, limit,
 		queryInt32(c, "driverId"), queryInt32(c, "vehicleId"), queryString(c, "fuelType"),
-		queryInt32(c, "bookingId"), actorID, role)
+		queryInt32(c, "bookingId"), actorID, role, c.Query("sortBy"), c.Query("sortOrder"))
 	if err != nil {
 		return err
 	}
@@ -144,7 +144,7 @@ func (h *MaintenanceHandler) Register(r fiber.Router) {
 func (h *MaintenanceHandler) List(c *fiber.Ctx) error {
 	page := queryInt(c, "page", 1)
 	limit := queryInt(c, "limit", 20)
-	data, total, err := h.svc.List(c.Context(), page, limit, queryInt32(c, "vehicleId"))
+	data, total, err := h.svc.List(c.Context(), page, limit, queryInt32(c, "vehicleId"), c.Query("sortBy"), c.Query("sortOrder"))
 	if err != nil {
 		return err
 	}

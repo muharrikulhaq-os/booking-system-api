@@ -8,6 +8,7 @@ package repository
 import (
 	"context"
 	"database/sql"
+	"fmt"
 )
 
 const countRooms = `-- name: CountRooms :one
@@ -103,8 +104,8 @@ SELECT rm.id, rm."resourceId", rm.location, rm.capacity, rm."photoUrl", r.name A
 FROM rooms rm
 JOIN resources r ON r.id = rm."resourceId"
 WHERE ($3::text IS NULL
-       OR r.name ILIKE '%' || $3::text || '%'
-       OR rm.location ILIKE '%' || $3::text || '%')
+       OR r.name ILIKE '%%' || $3::text || '%%'
+       OR rm.location ILIKE '%%' || $3::text || '%%')
   AND ($4::resource_status IS NULL OR r.status = $4::resource_status)
   AND ($4::resource_status IS DISTINCT FROM 'AVAILABLE'::resource_status
        OR NOT EXISTS (
@@ -113,15 +114,27 @@ WHERE ($3::text IS NULL
              AND bk.status IN ('APPROVED', 'ONGOING')
              AND NOW() BETWEEN bk."startDate" AND bk."endDate"
        ))
-ORDER BY r."createdAt" DESC
+ORDER BY %s
 LIMIT $1 OFFSET $2
 `
 
+// RoomSortColumns whitelists the columns ListRooms can sort by - see
+// BuildOrderBy (sort.go) for why sortBy never touches the query directly.
+var RoomSortColumns = map[string]string{
+	"name":      `r.name`,
+	"location":  `rm.location`,
+	"capacity":  `rm.capacity`,
+	"status":    `r.status`,
+	"createdAt": `r."createdAt"`,
+}
+
 type ListRoomsParams struct {
-	Limit  int32              `json:"limit"`
-	Offset int32              `json:"offset"`
-	Search sql.NullString     `json:"search"`
-	Status NullResourceStatus `json:"status"`
+	Limit     int32              `json:"limit"`
+	Offset    int32              `json:"offset"`
+	Search    sql.NullString     `json:"search"`
+	Status    NullResourceStatus `json:"status"`
+	SortBy    string             `json:"sort_by"`
+	SortOrder string             `json:"sort_order"`
 }
 
 type ListRoomsRow struct {
@@ -137,7 +150,8 @@ type ListRoomsRow struct {
 // Saat status filter = AVAILABLE, resource yang punya booking APPROVED/ONGOING
 // yang overlap dengan waktu sekarang ikut disembunyikan — lihat catatan di ListVehicles.
 func (q *Queries) ListRooms(ctx context.Context, arg ListRoomsParams) ([]ListRoomsRow, error) {
-	rows, err := q.db.QueryContext(ctx, listRooms,
+	orderBy := BuildOrderBy(arg.SortBy, arg.SortOrder, RoomSortColumns, `r."createdAt" DESC`)
+	rows, err := q.db.QueryContext(ctx, fmt.Sprintf(listRooms, orderBy),
 		arg.Limit,
 		arg.Offset,
 		arg.Search,

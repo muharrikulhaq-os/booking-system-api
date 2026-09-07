@@ -1,4 +1,8 @@
 -- name: ListBookings :many
+-- ORDER BY di sini cuma placeholder/default untuk dokumentasi - versi
+-- runtime-nya (internal/repository/booking.sql.go) mengganti klausanya
+-- secara dinamis lewat BuildOrderBy (internal/repository/sort.go), lihat
+-- catatan di ListVehicles (sql/query/vehicle.sql).
 SELECT b.*,
        u.name AS user_name, u."employeeId", dept.name AS department_name,
        r.name AS resource_name, r.type AS resource_type, r.status AS resource_status,

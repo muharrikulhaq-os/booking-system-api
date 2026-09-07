@@ -8,6 +8,7 @@ package repository
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"time"
 )
 
@@ -220,9 +221,21 @@ WHERE ($3::int IS NULL OR fe."driverId" = $3::int)
   AND ($4::int IS NULL OR fe."vehicleId" = $4::int)
   AND ($5::fuel_category IS NULL OR ft.type = $5::fuel_category)
   AND ($6::int IS NULL OR fe."bookingId" = $6::int)
-ORDER BY fe."createdAt" DESC
+ORDER BY %s
 LIMIT $1 OFFSET $2
 `
+
+// FuelExpenseSortColumns whitelists frontend sort keys to real columns for
+// BuildOrderBy (internal/repository/sort.go) - see note on ListVehicles.
+var FuelExpenseSortColumns = map[string]string{
+	"vehicleName": "r.name",
+	"plateNumber": `v."plateNumber"`,
+	"driverName":  "d_u.name",
+	"fuelType":    "ft.type",
+	"totalCost":   `fe."totalCost"`,
+	"distanceKm":  `fe."distanceKm"`,
+	"createdAt":   `fe."createdAt"`,
+}
 
 type ListFuelExpensesParams struct {
 	Limit        int32            `json:"limit"`
@@ -231,6 +244,8 @@ type ListFuelExpensesParams struct {
 	VehicleID    sql.NullInt32    `json:"vehicle_id"`
 	FuelCategory NullFuelCategory `json:"fuel_category"`
 	BookingID    sql.NullInt32    `json:"booking_id"`
+	SortBy       string           `json:"sort_by"`
+	SortOrder    string           `json:"sort_order"`
 }
 
 type ListFuelExpensesRow struct {
@@ -261,7 +276,8 @@ type ListFuelExpensesRow struct {
 }
 
 func (q *Queries) ListFuelExpenses(ctx context.Context, arg ListFuelExpensesParams) ([]ListFuelExpensesRow, error) {
-	rows, err := q.db.QueryContext(ctx, listFuelExpenses,
+	orderBy := BuildOrderBy(arg.SortBy, arg.SortOrder, FuelExpenseSortColumns, `fe."createdAt" DESC`)
+	rows, err := q.db.QueryContext(ctx, fmt.Sprintf(listFuelExpenses, orderBy),
 		arg.Limit,
 		arg.Offset,
 		arg.DriverID,

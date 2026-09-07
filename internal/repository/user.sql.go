@@ -8,6 +8,7 @@ package repository
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"time"
 )
 
@@ -231,15 +232,27 @@ FROM users u
 JOIN roles r ON r.id = u."roleId"
 JOIN departments d ON d.id = u."departmentId"
 WHERE ($3::text IS NULL
-       OR u.name ILIKE '%' || $3::text || '%'
-       OR u.email ILIKE '%' || $3::text || '%'
-       OR u."employeeId" ILIKE '%' || $3::text || '%')
+       OR u.name ILIKE '%%' || $3::text || '%%'
+       OR u.email ILIKE '%%' || $3::text || '%%'
+       OR u."employeeId" ILIKE '%%' || $3::text || '%%')
   AND ($4::int IS NULL OR u."roleId" = $4::int)
   AND ($5::boolean IS NULL OR u."isActive" = $5::boolean)
   AND ($6::int IS NULL OR u."departmentId" = $6::int)
-ORDER BY u."createdAt" DESC
+ORDER BY %s
 LIMIT $1 OFFSET $2
 `
+
+// UserSortColumns whitelists frontend sort keys to real columns for
+// BuildOrderBy (internal/repository/sort.go) - see note on ListVehicles.
+var UserSortColumns = map[string]string{
+	"name":         "u.name",
+	"email":        "u.email",
+	"employeeId":   `u."employeeId"`,
+	"isActive":     `u."isActive"`,
+	"role":         "r.name",
+	"department":   "d.name",
+	"createdAt":    `u."createdAt"`,
+}
 
 type ListUsersParams struct {
 	Limit        int32          `json:"limit"`
@@ -248,6 +261,8 @@ type ListUsersParams struct {
 	RoleID       sql.NullInt32  `json:"role_id"`
 	IsActive     sql.NullBool   `json:"is_active"`
 	DepartmentID sql.NullInt32  `json:"department_id"`
+	SortBy       string         `json:"sort_by"`
+	SortOrder    string         `json:"sort_order"`
 }
 
 type ListUsersRow struct {
@@ -267,7 +282,8 @@ type ListUsersRow struct {
 }
 
 func (q *Queries) ListUsers(ctx context.Context, arg ListUsersParams) ([]ListUsersRow, error) {
-	rows, err := q.db.QueryContext(ctx, listUsers,
+	orderBy := BuildOrderBy(arg.SortBy, arg.SortOrder, UserSortColumns, `u."createdAt" DESC`)
+	rows, err := q.db.QueryContext(ctx, fmt.Sprintf(listUsers, orderBy),
 		arg.Limit,
 		arg.Offset,
 		arg.Search,

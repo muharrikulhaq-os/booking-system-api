@@ -59,10 +59,12 @@ func serializeRoomByID(r repository.GetRoomByIDRow) map[string]any {
 	}
 }
 
-func (s *RoomService) List(ctx context.Context, page, limit int, search *string, status *string) ([]map[string]any, int64, error) {
+func (s *RoomService) List(ctx context.Context, page, limit int, search *string, status *string, sortBy, sortOrder string) ([]map[string]any, int64, error) {
 	params := repository.ListRoomsParams{
-		Limit:  int32(limit),
-		Offset: int32((page - 1) * limit),
+		Limit:     int32(limit),
+		Offset:    int32((page - 1) * limit),
+		SortBy:    sortBy,
+		SortOrder: sortOrder,
 	}
 	if search != nil {
 		params.Search = sql.NullString{String: *search, Valid: true}

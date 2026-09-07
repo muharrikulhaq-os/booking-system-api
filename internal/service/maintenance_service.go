@@ -125,10 +125,12 @@ func nullInt32Ptr(v *int32) sql.NullInt32 {
 	return sql.NullInt32{Int32: *v, Valid: true}
 }
 
-func (s *MaintenanceService) List(ctx context.Context, page, limit int, vehicleID *int32) ([]map[string]any, int64, error) {
+func (s *MaintenanceService) List(ctx context.Context, page, limit int, vehicleID *int32, sortBy, sortOrder string) ([]map[string]any, int64, error) {
 	params := repository.ListMaintenanceParams{
-		Limit:  int32(limit),
-		Offset: int32((page - 1) * limit),
+		Limit:     int32(limit),
+		Offset:    int32((page - 1) * limit),
+		SortBy:    sortBy,
+		SortOrder: sortOrder,
 	}
 	if vehicleID != nil {
 		params.VehicleID = sql.NullInt32{Int32: *vehicleID, Valid: true}

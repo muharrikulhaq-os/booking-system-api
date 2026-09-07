@@ -1,4 +1,9 @@
 -- name: ListVehicles :many
+-- ORDER BY di sini cuma placeholder/default untuk dokumentasi - versi
+-- runtime-nya (internal/repository/vehicle.sql.go) mengganti klausanya
+-- secara dinamis lewat BuildOrderBy (internal/repository/sort.go) supaya
+-- sortBy/sortOrder dari FE bisa dipakai dengan aman (whitelist kolom, bukan
+-- interpolasi bebas). Kalau sqlc dijalankan ulang, sesuaikan manual.
 -- Saat status filter = AVAILABLE, resource yang punya booking APPROVED/ONGOING
 -- yang overlap dengan waktu sekarang ikut disembunyikan — bukan cuma yang sudah
 -- di-Start (resources.status = IN_USE), tapi juga yang baru APPROVED tapi jadwalnya

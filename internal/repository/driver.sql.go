@@ -8,6 +8,7 @@ package repository
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"time"
 )
 
@@ -348,19 +349,33 @@ LEFT JOIN (
     ORDER BY ab2."assignedDriverId", ab2."startDate" DESC
 ) ap ON ap.driver_id = d.id
 WHERE ($3::text IS NULL
-       OR u.name ILIKE '%' || $3::text || '%'
-       OR u.email ILIKE '%' || $3::text || '%'
-       OR u."employeeId" ILIKE '%' || $3::text || '%')
+       OR u.name ILIKE '%%' || $3::text || '%%'
+       OR u.email ILIKE '%%' || $3::text || '%%'
+       OR u."employeeId" ILIKE '%%' || $3::text || '%%')
   AND ($4::boolean IS NULL OR d."isActive" = $4::boolean)
-ORDER BY d."createdAt" DESC
+ORDER BY %s
 LIMIT $1 OFFSET $2
 `
 
+// DriverSortColumns whitelists the columns ListDrivers can sort by - see
+// BuildOrderBy (sort.go) for why sortBy never touches the query directly.
+var DriverSortColumns = map[string]string{
+	"name":          `u.name`,
+	"employeeId":    `u."employeeId"`,
+	"email":         `u.email`,
+	"licenseNumber": `d."licenseNumber"`,
+	"phoneNumber":   `d."phoneNumber"`,
+	"isActive":      `d."isActive"`,
+	"createdAt":     `d."createdAt"`,
+}
+
 type ListDriversParams struct {
-	Limit    int32          `json:"limit"`
-	Offset   int32          `json:"offset"`
-	Search   sql.NullString `json:"search"`
-	IsActive sql.NullBool   `json:"is_active"`
+	Limit     int32          `json:"limit"`
+	Offset    int32          `json:"offset"`
+	Search    sql.NullString `json:"search"`
+	IsActive  sql.NullBool   `json:"is_active"`
+	SortBy    string         `json:"sort_by"`
+	SortOrder string         `json:"sort_order"`
 }
 
 type ListDriversRow struct {
@@ -389,7 +404,8 @@ type ListDriversRow struct {
 // correlation, so it joins like an ordinary table (also avoids the original
 // correlated-subquery instability).
 func (q *Queries) ListDrivers(ctx context.Context, arg ListDriversParams) ([]ListDriversRow, error) {
-	rows, err := q.db.QueryContext(ctx, listDrivers,
+	orderBy := BuildOrderBy(arg.SortBy, arg.SortOrder, DriverSortColumns, `d."createdAt" DESC`)
+	rows, err := q.db.QueryContext(ctx, fmt.Sprintf(listDrivers, orderBy),
 		arg.Limit,
 		arg.Offset,
 		arg.Search,

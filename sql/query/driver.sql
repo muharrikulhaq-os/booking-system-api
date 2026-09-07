@@ -1,4 +1,9 @@
 -- name: ListDrivers :many
+-- ORDER BY di sini cuma placeholder/default untuk dokumentasi - versi
+-- runtime-nya (internal/repository/driver.sql.go) mengganti klausanya
+-- secara dinamis lewat BuildOrderBy (internal/repository/sort.go), lihat
+-- catatan di ListVehicles (sql/query/vehicle.sql). Hanya ORDER BY terluar -
+-- ORDER BY di dalam subquery DISTINCT ON tidak disentuh.
 -- assigned_plate: sqlc v1.31.1's nullability inference for anything but a
 -- direct table.column reference is unreliable here — a scalar subquery
 -- silently flipped this to non-nullable `string` on a regen (the original

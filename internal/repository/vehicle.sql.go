@@ -8,6 +8,7 @@ package repository
 import (
 	"context"
 	"database/sql"
+	"fmt"
 )
 
 const countVehicles = `-- name: CountVehicles :one
@@ -289,9 +290,9 @@ JOIN vehicle_categories vc ON vc.id = v."categoryId"
 LEFT JOIN drivers fd ON fd.id = v."fixedDriverId"
 LEFT JOIN users fdu ON fdu.id = fd."userId"
 WHERE ($3::text IS NULL
-       OR r.name ILIKE '%' || $3::text || '%'
-       OR v."plateNumber" ILIKE '%' || $3::text || '%'
-       OR v.brand ILIKE '%' || $3::text || '%')
+       OR r.name ILIKE '%%' || $3::text || '%%'
+       OR v."plateNumber" ILIKE '%%' || $3::text || '%%'
+       OR v.brand ILIKE '%%' || $3::text || '%%')
   AND ($4::int IS NULL OR v."categoryId" = $4::int)
   AND ($5::resource_status IS NULL OR r.status = $5::resource_status)
   AND ($5::resource_status IS DISTINCT FROM 'AVAILABLE'::resource_status
@@ -301,9 +302,24 @@ WHERE ($3::text IS NULL
              AND bk.status IN ('APPROVED', 'ONGOING')
              AND NOW() BETWEEN bk."startDate" AND bk."endDate"
        ))
-ORDER BY r."createdAt" DESC
+ORDER BY %s
 LIMIT $1 OFFSET $2
 `
+
+// VehicleSortColumns whitelists the columns ListVehicles can sort by - keys
+// are the public sortBy value the frontend sends, values are the real SQL
+// expression. See BuildOrderBy for why this indirection matters.
+var VehicleSortColumns = map[string]string{
+	"name":        `r.name`,
+	"plateNumber": `v."plateNumber"`,
+	"brand":       `v.brand`,
+	"model":       `v.model`,
+	"year":        `v.year`,
+	"capacity":    `v.capacity`,
+	"category":    `vc.name`,
+	"status":      `r.status`,
+	"createdAt":   `r."createdAt"`,
+}
 
 type ListVehiclesParams struct {
 	Limit      int32              `json:"limit"`
@@ -311,6 +327,8 @@ type ListVehiclesParams struct {
 	Search     sql.NullString     `json:"search"`
 	CategoryID sql.NullInt32      `json:"category_id"`
 	Status     NullResourceStatus `json:"status"`
+	SortBy     string             `json:"sort_by"`
+	SortOrder  string             `json:"sort_order"`
 }
 
 type ListVehiclesRow struct {
@@ -339,7 +357,8 @@ type ListVehiclesRow struct {
 // di-Start (resources.status = IN_USE), tapi juga yang baru APPROVED tapi jadwalnya
 // sudah berjalan. Filter status lain (MAINTENANCE/INACTIVE/IN_USE) tidak terpengaruh.
 func (q *Queries) ListVehicles(ctx context.Context, arg ListVehiclesParams) ([]ListVehiclesRow, error) {
-	rows, err := q.db.QueryContext(ctx, listVehicles,
+	orderBy := BuildOrderBy(arg.SortBy, arg.SortOrder, VehicleSortColumns, `r."createdAt" DESC`)
+	rows, err := q.db.QueryContext(ctx, fmt.Sprintf(listVehicles, orderBy),
 		arg.Limit,
 		arg.Offset,
 		arg.Search,

@@ -8,6 +8,7 @@ package repository
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"time"
 )
 
@@ -704,10 +705,24 @@ WHERE ($3::int IS NULL OR b."userId" = $3::int)
   AND ($7::int IS NULL OR b."assignedDriverId" = $7::int)
   AND ($8::timestamptz IS NULL OR b."startDate" >= $8::timestamptz)
   AND ($9::timestamptz IS NULL OR b."endDate" <= $9::timestamptz)
-  AND ($10::text IS NULL OR r.name ILIKE '%' || $10::text || '%' OR u.name ILIKE '%' || $10::text || '%')
-ORDER BY b."createdAt" DESC
+  AND ($10::text IS NULL OR r.name ILIKE '%%' || $10::text || '%%' OR u.name ILIKE '%%' || $10::text || '%%')
+ORDER BY %s
 LIMIT $1 OFFSET $2
 `
+
+// BookingSortColumns whitelists frontend sort keys to real columns for
+// BuildOrderBy (internal/repository/sort.go) - see note on ListVehicles.
+var BookingSortColumns = map[string]string{
+	"startDate":      `b."startDate"`,
+	"endDate":        `b."endDate"`,
+	"status":         "b.status",
+	"purpose":        "b.purpose",
+	"user":           "u.name",
+	"resource":       "r.name",
+	"department":     "dept.name",
+	"passengerCount": `b."passengerCount"`,
+	"createdAt":      `b."createdAt"`,
+}
 
 type ListBookingsParams struct {
 	Limit        int32             `json:"limit"`
@@ -720,6 +735,8 @@ type ListBookingsParams struct {
 	StartFrom    sql.NullTime      `json:"start_from"`
 	EndTo        sql.NullTime      `json:"end_to"`
 	Search       sql.NullString    `json:"search"`
+	SortBy       string            `json:"sort_by"`
+	SortOrder    string            `json:"sort_order"`
 }
 
 type ListBookingsRow struct {
@@ -767,7 +784,8 @@ type ListBookingsRow struct {
 }
 
 func (q *Queries) ListBookings(ctx context.Context, arg ListBookingsParams) ([]ListBookingsRow, error) {
-	rows, err := q.db.QueryContext(ctx, listBookings,
+	orderBy := BuildOrderBy(arg.SortBy, arg.SortOrder, BookingSortColumns, `b."createdAt" DESC`)
+	rows, err := q.db.QueryContext(ctx, fmt.Sprintf(listBookings, orderBy),
 		arg.Limit,
 		arg.Offset,
 		arg.UserID,

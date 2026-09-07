@@ -98,10 +98,12 @@ func fixedDriverField(id sql.NullInt32, name sql.NullString) any {
 	return map[string]any{"id": id.Int32, "name": name.String}
 }
 
-func (s *VehicleService) List(ctx context.Context, page, limit int, search *string, categoryID *int32, status *string) ([]map[string]any, int64, error) {
+func (s *VehicleService) List(ctx context.Context, page, limit int, search *string, categoryID *int32, status *string, sortBy, sortOrder string) ([]map[string]any, int64, error) {
 	params := repository.ListVehiclesParams{
-		Limit:  int32(limit),
-		Offset: int32((page - 1) * limit),
+		Limit:     int32(limit),
+		Offset:    int32((page - 1) * limit),
+		SortBy:    sortBy,
+		SortOrder: sortOrder,
 	}
 	if search != nil {
 		params.Search = sql.NullString{String: *search, Valid: true}

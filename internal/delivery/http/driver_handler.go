@@ -38,7 +38,7 @@ func (h *DriverHandler) Register(r fiber.Router) {
 func (h *DriverHandler) List(c *fiber.Ctx) error {
 	page := queryInt(c, "page", 1)
 	limit := queryInt(c, "limit", 20)
-	data, total, err := h.svc.List(c.Context(), page, limit, queryString(c, "search"), nil)
+	data, total, err := h.svc.List(c.Context(), page, limit, queryString(c, "search"), nil, c.Query("sortBy"), c.Query("sortOrder"))
 	if err != nil {
 		return err
 	}

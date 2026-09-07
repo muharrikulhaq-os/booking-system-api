@@ -1,4 +1,8 @@
 -- name: ListRooms :many
+-- ORDER BY di sini cuma placeholder/default untuk dokumentasi - versi
+-- runtime-nya (internal/repository/room.sql.go) mengganti klausanya secara
+-- dinamis lewat BuildOrderBy (internal/repository/sort.go), lihat catatan di
+-- ListVehicles (sql/query/vehicle.sql).
 -- Saat status filter = AVAILABLE, resource yang punya booking APPROVED/ONGOING
 -- yang overlap dengan waktu sekarang ikut disembunyikan — lihat catatan di ListVehicles.
 SELECT rm.*, r.name AS resource_name, r.status AS resource_status
