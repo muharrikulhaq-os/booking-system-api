@@ -289,6 +289,54 @@ func (q *Queries) GetRoomRatings(ctx context.Context, roomKeeperID int32) ([]Get
 	return items, rows.Err()
 }
 
+type PendingDriverRatingRow struct {
+	BookingId    int32        `json:"bookingId"`
+	ResourceName string       `json:"resourceName"`
+	DriverName   string       `json:"driverName"`
+	StartDate    time.Time    `json:"startDate"`
+	EndDate      time.Time    `json:"endDate"`
+	ReturnedAt   sql.NullTime `json:"returnedAt"`
+}
+
+// GetPendingDriverRatings lists this user's COMPLETED vehicle bookings that
+// have an assigned driver but no driver rating yet - drives the "rate your
+// driver" reminder modal shown on next login. Merged (non-primary) bookings
+// are excluded - rating is only ever filled from the primary booking (see
+// BookingService.RateDriver).
+func (q *Queries) GetPendingDriverRatings(ctx context.Context, userID int32) ([]PendingDriverRatingRow, error) {
+	rows, err := q.db.QueryContext(ctx, `
+		SELECT b.id, r.name AS resource_name, du.name AS driver_name,
+		       b."startDate", b."endDate", b."returnedAt"
+		FROM bookings b
+		JOIN resources r ON r.id = b."resourceId"
+		JOIN drivers d ON d.id = b."assignedDriverId"
+		JOIN users du ON du.id = d."userId"
+		LEFT JOIN driver_ratings dr ON dr."bookingId" = b.id
+		LEFT JOIN booking_merges bm ON bm."mergedBookingId" = b.id
+		WHERE b."userId" = $1
+		  AND b.status = 'COMPLETED'
+		  AND b."assignedDriverId" IS NOT NULL
+		  AND dr.id IS NULL
+		  AND bm.id IS NULL
+		ORDER BY b."returnedAt" DESC NULLS LAST, b."endDate" DESC`, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []PendingDriverRatingRow
+	for rows.Next() {
+		var i PendingDriverRatingRow
+		if err := rows.Scan(&i.BookingId, &i.ResourceName, &i.DriverName, &i.StartDate, &i.EndDate, &i.ReturnedAt); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	return items, rows.Err()
+}
+
 // GetDriverActiveVehicleID returns the vehicle of the driver's active (APPROVED/ONGOING)
 // booking — the vehicle they currently "hold". Error if they have no active booking (= kosong).
 // This is the truthful source of driver↔vehicle ownership (vs driver_assignments which can

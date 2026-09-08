@@ -60,4 +60,5 @@ type ExtendedQuerier interface {
 	GetVehicleByFixedDriverID(ctx context.Context, driverID int32) (Vehicle, error)
 	ListVehiclesWithFixedDriver(ctx context.Context) ([]FixedDriverVehicleRow, error)
 	GetDriverIDsWithActiveSpd(ctx context.Context) ([]int32, error)
+	GetPendingDriverRatings(ctx context.Context, userID int32) ([]PendingDriverRatingRow, error)
 }

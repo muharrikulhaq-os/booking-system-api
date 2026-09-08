@@ -47,6 +47,7 @@ func (h *BookingHandler) Register(r fiber.Router) {
 
 	g := r.Group("/bookings", auth)
 	g.Get("", h.List)
+	g.Get("/pending-driver-ratings", h.GetPendingDriverRatings)
 	g.Get("/drivers/:driver_id/ratings", admin, h.GetDriverRatings)
 	// Rating ruangan (sekarang ditujukan ke room keeper, bukan ruangannya)
 	// tetap terbuka ke semua peran (bukan admin-only seperti driver).
@@ -289,6 +290,16 @@ func (h *BookingHandler) RateDriver(c *fiber.Ctx) error {
 		return err
 	}
 	return util.Created(c, "Driver rated", data)
+}
+
+// GetPendingDriverRatings lists the current user's COMPLETED vehicle bookings
+// that still need a driver rating - drives the reminder modal shown on login.
+func (h *BookingHandler) GetPendingDriverRatings(c *fiber.Ctx) error {
+	data, err := h.svc.GetPendingDriverRatings(c.Context(), int32(middleware.GetUserID(c)))
+	if err != nil {
+		return err
+	}
+	return util.OK(c, "Pending driver ratings retrieved", data)
 }
 
 func (h *BookingHandler) GetDriverRatings(c *fiber.Ctx) error {

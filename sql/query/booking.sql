@@ -245,3 +245,24 @@ WHERE "assignedVehicleId" = $1
   AND "startDate" < sqlc.arg(check_end)
   AND "endDate" > sqlc.arg(check_start)
   AND id != sqlc.arg(exclude_id);
+
+-- name: GetPendingDriverRatings :many
+-- Booking kendaraan milik user ini yang sudah COMPLETED, punya supir
+-- ditugaskan, tapi belum diberi rating - dipakai untuk modal pengingat
+-- rating otomatis saat user login (lihat internal/repository/booking_extra.go).
+-- Booking hasil merge (bukan primary) dikecualikan - rating cuma diisi dari
+-- booking primary (lihat RateDriver di booking_service.go).
+SELECT b.id, r.name AS resource_name, du.name AS driver_name,
+       b."startDate", b."endDate", b."returnedAt"
+FROM bookings b
+JOIN resources r ON r.id = b."resourceId"
+JOIN drivers d ON d.id = b."assignedDriverId"
+JOIN users du ON du.id = d."userId"
+LEFT JOIN driver_ratings dr ON dr."bookingId" = b.id
+LEFT JOIN booking_merges bm ON bm."mergedBookingId" = b.id
+WHERE b."userId" = sqlc.arg(user_id)
+  AND b.status = 'COMPLETED'
+  AND b."assignedDriverId" IS NOT NULL
+  AND dr.id IS NULL
+  AND bm.id IS NULL
+ORDER BY b."returnedAt" DESC NULLS LAST, b."endDate" DESC;

@@ -1118,6 +1118,17 @@ func (s *BookingService) Complete(ctx context.Context, id int32, userID int, rol
 	if s.notif != nil {
 		s.notif.Notify(full.UserId, "BOOKING_COMPLETED", "Booking selesai",
 			"Booking Anda telah selesai", map[string]any{"bookingId": id})
+		// Booking ruangan langsung memicu prompt rating karena biasanya
+		// pemilik booking sendiri yang menyelesaikannya (self-serve, lihat
+		// Complete() case EMPLOYEE di atas) - begitu selesai mereka masih di
+		// halaman detail booking-nya. Booking kendaraan beda: yang
+		// menyelesaikan cuma ADMIN, jadi pemilik booking tidak otomatis
+		// balik ke halaman itu - notifikasi eksplisit ini adalah pemantiknya.
+		if b.ResourceType == repository.ResourceTypeVEHICLE && b.AssignedDriverId.Valid {
+			s.notif.Notify(full.UserId, "RATE_DRIVER_PROMPT", "Beri rating driver",
+				"Booking Anda telah selesai - jangan lupa beri rating untuk driver Anda",
+				map[string]any{"bookingId": id})
+		}
 		if overtimeMins > 0 && b.AssignedDriverId.Valid {
 			if drv, derr := s.q.GetDriverByID(ctx, b.AssignedDriverId.Int32); derr == nil {
 				s.notif.Notify(drv.UserId, "OVERTIME_RECORDED", "Overtime tercatat",
@@ -1219,6 +1230,29 @@ func (s *BookingService) GetDriverRatings(ctx context.Context, driverID int32) (
 		"averageRating": avg,
 		"ratings":       items,
 	}, nil
+}
+
+// GetPendingDriverRatings lists the current user's COMPLETED vehicle bookings
+// that still need a driver rating - powers the reminder modal shown on
+// login (see §"rate driver reminder" feature: notification is the passive
+// nudge, this endpoint is what actually drives the modal's content/count).
+func (s *BookingService) GetPendingDriverRatings(ctx context.Context, userID int32) ([]map[string]any, error) {
+	rows, err := s.q.GetPendingDriverRatings(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]map[string]any, len(rows))
+	for i, r := range rows {
+		out[i] = map[string]any{
+			"bookingId":    r.BookingId,
+			"resourceName": r.ResourceName,
+			"driverName":   r.DriverName,
+			"startDate":    r.StartDate,
+			"endDate":      r.EndDate,
+			"returnedAt":   nullTime(r.ReturnedAt),
+		}
+	}
+	return out, nil
 }
 
 // GetBookingDriverRating returns the rating submitted for a single booking, or a 404
