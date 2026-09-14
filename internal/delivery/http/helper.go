@@ -2,6 +2,7 @@ package http
 
 import (
 	"strconv"
+	"strings"
 
 	"booking-system-api/internal/middleware"
 	"booking-system-api/internal/service"
@@ -63,12 +64,30 @@ func queryInt32(c *fiber.Ctx, key string) *int32 {
 	return &n32
 }
 
+// clientIP resolves the real originating client address. The API now only
+// ever gets reached through the IIS/ARR reverse proxy (see the :8443
+// firewall issue this was built to route around) - c.IP() alone would
+// return the proxy's own loopback address (127.0.0.1) for every single
+// request, which is exactly what audit_logs.ipAddress showed before this
+// fix. ARR sets X-Forwarded-For, so prefer that (leftmost entry = original
+// client, per the de-facto X-Forwarded-For convention) and fall back to
+// c.IP() for direct/local requests where the header is absent.
+func clientIP(c *fiber.Ctx) string {
+	if xff := c.Get("X-Forwarded-For"); xff != "" {
+		if idx := strings.Index(xff, ","); idx != -1 {
+			return strings.TrimSpace(xff[:idx])
+		}
+		return strings.TrimSpace(xff)
+	}
+	return c.IP()
+}
+
 // auditActor bundles who's making this request and where from, for services
 // that write audit_logs entries - see service.AuditActor.
 func auditActor(c *fiber.Ctx) service.AuditActor {
 	return service.AuditActor{
 		UserID:    int32(middleware.GetUserID(c)),
-		IP:        c.IP(),
+		IP:        clientIP(c),
 		UserAgent: c.Get("User-Agent"),
 	}
 }

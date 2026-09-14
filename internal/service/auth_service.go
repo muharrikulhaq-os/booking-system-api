@@ -59,7 +59,7 @@ type ChangePasswordRequest struct {
 	NewPassword     string `json:"newPassword"     validate:"required,min=8"`
 }
 
-func (s *AuthService) Login(ctx context.Context, req LoginRequest) (map[string]any, error) {
+func (s *AuthService) Login(ctx context.Context, req LoginRequest, actor AuditActor) (map[string]any, error) {
 	user, err := s.q.GetUserByEmail(ctx, req.Email)
 	if err != nil {
 		return nil, util.ErrWrongEmail
@@ -95,6 +95,8 @@ func (s *AuthService) Login(ctx context.Context, req LoginRequest) (map[string]a
 		EntityType:  "User",
 		EntityId:    sql.NullInt32{Int32: user.ID, Valid: true},
 		Description: sql.NullString{String: user.Name + " logged in", Valid: true},
+		IpAddress:   sql.NullString{String: actor.IP, Valid: actor.IP != ""},
+		UserAgent:   sql.NullString{String: actor.UserAgent, Valid: actor.UserAgent != ""},
 	})
 
 	return map[string]any{
@@ -180,7 +182,7 @@ func (s *AuthService) RefreshToken(ctx context.Context, refreshToken string) (ma
 	return map[string]any{"accessToken": accessToken}, nil
 }
 
-func (s *AuthService) Logout(ctx context.Context, refreshToken string, userID int) error {
+func (s *AuthService) Logout(ctx context.Context, refreshToken string, userID int, actor AuditActor) error {
 	_ = s.q.RevokeRefreshToken(ctx, repository.RevokeRefreshTokenParams{
 		Token: refreshToken, UserId: int32(userID),
 	})
@@ -190,6 +192,8 @@ func (s *AuthService) Logout(ctx context.Context, refreshToken string, userID in
 		EntityType:  "User",
 		EntityId:    sql.NullInt32{Int32: int32(userID), Valid: true},
 		Description: sql.NullString{String: "User logged out", Valid: true},
+		IpAddress:   sql.NullString{String: actor.IP, Valid: actor.IP != ""},
+		UserAgent:   sql.NullString{String: actor.UserAgent, Valid: actor.UserAgent != ""},
 	})
 	return nil
 }

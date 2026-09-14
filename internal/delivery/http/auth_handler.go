@@ -46,7 +46,7 @@ func (h *AuthHandler) Login(c *fiber.Ctx) error {
 	if err := bindAndValidate(c, &req); err != nil {
 		return err
 	}
-	data, err := h.svc.Login(c.Context(), req)
+	data, err := h.svc.Login(c.Context(), req, auditActor(c))
 	if err != nil {
 		return err
 	}
@@ -70,7 +70,7 @@ func (h *AuthHandler) Logout(c *fiber.Ctx) error {
 	if err := bindAndValidate(c, &req); err != nil {
 		return err
 	}
-	_ = h.svc.Logout(c.Context(), req.RefreshToken, middleware.GetUserID(c))
+	_ = h.svc.Logout(c.Context(), req.RefreshToken, middleware.GetUserID(c), auditActor(c))
 	return util.OK(c, "Logged out successfully", nil)
 }
 
