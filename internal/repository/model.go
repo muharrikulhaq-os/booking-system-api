@@ -1,12 +1,14 @@
 package repository
 
+import "time"
+
 type AuditLogResponse struct {
-	ID          int32   `json:"id"`
-	UserID      *int32  `json:"user_id,omitempty"`
-	Action      string  `json:"action"`
-	EntityType  string  `json:"entity_type"`
-	EntityID    *int32  `json:"entity_id,omitempty"`
-	Description *string `json:"description,omitempty"`
-	CreatedAt   string  `json:"created_at"`
-	UserName    *string `json:"user_name,omitempty"`
+	ID          int32     `json:"id"`
+	UserID      *int32    `json:"userId,omitempty"`
+	Action      string    `json:"action"`
+	EntityType  string    `json:"entityType"`
+	EntityID    *int32    `json:"entityId,omitempty"`
+	Description *string   `json:"description,omitempty"`
+	CreatedAt   time.Time `json:"createdAt"`
+	UserName    *string   `json:"userName,omitempty"`
 }

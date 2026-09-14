@@ -331,7 +331,7 @@ func toAuditLogResponse(row repository.ReportAuditLogsRow) repository.AuditLogRe
 		EntityType:  row.EntityType,
 		EntityID:    entityID,
 		Description: description,
-		CreatedAt:   row.CreatedAt.Format("2006-05-01"),
+		CreatedAt:   row.CreatedAt,
 		UserName:    userName,
 	}
 }
