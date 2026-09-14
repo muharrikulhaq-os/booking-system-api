@@ -324,6 +324,16 @@ func toAuditLogResponse(row repository.ReportAuditLogsRow) repository.AuditLogRe
 		userName = &row.UserName.String
 	}
 
+	var ipAddress *string
+	if row.IpAddress.Valid {
+		ipAddress = &row.IpAddress.String
+	}
+
+	var userAgent *string
+	if row.UserAgent.Valid {
+		userAgent = &row.UserAgent.String
+	}
+
 	return repository.AuditLogResponse{
 		ID:          row.ID,
 		UserID:      userID,
@@ -332,6 +342,8 @@ func toAuditLogResponse(row repository.ReportAuditLogsRow) repository.AuditLogRe
 		EntityID:    entityID,
 		Description: description,
 		CreatedAt:   row.CreatedAt,
+		IPAddress:   ipAddress,
+		UserAgent:   userAgent,
 		UserName:    userName,
 	}
 }

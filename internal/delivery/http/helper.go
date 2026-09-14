@@ -3,6 +3,9 @@ package http
 import (
 	"strconv"
 
+	"booking-system-api/internal/middleware"
+	"booking-system-api/internal/service"
+
 	"github.com/go-playground/validator/v10"
 	"github.com/gofiber/fiber/v2"
 )
@@ -58,4 +61,14 @@ func queryInt32(c *fiber.Ctx, key string) *int32 {
 	}
 	n32 := int32(n)
 	return &n32
+}
+
+// auditActor bundles who's making this request and where from, for services
+// that write audit_logs entries - see service.AuditActor.
+func auditActor(c *fiber.Ctx) service.AuditActor {
+	return service.AuditActor{
+		UserID:    int32(middleware.GetUserID(c)),
+		IP:        c.IP(),
+		UserAgent: c.Get("User-Agent"),
+	}
 }

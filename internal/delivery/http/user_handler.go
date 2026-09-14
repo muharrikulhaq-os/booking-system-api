@@ -87,7 +87,7 @@ func (h *UserHandler) Create(c *fiber.Ctx) error {
 	if err := bindAndValidate(c, &req); err != nil {
 		return err
 	}
-	data, err := h.svc.Create(c.Context(), req)
+	data, err := h.svc.Create(c.Context(), req, auditActor(c))
 	if err != nil {
 		return err
 	}
@@ -103,7 +103,7 @@ func (h *UserHandler) Update(c *fiber.Ctx) error {
 	if err := bindAndValidate(c, &req); err != nil {
 		return err
 	}
-	data, err := h.svc.Update(c.Context(), id, req)
+	data, err := h.svc.Update(c.Context(), id, req, auditActor(c))
 	if err != nil {
 		return err
 	}
@@ -115,7 +115,7 @@ func (h *UserHandler) ToggleActive(c *fiber.Ctx) error {
 	if err != nil {
 		return err
 	}
-	data, err := h.svc.ToggleActive(c.Context(), id)
+	data, err := h.svc.ToggleActive(c.Context(), id, auditActor(c))
 	if err != nil {
 		return err
 	}
@@ -132,7 +132,7 @@ func (h *UserHandler) ResetPassword(c *fiber.Ctx) error {
 	if err := bindAndValidate(c, &req); err != nil {
 		return err
 	}
-	if err := h.svc.ResetPassword(c.Context(), id, req.NewPassword); err != nil {
+	if err := h.svc.ResetPassword(c.Context(), id, req.NewPassword, auditActor(c)); err != nil {
 		return err
 	}
 	return util.OK(c, "Password reset", nil)
@@ -143,7 +143,7 @@ func (h *UserHandler) Delete(c *fiber.Ctx) error {
 	if err != nil {
 		return err
 	}
-	if err := h.svc.Delete(c.Context(), id); err != nil {
+	if err := h.svc.Delete(c.Context(), id, auditActor(c)); err != nil {
 		return err
 	}
 	return util.OK(c, "User deleted", nil)

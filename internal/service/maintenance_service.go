@@ -160,7 +160,8 @@ type MaintenanceCreateResponse struct {
 	Warning string         `json:"warning,omitempty"`
 }
 
-func (s *MaintenanceService) Create(ctx context.Context, req CreateMaintenanceRequest, createdByID int32) (MaintenanceCreateResponse, error) {
+func (s *MaintenanceService) Create(ctx context.Context, req CreateMaintenanceRequest, actor AuditActor) (MaintenanceCreateResponse, error) {
+	createdByID := actor.UserID
 	// First, get the vehicle to find its resourceId for overlapping check
 	vehicle, err := s.q.GetVehicleByID(ctx, req.VehicleID)
 	if err != nil {
@@ -235,6 +236,9 @@ func (s *MaintenanceService) Create(ctx context.Context, req CreateMaintenanceRe
 		})
 	}
 
+	logAudit(ctx, s.q, actor, "CREATE", "Maintenance", m.ID,
+		"Membuat maintenance untuk kendaraan "+vehicle.PlateNumber)
+
 	res, _ := s.GetByID(ctx, m.ID)
 	return MaintenanceCreateResponse{
 		Data:    res,
@@ -242,7 +246,7 @@ func (s *MaintenanceService) Create(ctx context.Context, req CreateMaintenanceRe
 	}, nil
 }
 
-func (s *MaintenanceService) Update(ctx context.Context, id int32, req UpdateMaintenanceRequest) (map[string]any, error) {
+func (s *MaintenanceService) Update(ctx context.Context, id int32, req UpdateMaintenanceRequest, actor AuditActor) (map[string]any, error) {
 	existing, err := s.q.GetMaintenanceByID(ctx, id)
 	if err != nil {
 		return nil, util.ErrNotFound
@@ -286,6 +290,8 @@ func (s *MaintenanceService) Update(ctx context.Context, id int32, req UpdateMai
 	}); err != nil {
 		return nil, err
 	}
+	logAudit(ctx, s.q, actor, "UPDATE", "Maintenance", id,
+		"Mengubah data maintenance kendaraan "+vehicle.PlateNumber)
 
 	// if endDate provided and is <= now, mark resource AVAILABLE again
 	if req.EndDate != nil && (req.EndDate.Before(time.Now()) || req.EndDate.Equal(time.Now())) {
@@ -303,7 +309,7 @@ func (s *MaintenanceService) Update(ctx context.Context, id int32, req UpdateMai
 	return s.GetByID(ctx, id)
 }
 
-func (s *MaintenanceService) Delete(ctx context.Context, id int32) error {
+func (s *MaintenanceService) Delete(ctx context.Context, id int32, actor AuditActor) error {
 	m, err := s.q.GetMaintenanceByID(ctx, id)
 	if err != nil {
 		return util.ErrNotFound
@@ -318,6 +324,10 @@ func (s *MaintenanceService) Delete(ctx context.Context, id int32) error {
 			ID:     vehicle.ResourceId,
 			Status: repository.ResourceStatusAVAILABLE,
 		})
+	}
+	if err == nil {
+		logAudit(ctx, s.q, actor, "DELETE", "Maintenance", id,
+			"Menghapus maintenance kendaraan "+m.PlateNumber)
 	}
 	return err
 }

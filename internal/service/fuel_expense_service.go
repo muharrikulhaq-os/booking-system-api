@@ -144,7 +144,7 @@ func (s *FuelExpenseService) GetByID(ctx context.Context, id int32) (map[string]
 	return serializeFuelExpenseRow(repository.ListFuelExpensesRow(fe)), nil
 }
 
-func (s *FuelExpenseService) Create(ctx context.Context, req CreateFuelExpenseRequest, recordedByID int32, driverID *int32) (map[string]any, error) {
+func (s *FuelExpenseService) Create(ctx context.Context, req CreateFuelExpenseRequest, recordedByID int32, driverID *int32, actor AuditActor) (map[string]any, error) {
 	var totalCost float64
 	var quantity float64
 	var pricePerUnit float64
@@ -211,12 +211,21 @@ func (s *FuelExpenseService) Create(ctx context.Context, req CreateFuelExpenseRe
 		checkAndTriggerAutoMaintenance(ctx, s.q, req.VehicleID, recordedByID)
 	}
 
+	logAudit(ctx, s.q, actor, "CREATE", "FuelExpense", fe.ID,
+		"Mencatat pengisian BBM/listrik kendaraan")
+
 	return s.GetByID(ctx, fe.ID)
 }
 
-func (s *FuelExpenseService) Delete(ctx context.Context, id int32) error {
-	if _, err := s.q.GetFuelExpenseByID(ctx, id); err != nil {
+func (s *FuelExpenseService) Delete(ctx context.Context, id int32, actor AuditActor) error {
+	fe, err := s.q.GetFuelExpenseByID(ctx, id)
+	if err != nil {
 		return util.ErrNotFound
 	}
-	return s.q.DeleteFuelExpense(ctx, id)
+	if err := s.q.DeleteFuelExpense(ctx, id); err != nil {
+		return err
+	}
+	logAudit(ctx, s.q, actor, "DELETE", "FuelExpense", id,
+		"Menghapus catatan pengisian BBM/listrik kendaraan "+fe.PlateNumber)
+	return nil
 }

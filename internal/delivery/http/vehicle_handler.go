@@ -65,7 +65,7 @@ func (h *VehicleHandler) Create(c *fiber.Ctx) error {
 	if err := bindAndValidate(c, &req); err != nil {
 		return err
 	}
-	data, err := h.svc.Create(c.Context(), req)
+	data, err := h.svc.Create(c.Context(), req, auditActor(c))
 	if err != nil {
 		return err
 	}
@@ -81,7 +81,7 @@ func (h *VehicleHandler) Update(c *fiber.Ctx) error {
 	if err := bindAndValidate(c, &req); err != nil {
 		return err
 	}
-	data, err := h.svc.Update(c.Context(), id, req, int32(middleware.GetUserID(c)))
+	data, err := h.svc.Update(c.Context(), id, req, auditActor(c))
 	if err != nil {
 		return err
 	}
@@ -109,7 +109,7 @@ func (h *VehicleHandler) UpdateStatus(c *fiber.Ctx) error {
 	if err := bindAndValidate(c, &req); err != nil {
 		return err
 	}
-	data, err := h.svc.UpdateStatus(c.Context(), id, req.Status)
+	data, err := h.svc.UpdateStatus(c.Context(), id, req.Status, auditActor(c))
 	if err != nil {
 		return err
 	}
@@ -160,7 +160,7 @@ func (h *VehicleHandler) Delete(c *fiber.Ctx) error {
 	if err != nil {
 		return err
 	}
-	if err := h.svc.Delete(c.Context(), id); err != nil {
+	if err := h.svc.Delete(c.Context(), id, auditActor(c)); err != nil {
 		return err
 	}
 	return util.OK(c, "Vehicle deleted", nil)

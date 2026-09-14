@@ -61,7 +61,7 @@ func (h *RoomHandler) Create(c *fiber.Ctx) error {
 	if err := bindAndValidate(c, &req); err != nil {
 		return err
 	}
-	data, err := h.svc.Create(c.Context(), req)
+	data, err := h.svc.Create(c.Context(), req, auditActor(c))
 	if err != nil {
 		return err
 	}
@@ -77,7 +77,7 @@ func (h *RoomHandler) Update(c *fiber.Ctx) error {
 	if err := bindAndValidate(c, &req); err != nil {
 		return err
 	}
-	data, err := h.svc.Update(c.Context(), id, req)
+	data, err := h.svc.Update(c.Context(), id, req, auditActor(c))
 	if err != nil {
 		return err
 	}
@@ -93,7 +93,7 @@ func (h *RoomHandler) UpdateStatus(c *fiber.Ctx) error {
 	if err := bindAndValidate(c, &req); err != nil {
 		return err
 	}
-	data, err := h.svc.UpdateStatus(c.Context(), id, req.Status)
+	data, err := h.svc.UpdateStatus(c.Context(), id, req.Status, auditActor(c))
 	if err != nil {
 		return err
 	}
@@ -144,7 +144,7 @@ func (h *RoomHandler) Delete(c *fiber.Ctx) error {
 	if err != nil {
 		return err
 	}
-	if err := h.svc.Delete(c.Context(), id); err != nil {
+	if err := h.svc.Delete(c.Context(), id, auditActor(c)); err != nil {
 		return err
 	}
 	return util.OK(c, "Room deleted", nil)

@@ -127,7 +127,7 @@ func (s *DriverService) GetByID(ctx context.Context, id int32) (map[string]any, 
 	return serializeDriverByID(d, fixedVehicle), nil
 }
 
-func (s *DriverService) Create(ctx context.Context, req CreateDriverRequest) (map[string]any, error) {
+func (s *DriverService) Create(ctx context.Context, req CreateDriverRequest, actor AuditActor) (map[string]any, error) {
 	if _, err := s.q.GetDriverByUserID(ctx, req.UserID); err == nil {
 		return nil, util.NewError(409, "user is already a driver", util.ErrDuplicate)
 	}
@@ -139,10 +139,12 @@ func (s *DriverService) Create(ctx context.Context, req CreateDriverRequest) (ma
 	if err != nil {
 		return nil, err
 	}
+	logAudit(ctx, s.q, actor, "CREATE", "Driver", d.ID,
+		"Membuat driver dengan SIM "+req.LicenseNumber)
 	return s.GetByID(ctx, d.ID)
 }
 
-func (s *DriverService) Update(ctx context.Context, id int32, req UpdateDriverRequest) (map[string]any, error) {
+func (s *DriverService) Update(ctx context.Context, id int32, req UpdateDriverRequest, actor AuditActor) (map[string]any, error) {
 	if _, err := s.q.GetDriverByID(ctx, id); err != nil {
 		return nil, util.ErrNotFound
 	}
@@ -153,16 +155,25 @@ func (s *DriverService) Update(ctx context.Context, id int32, req UpdateDriverRe
 	}); err != nil {
 		return nil, err
 	}
+	logAudit(ctx, s.q, actor, "UPDATE", "Driver", id,
+		"Mengubah data driver (SIM "+req.LicenseNumber+")")
 	return s.GetByID(ctx, id)
 }
 
-func (s *DriverService) ToggleActive(ctx context.Context, id int32) (map[string]any, error) {
-	if _, err := s.q.GetDriverByID(ctx, id); err != nil {
+func (s *DriverService) ToggleActive(ctx context.Context, id int32, actor AuditActor) (map[string]any, error) {
+	d, err := s.q.GetDriverByID(ctx, id)
+	if err != nil {
 		return nil, util.ErrNotFound
 	}
 	if _, err := s.q.ToggleDriverActive(ctx, id); err != nil {
 		return nil, err
 	}
+	action := "ACTIVATE"
+	if d.IsActive {
+		action = "DEACTIVATE"
+	}
+	logAudit(ctx, s.q, actor, action, "Driver", id,
+		"Mengubah status aktif driver "+d.UserName)
 	return s.GetByID(ctx, id)
 }
 

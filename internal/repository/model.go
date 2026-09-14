@@ -10,5 +10,7 @@ type AuditLogResponse struct {
 	EntityID    *int32    `json:"entityId,omitempty"`
 	Description *string   `json:"description,omitempty"`
 	CreatedAt   time.Time `json:"createdAt"`
+	IPAddress   *string   `json:"ipAddress,omitempty"`
+	UserAgent   *string   `json:"userAgent,omitempty"`
 	UserName    *string   `json:"userName,omitempty"`
 }

@@ -96,7 +96,7 @@ func (s *RoomService) GetByID(ctx context.Context, id int32) (map[string]any, er
 	return serializeRoomByID(r), nil
 }
 
-func (s *RoomService) Create(ctx context.Context, req CreateRoomRequest) (map[string]any, error) {
+func (s *RoomService) Create(ctx context.Context, req CreateRoomRequest, actor AuditActor) (map[string]any, error) {
 	res, err := s.q.CreateResource(ctx, repository.CreateResourceParams{
 		Name: req.Name, Type: repository.ResourceTypeROOM,
 	})
@@ -109,10 +109,12 @@ func (s *RoomService) Create(ctx context.Context, req CreateRoomRequest) (map[st
 	if err != nil {
 		return nil, err
 	}
+	logAudit(ctx, s.q, actor, "CREATE", "Room", room.ID,
+		"Membuat ruangan "+req.Name+" ("+req.Location+")")
 	return s.GetByID(ctx, room.ID)
 }
 
-func (s *RoomService) Update(ctx context.Context, id int32, req UpdateRoomRequest) (map[string]any, error) {
+func (s *RoomService) Update(ctx context.Context, id int32, req UpdateRoomRequest, actor AuditActor) (map[string]any, error) {
 	r, err := s.q.GetRoomByID(ctx, id)
 	if err != nil {
 		return nil, util.ErrNotFound
@@ -125,10 +127,12 @@ func (s *RoomService) Update(ctx context.Context, id int32, req UpdateRoomReques
 	}); err != nil {
 		return nil, err
 	}
+	logAudit(ctx, s.q, actor, "UPDATE", "Room", id,
+		"Mengubah data ruangan "+req.Name+" ("+req.Location+")")
 	return s.GetByID(ctx, id)
 }
 
-func (s *RoomService) UpdateStatus(ctx context.Context, id int32, status string) (map[string]any, error) {
+func (s *RoomService) UpdateStatus(ctx context.Context, id int32, status string, actor AuditActor) (map[string]any, error) {
 	r, err := s.q.GetRoomByID(ctx, id)
 	if err != nil {
 		return nil, util.ErrNotFound
@@ -138,15 +142,22 @@ func (s *RoomService) UpdateStatus(ctx context.Context, id int32, status string)
 	}); err != nil {
 		return nil, err
 	}
+	logAudit(ctx, s.q, actor, "UPDATE_STATUS", "Room", id,
+		"Mengubah status ruangan "+r.ResourceName+" menjadi "+status)
 	return s.GetByID(ctx, id)
 }
 
-func (s *RoomService) Delete(ctx context.Context, id int32) error {
+func (s *RoomService) Delete(ctx context.Context, id int32, actor AuditActor) error {
 	r, err := s.q.GetRoomByID(ctx, id)
 	if err != nil {
 		return util.ErrNotFound
 	}
-	return s.q.DeleteResource(ctx, r.ResourceId)
+	if err := s.q.DeleteResource(ctx, r.ResourceId); err != nil {
+		return err
+	}
+	logAudit(ctx, s.q, actor, "DELETE", "Room", id,
+		"Menghapus ruangan "+r.ResourceName)
+	return nil
 }
 
 // SetRoomKeeper assigns (roomKeeperID != nil) or clears (nil) this room's

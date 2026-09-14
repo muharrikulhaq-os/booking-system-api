@@ -132,7 +132,7 @@ func (s *UserService) GetByID(ctx context.Context, id int32) (map[string]any, er
 	return out, nil
 }
 
-func (s *UserService) Create(ctx context.Context, req CreateUserRequest) (map[string]any, error) {
+func (s *UserService) Create(ctx context.Context, req CreateUserRequest, actor AuditActor) (map[string]any, error) {
 	if _, err := s.q.GetUserByEmail(ctx, req.Email); err == nil {
 		return nil, util.ErrDuplicate
 	}
@@ -195,6 +195,9 @@ func (s *UserService) Create(ctx context.Context, req CreateUserRequest) (map[st
 		}
 	}
 
+	logAudit(ctx, qtx, actor, "CREATE", "User", full.ID,
+		"Membuat user "+full.Name+" ("+full.Email+")")
+
 	if err := tx.Commit(); err != nil {
 		return nil, err
 	}
@@ -209,7 +212,7 @@ func (s *UserService) Create(ctx context.Context, req CreateUserRequest) (map[st
 	}, nil
 }
 
-func (s *UserService) Update(ctx context.Context, id int32, req UpdateUserRequest) (map[string]any, error) {
+func (s *UserService) Update(ctx context.Context, id int32, req UpdateUserRequest, actor AuditActor) (map[string]any, error) {
 	if _, err := s.q.GetUserByID(ctx, id); err != nil {
 		return nil, util.ErrNotFound
 	}
@@ -282,6 +285,9 @@ func (s *UserService) Update(ctx context.Context, id int32, req UpdateUserReques
 		}
 	}
 
+	logAudit(ctx, qtx, actor, "UPDATE", "User", id,
+		"Mengubah data user "+full.Name+" ("+full.Email+")")
+
 	if err := tx.Commit(); err != nil {
 		return nil, err
 	}
@@ -297,33 +303,46 @@ type AdminResetPasswordRequest struct {
 
 // ResetPassword mengganti password user secara langsung. Hanya untuk ADMIN —
 // tidak ada verifikasi OTP karena admin dianggap sudah terautentikasi & berwenang.
-func (s *UserService) ResetPassword(ctx context.Context, id int32, newPassword string) error {
-	if _, err := s.q.GetUserByID(ctx, id); err != nil {
+func (s *UserService) ResetPassword(ctx context.Context, id int32, newPassword string, actor AuditActor) error {
+	u, err := s.q.GetUserByID(ctx, id)
+	if err != nil {
 		return util.ErrNotFound
 	}
 	hashed, err := util.HashPassword(newPassword)
 	if err != nil {
 		return err
 	}
-	return s.q.UpdateUserPassword(ctx, repository.UpdateUserPasswordParams{
+	if err := s.q.UpdateUserPassword(ctx, repository.UpdateUserPasswordParams{
 		Password: hashed,
 		ID:       id,
-	})
+	}); err != nil {
+		return err
+	}
+	logAudit(ctx, s.q, actor, "RESET_PASSWORD", "User", id,
+		"Mereset password user "+u.Name+" ("+u.Email+")")
+	return nil
 }
 
-func (s *UserService) ToggleActive(ctx context.Context, id int32) (map[string]any, error) {
-	if _, err := s.q.GetUserByID(ctx, id); err != nil {
+func (s *UserService) ToggleActive(ctx context.Context, id int32, actor AuditActor) (map[string]any, error) {
+	u, err := s.q.GetUserByID(ctx, id)
+	if err != nil {
 		return nil, util.ErrNotFound
 	}
-	_, err := s.q.ToggleUserActive(ctx, id)
-	if err != nil {
+	if _, err := s.q.ToggleUserActive(ctx, id); err != nil {
 		return nil, err
 	}
+	action := "ACTIVATE"
+	if u.IsActive {
+		action = "DEACTIVATE"
+	}
+	logAudit(ctx, s.q, actor, action, "User", id,
+		"Mengubah status aktif user "+u.Name+" ("+u.Email+")")
 	return s.GetByID(ctx, id)
 }
 
-func (s *UserService) Delete(ctx context.Context, id int32) error {
-	if _, err := s.q.GetUserByID(ctx, id); err != nil {
+func (s *UserService) Delete(ctx context.Context, id int32, actor AuditActor) error {
+	u, err := s.q.GetUserByID(ctx, id)
+	if err != nil {
 		return util.ErrNotFound
 	}
 	if err := s.q.DeleteUser(ctx, id); err != nil {
@@ -340,6 +359,8 @@ func (s *UserService) Delete(ctx context.Context, id int32) error {
 		}
 		return err
 	}
+	logAudit(ctx, s.q, actor, "DELETE", "User", id,
+		"Menghapus user "+u.Name+" ("+u.Email+")")
 	return nil
 }
 

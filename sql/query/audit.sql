@@ -1,3 +1,3 @@
 -- name: CreateAuditLog :one
-INSERT INTO audit_logs ("userId", action, "entityType", "entityId", description)
-VALUES ($1, $2, $3, $4, $5) RETURNING *;
+INSERT INTO audit_logs ("userId", action, "entityType", "entityId", description, "ipAddress", "userAgent")
+VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *;

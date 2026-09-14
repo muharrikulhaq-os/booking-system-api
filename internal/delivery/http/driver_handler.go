@@ -62,7 +62,7 @@ func (h *DriverHandler) Create(c *fiber.Ctx) error {
 	if err := bindAndValidate(c, &req); err != nil {
 		return err
 	}
-	data, err := h.svc.Create(c.Context(), req)
+	data, err := h.svc.Create(c.Context(), req, auditActor(c))
 	if err != nil {
 		return err
 	}
@@ -78,7 +78,7 @@ func (h *DriverHandler) Update(c *fiber.Ctx) error {
 	if err := bindAndValidate(c, &req); err != nil {
 		return err
 	}
-	data, err := h.svc.Update(c.Context(), id, req)
+	data, err := h.svc.Update(c.Context(), id, req, auditActor(c))
 	if err != nil {
 		return err
 	}
@@ -90,7 +90,7 @@ func (h *DriverHandler) ToggleActive(c *fiber.Ctx) error {
 	if err != nil {
 		return err
 	}
-	data, err := h.svc.ToggleActive(c.Context(), id)
+	data, err := h.svc.ToggleActive(c.Context(), id, auditActor(c))
 	if err != nil {
 		return err
 	}

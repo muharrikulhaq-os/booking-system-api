@@ -100,7 +100,7 @@ func (h *FuelExpenseHandler) Create(c *fiber.Ctx) error {
 	}
 	req.ProofPhotoUrl = "/uploads/" + filePath
 
-	data, err := h.svc.Create(c.Context(), req, recordedByID, driverID)
+	data, err := h.svc.Create(c.Context(), req, recordedByID, driverID, auditActor(c))
 	if err != nil {
 		return err
 	}
@@ -112,7 +112,7 @@ func (h *FuelExpenseHandler) Delete(c *fiber.Ctx) error {
 	if err != nil {
 		return err
 	}
-	if err := h.svc.Delete(c.Context(), id); err != nil {
+	if err := h.svc.Delete(c.Context(), id, auditActor(c)); err != nil {
 		return err
 	}
 	return util.OK(c, "Fuel expense deleted", nil)
@@ -168,7 +168,7 @@ func (h *MaintenanceHandler) Create(c *fiber.Ctx) error {
 	if err := bindAndValidate(c, &req); err != nil {
 		return err
 	}
-	resp, err := h.svc.Create(c.Context(), req, int32(middleware.GetUserID(c)))
+	resp, err := h.svc.Create(c.Context(), req, auditActor(c))
 	if err != nil {
 		return err
 	}
@@ -214,7 +214,7 @@ func (h *MaintenanceHandler) Update(c *fiber.Ctx) error {
 	if err := bindAndValidate(c, &req); err != nil {
 		return err
 	}
-	data, err := h.svc.Update(c.Context(), id, req)
+	data, err := h.svc.Update(c.Context(), id, req, auditActor(c))
 	if err != nil {
 		return err
 	}
@@ -226,7 +226,7 @@ func (h *MaintenanceHandler) Delete(c *fiber.Ctx) error {
 	if err != nil {
 		return err
 	}
-	if err := h.svc.Delete(c.Context(), id); err != nil {
+	if err := h.svc.Delete(c.Context(), id, auditActor(c)); err != nil {
 		return err
 	}
 	return util.OK(c, "Maintenance record deleted", nil)

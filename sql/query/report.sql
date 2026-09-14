@@ -54,6 +54,8 @@ WHERE b.status = 'OVERDUE'
 ORDER BY b."endDate" ASC;
 
 -- name: ReportAuditLogs :many
+-- ipAddress/userAgent: metadata request (dari mana log ini berasal), lihat
+-- catatan di internal/service/audit.go (AuditActor + logAudit).
 SELECT al.*, u.name AS user_name
 FROM audit_logs al
 LEFT JOIN users u ON u.id = al."userId"

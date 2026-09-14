@@ -11,8 +11,8 @@ import (
 )
 
 const createAuditLog = `-- name: CreateAuditLog :one
-INSERT INTO audit_logs ("userId", action, "entityType", "entityId", description)
-VALUES ($1, $2, $3, $4, $5) RETURNING id, "userId", action, "entityType", "entityId", description, "createdAt"
+INSERT INTO audit_logs ("userId", action, "entityType", "entityId", description, "ipAddress", "userAgent")
+VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id, "userId", action, "entityType", "entityId", description, "createdAt", "ipAddress", "userAgent"
 `
 
 type CreateAuditLogParams struct {
@@ -21,6 +21,8 @@ type CreateAuditLogParams struct {
 	EntityType  string         `json:"entityType"`
 	EntityId    sql.NullInt32  `json:"entityId"`
 	Description sql.NullString `json:"description"`
+	IpAddress   sql.NullString `json:"ipAddress"`
+	UserAgent   sql.NullString `json:"userAgent"`
 }
 
 func (q *Queries) CreateAuditLog(ctx context.Context, arg CreateAuditLogParams) (AuditLog, error) {
@@ -30,6 +32,8 @@ func (q *Queries) CreateAuditLog(ctx context.Context, arg CreateAuditLogParams) 
 		arg.EntityType,
 		arg.EntityId,
 		arg.Description,
+		arg.IpAddress,
+		arg.UserAgent,
 	)
 	var i AuditLog
 	err := row.Scan(
@@ -40,6 +44,8 @@ func (q *Queries) CreateAuditLog(ctx context.Context, arg CreateAuditLogParams) 
 		&i.EntityId,
 		&i.Description,
 		&i.CreatedAt,
+		&i.IpAddress,
+		&i.UserAgent,
 	)
 	return i, err
 }

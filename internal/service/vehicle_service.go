@@ -154,7 +154,7 @@ func (s *VehicleService) GetByID(ctx context.Context, id int32) (map[string]any,
 	return serializeVehicleByID(v, spdActive), nil
 }
 
-func (s *VehicleService) Create(ctx context.Context, req CreateVehicleRequest) (map[string]any, error) {
+func (s *VehicleService) Create(ctx context.Context, req CreateVehicleRequest, actor AuditActor) (map[string]any, error) {
 	if _, err := s.q.GetVehicleByPlate(ctx, req.PlateNumber); err == nil {
 		return nil, util.NewError(409, "plate number already exists", util.ErrDuplicate)
 	}
@@ -181,10 +181,12 @@ func (s *VehicleService) Create(ctx context.Context, req CreateVehicleRequest) (
 	}
 
 	v, _ := s.q.GetVehicleByPlate(ctx, req.PlateNumber)
+	logAudit(ctx, s.q, actor, "CREATE", "Vehicle", v.ID,
+		"Membuat kendaraan "+req.Name+" ("+req.PlateNumber+")")
 	return s.GetByID(ctx, v.ID)
 }
 
-func (s *VehicleService) Update(ctx context.Context, id int32, req UpdateVehicleRequest, actorID int32) (map[string]any, error) {
+func (s *VehicleService) Update(ctx context.Context, id int32, req UpdateVehicleRequest, actor AuditActor) (map[string]any, error) {
 	v, err := s.q.GetVehicleByID(ctx, id)
 	if err != nil {
 		return nil, util.ErrNotFound
@@ -206,9 +208,11 @@ func (s *VehicleService) Update(ctx context.Context, id int32, req UpdateVehicle
 	if err != nil {
 		return nil, err
 	}
+	logAudit(ctx, s.q, actor, "UPDATE", "Vehicle", id,
+		"Mengubah data kendaraan "+req.Name+" ("+req.PlateNumber+")")
 
 	if req.CurrentOdometer > v.CurrentOdometer {
-		checkAndTriggerAutoMaintenance(ctx, s.q, id, actorID)
+		checkAndTriggerAutoMaintenance(ctx, s.q, id, actor.UserID)
 	}
 
 	return s.GetByID(ctx, id)
@@ -237,7 +241,7 @@ func (s *VehicleService) GetMaintenanceStatus(ctx context.Context, id int32) (ma
 	}, nil
 }
 
-func (s *VehicleService) UpdateStatus(ctx context.Context, id int32, status string) (map[string]any, error) {
+func (s *VehicleService) UpdateStatus(ctx context.Context, id int32, status string, actor AuditActor) (map[string]any, error) {
 	v, err := s.q.GetVehicleByID(ctx, id)
 	if err != nil {
 		return nil, util.ErrNotFound
@@ -248,15 +252,22 @@ func (s *VehicleService) UpdateStatus(ctx context.Context, id int32, status stri
 	if err != nil {
 		return nil, err
 	}
+	logAudit(ctx, s.q, actor, "UPDATE_STATUS", "Vehicle", id,
+		"Mengubah status kendaraan "+v.PlateNumber+" menjadi "+status)
 	return s.GetByID(ctx, id)
 }
 
-func (s *VehicleService) Delete(ctx context.Context, id int32) error {
+func (s *VehicleService) Delete(ctx context.Context, id int32, actor AuditActor) error {
 	v, err := s.q.GetVehicleByID(ctx, id)
 	if err != nil {
 		return util.ErrNotFound
 	}
-	return s.q.DeleteResource(ctx, v.ResourceId)
+	if err := s.q.DeleteResource(ctx, v.ResourceId); err != nil {
+		return err
+	}
+	logAudit(ctx, s.q, actor, "DELETE", "Vehicle", id,
+		"Menghapus kendaraan "+v.PlateNumber)
+	return nil
 }
 
 func (s *VehicleService) UpdatePhoto(ctx context.Context, id int32, photoURL string) (map[string]any, error) {

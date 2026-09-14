@@ -436,6 +436,8 @@ type AuditLog struct {
 	EntityId    sql.NullInt32  `json:"entityId"`
 	Description sql.NullString `json:"description"`
 	CreatedAt   time.Time      `json:"createdAt"`
+	IpAddress   sql.NullString `json:"ipAddress"`
+	UserAgent   sql.NullString `json:"userAgent"`
 }
 
 type Booking struct {

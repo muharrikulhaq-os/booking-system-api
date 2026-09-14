@@ -39,7 +39,7 @@ func (q *Queries) CountAuditLogs(ctx context.Context, arg CountAuditLogsParams) 
 }
 
 const reportAuditLogs = `-- name: ReportAuditLogs :many
-SELECT al.id, al."userId", al.action, al."entityType", al."entityId", al.description, al."createdAt", u.name AS user_name
+SELECT al.id, al."userId", al.action, al."entityType", al."entityId", al.description, al."createdAt", al."ipAddress", al."userAgent", u.name AS user_name
 FROM audit_logs al
 LEFT JOIN users u ON u.id = al."userId"
 WHERE ($3::text IS NULL OR al."entityType" = $3::text)
@@ -67,6 +67,8 @@ type ReportAuditLogsRow struct {
 	EntityId    sql.NullInt32  `json:"entityId"`
 	Description sql.NullString `json:"description"`
 	CreatedAt   time.Time      `json:"createdAt"`
+	IpAddress   sql.NullString `json:"ipAddress"`
+	UserAgent   sql.NullString `json:"userAgent"`
 	UserName    sql.NullString `json:"user_name"`
 }
 
@@ -94,6 +96,8 @@ func (q *Queries) ReportAuditLogs(ctx context.Context, arg ReportAuditLogsParams
 			&i.EntityId,
 			&i.Description,
 			&i.CreatedAt,
+			&i.IpAddress,
+			&i.UserAgent,
 			&i.UserName,
 		); err != nil {
 			return nil, err
