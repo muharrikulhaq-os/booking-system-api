@@ -397,7 +397,7 @@ func (q *Queries) UpdateProfilePhoto(ctx context.Context, arg UpdateProfilePhoto
 
 const updateUser = `-- name: UpdateUser :one
 UPDATE users
-SET name = $2, email = $3, "roleId" = $4, "departmentId" = $5, "updatedAt" = NOW()
+SET name = $2, email = $3, "roleId" = $4, "departmentId" = $5, "employeeId" = $6, "updatedAt" = NOW()
 WHERE id = $1
 RETURNING id, "employeeId", name, email, password, "profilePhoto", "isActive", "roleId", "departmentId", "createdAt", "updatedAt"
 `
@@ -408,6 +408,7 @@ type UpdateUserParams struct {
 	Email        string `json:"email"`
 	RoleId       int32  `json:"roleId"`
 	DepartmentId int32  `json:"departmentId"`
+	EmployeeId   string `json:"employeeId"`
 }
 
 func (q *Queries) UpdateUser(ctx context.Context, arg UpdateUserParams) (User, error) {
@@ -417,6 +418,7 @@ func (q *Queries) UpdateUser(ctx context.Context, arg UpdateUserParams) (User, e
 		arg.Email,
 		arg.RoleId,
 		arg.DepartmentId,
+		arg.EmployeeId,
 	)
 	var i User
 	err := row.Scan(

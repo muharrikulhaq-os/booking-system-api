@@ -40,6 +40,7 @@ type CreateUserRequest struct {
 type UpdateUserRequest struct {
 	Name          string `json:"name"          validate:"required"`
 	Email         string `json:"email"         validate:"required,email"`
+	EmployeeID    string `json:"employeeId"    validate:"required"`
 	RoleID        int32  `json:"roleId"        validate:"required"`
 	DepartmentID  int32  `json:"departmentId"  validate:"required"`
 	LicenseNumber string `json:"licenseNumber"`
@@ -216,6 +217,12 @@ func (s *UserService) Update(ctx context.Context, id int32, req UpdateUserReques
 	if _, err := s.q.GetUserByID(ctx, id); err != nil {
 		return nil, util.ErrNotFound
 	}
+	// employeeId UNIQUE di DB - cek dulu supaya errornya jelas (409), bukan
+	// bocor sebagai raw constraint violation. existing.ID != id: employeeId
+	// itu boleh saja "tidak berubah" (masih dipegang oleh user ini sendiri).
+	if existing, err := s.q.GetUserByEmployeeID(ctx, req.EmployeeID); err == nil && existing.ID != id {
+		return nil, util.NewError(409, "ID karyawan sudah dipakai user lain", util.ErrDuplicate)
+	}
 
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -228,6 +235,7 @@ func (s *UserService) Update(ctx context.Context, id int32, req UpdateUserReques
 	_, err = qtx.UpdateUser(ctx, repository.UpdateUserParams{
 		ID: id, Name: req.Name, Email: req.Email,
 		RoleId: req.RoleID, DepartmentId: req.DepartmentID,
+		EmployeeId: req.EmployeeID,
 	})
 	if err != nil {
 		return nil, err

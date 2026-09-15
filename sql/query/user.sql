@@ -85,7 +85,7 @@ RETURNING *;
 
 -- name: UpdateUser :one
 UPDATE users
-SET name = $2, email = $3, "roleId" = $4, "departmentId" = $5, "updatedAt" = NOW()
+SET name = $2, email = $3, "roleId" = $4, "departmentId" = $5, "employeeId" = $6, "updatedAt" = NOW()
 WHERE id = $1
 RETURNING *;
 
