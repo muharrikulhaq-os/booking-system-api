@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"database/sql"
+	"fmt"
 
 	"booking-system-api/internal/repository"
 	"booking-system-api/internal/util"
@@ -190,6 +191,14 @@ func (s *VehicleService) Update(ctx context.Context, id int32, req UpdateVehicle
 	v, err := s.q.GetVehicleByID(ctx, id)
 	if err != nil {
 		return nil, util.ErrNotFound
+	}
+	// Odometer kendaraan harus data faktual yang monoton naik - satu-satunya
+	// jalan menurunkannya adalah kesalahan input, jadi tolak eksplisit di
+	// sini (bukan diam-diam di-clamp) supaya adminnya tahu ada yang salah.
+	if req.CurrentOdometer < v.CurrentOdometer {
+		return nil, util.NewError(400,
+			fmt.Sprintf("odometer tidak boleh kurang dari catatan saat ini (%d km)", v.CurrentOdometer),
+			util.ErrBadRequest)
 	}
 
 	_ = s.q.UpdateResourceName(ctx, repository.UpdateResourceNameParams{

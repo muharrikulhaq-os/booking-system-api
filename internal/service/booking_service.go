@@ -931,6 +931,16 @@ func (s *BookingService) Start(ctx context.Context, id int32, odometer *int32, l
 	if now.After(b.EndDate) {
 		return nil, util.NewError(400, "booking period has already ended", util.ErrBadRequest)
 	}
+	// Odometer awal trip harus data faktual kendaraan (sama seperti dicek di
+	// FuelExpenseService.Create) - divalidasi SEBELUM StartBooking/UpdateResourceStatus
+	// di bawah supaya kalau ditolak, tidak ada state booking yang sudah terlanjur berubah.
+	if odometer != nil && b.ResourceType == repository.ResourceTypeVEHICLE && b.AssignedVehicleId.Valid {
+		if veh, verr := s.q.GetVehicleByID(ctx, b.AssignedVehicleId.Int32); verr == nil && *odometer < veh.CurrentOdometer {
+			return nil, util.NewError(400,
+				"odometer tidak boleh kurang dari catatan kendaraan saat ini ("+itoa(veh.CurrentOdometer)+" km)",
+				util.ErrBadRequest)
+		}
+	}
 
 	if _, err = s.q.StartBooking(ctx, id); err != nil {
 		return nil, err
@@ -1755,6 +1765,14 @@ func (s *BookingService) SubmitReturnReport(
 	if _, err = s.q.GetReturnReport(ctx, bookingID); err == nil {
 		return util.NewError(409, "return report already submitted for this booking", util.ErrConflict)
 	}
+	// Odometer akhir trip harus data faktual - minimal sama dengan odometer
+	// awal trip ini sendiri (dicatat saat Start()), supaya jaraknya tidak
+	// pernah negatif.
+	if odometer != nil && b.OdometerStart.Valid && *odometer < b.OdometerStart.Int32 {
+		return util.NewError(400,
+			"odometer tidak boleh kurang dari odometer awal trip ini ("+itoa(b.OdometerStart.Int32)+" km)",
+			util.ErrBadRequest)
+	}
 
 	var odo sql.NullInt32
 	if odometer != nil {
@@ -1762,6 +1780,16 @@ func (s *BookingService) SubmitReturnReport(
 	}
 	if _, err = s.q.CreateReturnReport(ctx, bookingID, int32(userID), note, location, odo); err != nil {
 		return err
+	}
+	// Odometer kendaraan sebelumnya cuma maju lewat catatan isi BBM - laporan
+	// pengembalian trip punya bacaan odometer sendiri yang sama faktualnya,
+	// jadi harus ikut memajukan currentOdometer kendaraan (GREATEST-guarded,
+	// tidak akan pernah memundurkan).
+	if odometer != nil && b.AssignedVehicleId.Valid {
+		_, _ = s.q.UpdateVehicleOdometer(ctx, repository.UpdateVehicleOdometerParams{
+			ID: b.AssignedVehicleId.Int32, CurrentOdometer: *odometer,
+		})
+		checkAndTriggerAutoMaintenance(ctx, s.q, b.AssignedVehicleId.Int32, int32(userID))
 	}
 
 	_, _ = s.q.CreateAuditLog(ctx, repository.CreateAuditLogParams{

@@ -66,8 +66,8 @@ func (q *Queries) CreateResource(ctx context.Context, arg CreateResourceParams) 
 
 const createVehicle = `-- name: CreateVehicle :one
 INSERT INTO vehicles ("resourceId", "plateNumber", brand, model, year,
-                       "currentOdometer", "categoryId", capacity, energy_type)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id, "resourceId", "plateNumber", brand, model, year, "currentOdometer", "categoryId", capacity, "photoUrl", energy_type, "maintenanceIntervalKm", "lastMaintenanceOdometer"
+                       "currentOdometer", "categoryId", capacity, energy_type, "lastMaintenanceOdometer")
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $6) RETURNING id, "resourceId", "plateNumber", brand, model, year, "currentOdometer", "categoryId", capacity, "photoUrl", energy_type, "maintenanceIntervalKm", "lastMaintenanceOdometer"
 `
 
 type CreateVehicleParams struct {
@@ -82,6 +82,13 @@ type CreateVehicleParams struct {
 	EnergyType      EnergyType `json:"energy_type"`
 }
 
+// CreateVehicle seeds lastMaintenanceOdometer to the same value as the
+// initial currentOdometer (reusing $6 for both) - a real vehicle is never
+// brand new with 0 km, and without this the maintenance-due calculation
+// (currentOdometer - lastMaintenanceOdometer >= maintenanceIntervalKm)
+// would immediately count the vehicle's WHOLE prior mileage against the
+// interval and spuriously auto-trigger a maintenance record on the very
+// next odometer-advancing event.
 func (q *Queries) CreateVehicle(ctx context.Context, arg CreateVehicleParams) (Vehicle, error) {
 	row := q.db.QueryRowContext(ctx, createVehicle,
 		arg.ResourceId,

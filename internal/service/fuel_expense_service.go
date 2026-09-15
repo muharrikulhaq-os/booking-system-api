@@ -145,6 +145,23 @@ func (s *FuelExpenseService) GetByID(ctx context.Context, id int32) (map[string]
 }
 
 func (s *FuelExpenseService) Create(ctx context.Context, req CreateFuelExpenseRequest, recordedByID int32, driverID *int32, actor AuditActor) (map[string]any, error) {
+	// Odometer di sini harus data faktual kendaraan yang sama dipakai di
+	// mana-mana (start trip, laporan pengembalian, maintenance) - "sebelum"
+	// tidak boleh mundur dari catatan kendaraan saat ini, dan "sesudah"
+	// wajib maju dari "sebelum".
+	vehicle, err := s.q.GetVehicleByID(ctx, req.VehicleID)
+	if err != nil {
+		return nil, util.NewError(404, "Vehicle not found", util.ErrNotFound)
+	}
+	if req.OdometerBefore < vehicle.CurrentOdometer {
+		return nil, util.NewError(400,
+			fmt.Sprintf("odometer sebelum tidak boleh kurang dari catatan kendaraan saat ini (%d km)", vehicle.CurrentOdometer),
+			util.ErrBadRequest)
+	}
+	if req.OdometerAfter <= req.OdometerBefore {
+		return nil, util.NewError(400, "odometer sesudah harus lebih besar dari odometer sebelum", util.ErrBadRequest)
+	}
+
 	var totalCost float64
 	var quantity float64
 	var pricePerUnit float64
@@ -166,11 +183,7 @@ func (s *FuelExpenseService) Create(ctx context.Context, req CreateFuelExpenseRe
 	}
 
 	totalCost = quantity * pricePerUnit
-	
-	distanceKm := int32(0)
-	if req.OdometerAfter > req.OdometerBefore {
-		distanceKm = req.OdometerAfter - req.OdometerBefore
-	}
+	distanceKm := req.OdometerAfter - req.OdometerBefore
 
 	var bookingID sql.NullInt32
 	if req.BookingID != nil {

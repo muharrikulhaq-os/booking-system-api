@@ -64,9 +64,12 @@ SELECT * FROM vehicles WHERE "plateNumber" = $1 LIMIT 1;
 INSERT INTO resources (name, type, status) VALUES ($1, $2, 'AVAILABLE') RETURNING *;
 
 -- name: CreateVehicle :one
+-- lastMaintenanceOdometer sengaja diisi dari $6 yang sama dengan
+-- currentOdometer (bukan kolom terpisah) - lihat catatan di
+-- internal/repository/vehicle.sql.go kenapa ini wajib di-seed saat create.
 INSERT INTO vehicles ("resourceId", "plateNumber", brand, model, year,
-                       "currentOdometer", "categoryId", capacity, energy_type)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *;
+                       "currentOdometer", "categoryId", capacity, energy_type, "lastMaintenanceOdometer")
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $6) RETURNING *;
 
 -- name: UpdateVehicle :one
 UPDATE vehicles
