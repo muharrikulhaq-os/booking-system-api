@@ -524,10 +524,17 @@ func (q *Queries) ReportDepartmentSummary(ctx context.Context, start, end sql.Nu
 // ─── Resource Usage (ranged) ───────────────────────────────────────────────────
 // v_vehicle_summary (dipakai ReportResourceUsage) tidak bisa menerima
 // parameter - view Postgres biasa. Query ini mereplikasi persis logikanya
-// (termasuk kuirk fan-out completed_bookings dari LEFT JOIN fuel_expenses
-// yang sudah ada di view aslinya - sengaja TIDAK diperbaiki di sini supaya
-// angka yang tampil tidak berubah diam-diam sebagai efek samping fitur
-// filter tanggal) tapi dengan filter tanggal opsional pada booking & BBM.
+// tapi dengan filter tanggal opsional pada booking & BBM.
+//
+// Fan-out view aslinya SUDAH diperbaiki di sini: dulu bookings dan
+// fuel_expenses di-LEFT JOIN bersamaan ke kendaraan yang sama, sehingga tiap
+// booking tergandakan sebanyak jumlah catatan BBM dan sebaliknya.
+// COUNT(DISTINCT b.id) masih benar, tapi completed_bookings (SUM tanpa
+// DISTINCT) bisa melampaui total_bookings - tampil sebagai "1350% selesai" di
+// aplikasi - dan seluruh angka BBM/listrik ikut terkali jumlah booking
+// (mis. CR-V: Rp 2.040.000 di sini vs Rp 510.000 di cost/by-vehicle untuk
+// rentang yang sama). Kedua tabel kini diagregasi terpisah dulu, baru
+// digabung ke kendaraan.
 
 type ResourceUsageRangedRow struct {
 	ID                int32          `json:"id"`
@@ -551,24 +558,38 @@ func (q *Queries) ReportResourceUsageRanged(ctx context.Context, start, end sql.
 		SELECT
 		    v.id, r.name, v."plateNumber",
 		    vc.name, v.capacity, r.status, v."currentOdometer",
-		    COUNT(DISTINCT b.id) AS total_bookings,
-		    COALESCE(SUM(CASE WHEN b.status = 'COMPLETED' THEN 1 ELSE 0 END), 0) AS completed_bookings,
-		    COALESCE(SUM(CASE WHEN ft.type = 'BBM' THEN fe.quantity ELSE 0 END), 0)::float8 AS total_liter_bbm,
-		    COALESCE(SUM(CASE WHEN ft.type = 'BBM' THEN fe."totalCost" ELSE 0 END), 0)::float8 AS total_cost_bbm,
-		    COALESCE(SUM(CASE WHEN ft.type = 'LISTRIK' THEN fe.quantity ELSE 0 END), 0)::float8 AS total_kwh_listrik,
-		    COALESCE(SUM(CASE WHEN ft.type = 'LISTRIK' THEN fe."totalCost" ELSE 0 END), 0)::float8 AS total_cost_listrik,
-		    COALESCE(SUM(fe."totalCost")::float8, 0) AS total_fuel_cost
+		    COALESCE(bk.total_bookings, 0)            AS total_bookings,
+		    COALESCE(bk.completed_bookings, 0)        AS completed_bookings,
+		    COALESCE(fu.total_liter_bbm, 0)::float8    AS total_liter_bbm,
+		    COALESCE(fu.total_cost_bbm, 0)::float8     AS total_cost_bbm,
+		    COALESCE(fu.total_kwh_listrik, 0)::float8  AS total_kwh_listrik,
+		    COALESCE(fu.total_cost_listrik, 0)::float8 AS total_cost_listrik,
+		    COALESCE(fu.total_fuel_cost, 0)::float8    AS total_fuel_cost
 		FROM vehicles v
 		JOIN resources r ON r.id = v."resourceId"
 		JOIN vehicle_categories vc ON vc.id = v."categoryId"
-		LEFT JOIN bookings b ON b."resourceId" = r.id
-		    AND ($1::timestamptz IS NULL OR b."startDate" >= $1::timestamptz)
-		    AND ($2::timestamptz IS NULL OR b."endDate"   <= $2::timestamptz)
-		LEFT JOIN fuel_expenses fe ON fe."vehicleId" = v.id
-		    AND ($1::timestamptz IS NULL OR fe."createdAt" >= $1::timestamptz)
-		    AND ($2::timestamptz IS NULL OR fe."createdAt" <= $2::timestamptz)
-		LEFT JOIN fuel_types ft ON ft.id = fe."fuelTypeId"
-		GROUP BY v.id, r.name, v."plateNumber", vc.name, v.capacity, r.status, v."currentOdometer"
+		LEFT JOIN (
+		    SELECT b."resourceId",
+		           COUNT(*)                                      AS total_bookings,
+		           COUNT(*) FILTER (WHERE b.status = 'COMPLETED') AS completed_bookings
+		    FROM bookings b
+		    WHERE ($1::timestamptz IS NULL OR b."startDate" >= $1::timestamptz)
+		      AND ($2::timestamptz IS NULL OR b."endDate"   <= $2::timestamptz)
+		    GROUP BY b."resourceId"
+		) bk ON bk."resourceId" = r.id
+		LEFT JOIN (
+		    SELECT fe."vehicleId",
+		           SUM(CASE WHEN ft.type = 'BBM'     THEN fe.quantity    ELSE 0 END) AS total_liter_bbm,
+		           SUM(CASE WHEN ft.type = 'BBM'     THEN fe."totalCost" ELSE 0 END) AS total_cost_bbm,
+		           SUM(CASE WHEN ft.type = 'LISTRIK' THEN fe.quantity    ELSE 0 END) AS total_kwh_listrik,
+		           SUM(CASE WHEN ft.type = 'LISTRIK' THEN fe."totalCost" ELSE 0 END) AS total_cost_listrik,
+		           SUM(fe."totalCost")                                            AS total_fuel_cost
+		    FROM fuel_expenses fe
+		    LEFT JOIN fuel_types ft ON ft.id = fe."fuelTypeId"
+		    WHERE ($1::timestamptz IS NULL OR fe."createdAt" >= $1::timestamptz)
+		      AND ($2::timestamptz IS NULL OR fe."createdAt" <= $2::timestamptz)
+		    GROUP BY fe."vehicleId"
+		) fu ON fu."vehicleId" = v.id
 		ORDER BY total_bookings DESC`
 	rows, err := q.db.QueryContext(ctx, query, start, end)
 	if err != nil {
@@ -644,6 +665,11 @@ func (q *Queries) ReportDriverRatingsRanged(ctx context.Context, start, end sql.
 // ─── Driver Activity (ranged) ──────────────────────────────────────────────────
 // Sama seperti DriverPerformance di atas - dulu tanpa filter tanggal sama
 // sekali, sekarang scoped ke [start, end] opsional.
+//
+// Fan-out yang sama dengan ResourceUsageRanged diperbaiki di sini: bookings
+// dan fuel_expenses dulu di-LEFT JOIN bersamaan ke driver yang sama, sehingga
+// completed_bookings dan total_fuel_expenses ikut terkali jumlah baris tabel
+// lainnya. Keduanya kini diagregasi terpisah dulu.
 
 type DriverActivityRangedRow struct {
 	DriverID          int32   `json:"driver_id"`
@@ -657,18 +683,27 @@ type DriverActivityRangedRow struct {
 func (q *Queries) ReportDriverActivityRanged(ctx context.Context, start, end sql.NullTime) ([]DriverActivityRangedRow, error) {
 	query := `
 		SELECT d.id, u.name, u."employeeId",
-		    COUNT(DISTINCT b.id) AS total_bookings,
-		    COALESCE(SUM(CASE WHEN b.status = 'COMPLETED' THEN 1 ELSE 0 END), 0)::bigint AS completed_bookings,
-		    COALESCE(SUM(fe."totalCost")::float8, 0) AS total_fuel_expenses
+		    COALESCE(bk.total_bookings, 0)              AS total_bookings,
+		    COALESCE(bk.completed_bookings, 0)::bigint  AS completed_bookings,
+		    COALESCE(fu.total_fuel_expenses, 0)::float8 AS total_fuel_expenses
 		FROM drivers d
 		JOIN users u ON u.id = d."userId"
-		LEFT JOIN bookings b ON b."assignedDriverId" = d.id
-		    AND ($1::timestamptz IS NULL OR b."startDate" >= $1::timestamptz)
-		    AND ($2::timestamptz IS NULL OR b."endDate"   <= $2::timestamptz)
-		LEFT JOIN fuel_expenses fe ON fe."driverId" = d.id
-		    AND ($1::timestamptz IS NULL OR fe."createdAt" >= $1::timestamptz)
-		    AND ($2::timestamptz IS NULL OR fe."createdAt" <= $2::timestamptz)
-		GROUP BY d.id, u.name, u."employeeId"
+		LEFT JOIN (
+		    SELECT b."assignedDriverId",
+		           COUNT(*)                                      AS total_bookings,
+		           COUNT(*) FILTER (WHERE b.status = 'COMPLETED') AS completed_bookings
+		    FROM bookings b
+		    WHERE ($1::timestamptz IS NULL OR b."startDate" >= $1::timestamptz)
+		      AND ($2::timestamptz IS NULL OR b."endDate"   <= $2::timestamptz)
+		    GROUP BY b."assignedDriverId"
+		) bk ON bk."assignedDriverId" = d.id
+		LEFT JOIN (
+		    SELECT fe."driverId", SUM(fe."totalCost") AS total_fuel_expenses
+		    FROM fuel_expenses fe
+		    WHERE ($1::timestamptz IS NULL OR fe."createdAt" >= $1::timestamptz)
+		      AND ($2::timestamptz IS NULL OR fe."createdAt" <= $2::timestamptz)
+		    GROUP BY fe."driverId"
+		) fu ON fu."driverId" = d.id
 		ORDER BY total_bookings DESC`
 	rows, err := q.db.QueryContext(ctx, query, start, end)
 	if err != nil {
