@@ -40,7 +40,8 @@ func SaveUploadedFile(fh *multipart.FileHeader, category string) (filePath strin
 	if category == "" {
 		category = "misc"
 	}
-	dir := filepath.Join(config.C.UploadDir, category, time.Now().Format("2006/01"))
+	// Folder per bulan WIB (proses berjalan dengan time.Local = UTC).
+	dir := filepath.Join(config.C.UploadDir, category, time.Now().In(WIB).Format("2006/01"))
 	if err = os.MkdirAll(dir, 0755); err != nil {
 		return "", err
 	}

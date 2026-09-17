@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"booking-system-api/internal/repository"
+	"booking-system-api/internal/util"
 )
 
 type ReportService struct {
@@ -25,19 +26,26 @@ func nullableTime(t *time.Time) sql.NullTime {
 	return sql.NullTime{Time: *t, Valid: true}
 }
 
-// periodBounds returns start/end times for the given named period (monthly/quarterly/yearly).
+// periodBounds returns start/end times for the given named period
+// (monthly/quarterly/yearly), aligned to WIB calendar boundaries. Dulu batasnya
+// UTC: "bulan ini" dimulai pukul 07:00 WIB tanggal 1, sehingga booking pada
+// 00:00–06:59 WIB tanggal 1 masuk ke bulan sebelumnya.
 func periodBounds(period string) (start, end time.Time) {
-	now := time.Now().UTC()
+	return periodBoundsAt(period, time.Now())
+}
+
+func periodBoundsAt(period string, at time.Time) (start, end time.Time) {
+	now := at.In(util.WIB)
 	switch period {
 	case "quarterly":
 		q := (int(now.Month())-1)/3 + 1
-		start = time.Date(now.Year(), time.Month((q-1)*3+1), 1, 0, 0, 0, 0, time.UTC)
+		start = time.Date(now.Year(), time.Month((q-1)*3+1), 1, 0, 0, 0, 0, util.WIB)
 		end = start.AddDate(0, 3, 0).Add(-time.Nanosecond)
 	case "yearly":
-		start = time.Date(now.Year(), 1, 1, 0, 0, 0, 0, time.UTC)
+		start = time.Date(now.Year(), 1, 1, 0, 0, 0, 0, util.WIB)
 		end = start.AddDate(1, 0, 0).Add(-time.Nanosecond)
 	default: // monthly
-		start = time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, time.UTC)
+		start = time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, util.WIB)
 		end = start.AddDate(0, 1, 0).Add(-time.Nanosecond)
 	}
 	return
