@@ -122,7 +122,7 @@ func (h *BookingHandler) Create(c *fiber.Ctx) error {
 	if err := bindAndValidate(c, &req); err != nil {
 		return err
 	}
-	data, err := h.svc.Create(c.Context(), req, middleware.GetUserID(c))
+	data, err := h.svc.Create(c.Context(), req, auditActor(c))
 	if err != nil {
 		return err
 	}
@@ -134,7 +134,7 @@ func (h *BookingHandler) Cancel(c *fiber.Ctx) error {
 	if err != nil {
 		return err
 	}
-	data, err := h.svc.Cancel(c.Context(), id, middleware.GetUserID(c), middleware.GetUserRole(c))
+	data, err := h.svc.Cancel(c.Context(), id, auditActor(c), middleware.GetUserRole(c))
 	if err != nil {
 		return err
 	}
@@ -148,7 +148,7 @@ func (h *BookingHandler) Approve(c *fiber.Ctx) error {
 	}
 	var req service.ApproveBookingRequest
 	_ = c.BodyParser(&req)
-	resp, err := h.svc.Approve(c.Context(), id, req, middleware.GetUserID(c))
+	resp, err := h.svc.Approve(c.Context(), id, req, auditActor(c))
 	if err != nil {
 		return err
 	}
@@ -172,7 +172,7 @@ func (h *BookingHandler) Reject(c *fiber.Ctx) error {
 	if err := bindAndValidate(c, &req); err != nil {
 		return err
 	}
-	data, err := h.svc.Reject(c.Context(), id, req, middleware.GetUserID(c))
+	data, err := h.svc.Reject(c.Context(), id, req, auditActor(c))
 	if err != nil {
 		return err
 	}
@@ -188,7 +188,7 @@ func (h *BookingHandler) SubstituteResource(c *fiber.Ctx) error {
 	if err := bindAndValidate(c, &req); err != nil {
 		return err
 	}
-	data, err := h.svc.SubstituteResource(c.Context(), id, req, middleware.GetUserID(c))
+	data, err := h.svc.SubstituteResource(c.Context(), id, req, auditActor(c))
 	if err != nil {
 		return err
 	}
@@ -204,7 +204,7 @@ func (h *BookingHandler) AssignVehicle(c *fiber.Ctx) error {
 	if err := bindAndValidate(c, &req); err != nil {
 		return err
 	}
-	data, err := h.svc.AssignVehicle(c.Context(), id, req, middleware.GetUserID(c))
+	data, err := h.svc.AssignVehicle(c.Context(), id, req, auditActor(c))
 	if err != nil {
 		return err
 	}
@@ -229,7 +229,7 @@ func (h *BookingHandler) Start(c *fiber.Ctx) error {
 	}
 
 	data, err := h.svc.Start(c.Context(), id, odometer, location, photoURL,
-		middleware.GetUserID(c), middleware.GetUserRole(c))
+		auditActor(c), middleware.GetUserRole(c))
 	if err != nil {
 		return err
 	}
@@ -241,7 +241,7 @@ func (h *BookingHandler) Complete(c *fiber.Ctx) error {
 	if err != nil {
 		return err
 	}
-	data, err := h.svc.Complete(c.Context(), id, middleware.GetUserID(c), middleware.GetUserRole(c))
+	data, err := h.svc.Complete(c.Context(), id, auditActor(c), middleware.GetUserRole(c))
 	if err != nil {
 		return err
 	}
@@ -257,7 +257,7 @@ func (h *BookingHandler) MergeBooking(c *fiber.Ctx) error {
 	if err := bindAndValidate(c, &req); err != nil {
 		return err
 	}
-	data, err := h.svc.MergeBookings(c.Context(), id, req, middleware.GetUserID(c))
+	data, err := h.svc.MergeBookings(c.Context(), id, req, auditActor(c))
 	if err != nil {
 		return err
 	}
@@ -285,7 +285,7 @@ func (h *BookingHandler) RateDriver(c *fiber.Ctx) error {
 	if err := bindAndValidate(c, &req); err != nil {
 		return err
 	}
-	data, err := h.svc.RateDriver(c.Context(), id, req, middleware.GetUserID(c))
+	data, err := h.svc.RateDriver(c.Context(), id, req, auditActor(c))
 	if err != nil {
 		return err
 	}
@@ -338,7 +338,7 @@ func (h *BookingHandler) RateRoom(c *fiber.Ctx) error {
 	if err := bindAndValidate(c, &req); err != nil {
 		return err
 	}
-	data, err := h.svc.RateRoom(c.Context(), id, req, middleware.GetUserID(c))
+	data, err := h.svc.RateRoom(c.Context(), id, req, auditActor(c))
 	if err != nil {
 		return err
 	}
@@ -442,7 +442,7 @@ func (h *BookingHandler) SubmitReturnReport(c *fiber.Ctx) error {
 
 	odometer := formInt32Ptr(c, "odometer")
 	uploaderID := int32(middleware.GetUserID(c))
-	if err = h.svc.SubmitReturnReport(c.Context(), id, note, location, odometer, middleware.GetUserID(c)); err != nil {
+	if err = h.svc.SubmitReturnReport(c.Context(), id, note, location, odometer, auditActor(c)); err != nil {
 		return err
 	}
 

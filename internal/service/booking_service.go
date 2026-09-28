@@ -211,6 +211,37 @@ func nullInt32(n sql.NullInt32) any {
 	return nil
 }
 
+// sweepStaleBookings menjalankan ketiga auto-transisi berbasis waktu dan
+// mencatat SETIAP perubahan ke audit_logs, supaya timeline aktivitas booking
+// tidak "bolong": sebelumnya hanya OVERDUE yang dicatat, sedangkan EXPIRED
+// dan IGNORED berubah status tanpa jejak sama sekali sehingga pemohon tidak
+// bisa tahu kapan/kenapa bookingnya hangus. Tidak ada aktor manusia di sini
+// (dipicu sistem saat ada yang membuka daftar booking), jadi userId/ip/
+// userAgent memang sengaja dibiarkan NULL - itu penanda "aksi sistem".
+func (s *BookingService) sweepStaleBookings(ctx context.Context) int {
+	type sweep struct {
+		rows   []repository.Booking
+		action string
+		desc   string
+	}
+	overdue, _ := s.q.MarkOverdueBookings(ctx) // ONGOING + endDate lewat → OVERDUE
+	expired, _ := s.q.MarkExpiredBookings(ctx) // APPROVED + endDate lewat, tidak pernah dimulai → EXPIRED
+	ignored, _ := s.q.MarkIgnoredBookings(ctx) // PENDING + endDate lewat, admin tidak merespons → IGNORED
+
+	total := 0
+	for _, sw := range []sweep{
+		{overdue, "OVERDUE", "Booking belum diselesaikan setelah waktu selesai terlewati"},
+		{expired, "EXPIRED", "Booking hangus: sudah disetujui tapi tidak pernah dimulai sampai waktu selesai terlewati"},
+		{ignored, "IGNORED", "Booking hangus: tidak ada respons admin sampai waktu selesai terlewati"},
+	} {
+		for _, b := range sw.rows {
+			logAudit(ctx, s.q, AuditActor{}, sw.action, "Booking", b.ID, sw.desc)
+			total++
+		}
+	}
+	return total
+}
+
 func (s *BookingService) List(ctx context.Context,
 	page, limit int,
 	userID *int32,
@@ -225,18 +256,7 @@ func (s *BookingService) List(ctx context.Context,
 	sortBy, sortOrder string,
 ) ([]map[string]any, int64, error) {
 	// Auto-transition stale bookings on every list call (lightweight)
-	if overdue, err := s.q.MarkOverdueBookings(ctx); err == nil { // ONGOING + endDate passed → OVERDUE
-		for _, b := range overdue {
-			_, _ = s.q.CreateAuditLog(ctx, repository.CreateAuditLogParams{
-				Action:      "OVERDUE",
-				EntityType:  "Booking",
-				EntityId:    sql.NullInt32{Int32: b.ID, Valid: true},
-				Description: sql.NullString{String: "Booking belum diselesaikan setelah waktu selesai terlewati", Valid: true},
-			})
-		}
-	}
-	_, _ = s.q.MarkExpiredBookings(ctx) // APPROVED + endDate passed, never started → EXPIRED
-	_, _ = s.q.MarkIgnoredBookings(ctx) // PENDING + endDate passed, admin didn't respond → IGNORED
+	s.sweepStaleBookings(ctx)
 
 	params := repository.ListBookingsParams{
 		Limit:     int32(limit),
@@ -352,7 +372,13 @@ func (s *BookingService) attachOvertime(ctx context.Context, out map[string]any,
 	}
 }
 
-func (s *BookingService) Create(ctx context.Context, req CreateBookingRequest, userID int) (map[string]any, error) {
+// Semua method yang mengubah state booking menerima AuditActor, bukan userID
+// telanjang: selain "siapa", audit log juga perlu "dari mana" (IP + User-Agent)
+// supaya riwayat aktivitas booking bisa dipakai menelusuri perangkat pelaku,
+// sama seperti CRUD data master. userID lokal di bawah cuma alias supaya body
+// method tidak perlu diubah.
+func (s *BookingService) Create(ctx context.Context, req CreateBookingRequest, actor AuditActor) (map[string]any, error) {
+	userID := int(actor.UserID)
 	if !req.EndDate.After(req.StartDate) {
 		return nil, util.ErrInvalidDateRange
 	}
@@ -488,13 +514,7 @@ func (s *BookingService) Create(ctx context.Context, req CreateBookingRequest, u
 		return nil, err
 	}
 
-	_, _ = s.q.CreateAuditLog(ctx, repository.CreateAuditLogParams{
-		UserId:      sql.NullInt32{Int32: int32(userID), Valid: true},
-		Action:      "CREATE",
-		EntityType:  "Booking",
-		EntityId:    sql.NullInt32{Int32: b.ID, Valid: true},
-		Description: sql.NullString{String: "Booking created", Valid: true},
-	})
+	logAudit(ctx, s.q, actor, "CREATE", "Booking", b.ID, "Booking dibuat")
 
 	// Notifikasi: booking baru butuh persetujuan → semua admin.
 	if s.notif != nil {
@@ -506,7 +526,8 @@ func (s *BookingService) Create(ctx context.Context, req CreateBookingRequest, u
 	return serializeBookingByID(full), nil
 }
 
-func (s *BookingService) Cancel(ctx context.Context, id int32, userID int, role string) (map[string]any, error) {
+func (s *BookingService) Cancel(ctx context.Context, id int32, actor AuditActor, role string) (map[string]any, error) {
+	userID := int(actor.UserID)
 	b, err := s.q.GetBookingByID(ctx, id)
 	if err != nil {
 		return nil, util.ErrNotFound
@@ -520,6 +541,10 @@ func (s *BookingService) Cancel(ctx context.Context, id int32, userID int, role 
 	if _, err = s.q.CancelBooking(ctx, id); err != nil {
 		return nil, err
 	}
+	// Pembatalan sebelumnya sama sekali tidak tercatat di audit_logs, padahal
+	// frontend sudah punya entri "Dibatalkan" di timeline - akibatnya booking
+	// yang dibatalkan kelihatan berhenti mendadak tanpa jejak pelakunya.
+	logAudit(ctx, s.q, actor, "CANCEL", "Booking", id, "Booking dibatalkan oleh pemohon")
 	// Notifikasi: pembatalan → admin, dan supir yang ditugaskan (bila ada).
 	if s.notif != nil {
 		s.notif.NotifyAdmins("BOOKING_CANCELLED", "Booking dibatalkan",
@@ -619,7 +644,8 @@ func (s *BookingService) driverSpdConflict(ctx context.Context, driverID int32, 
 	return count > 0, err
 }
 
-func (s *BookingService) Approve(ctx context.Context, id int32, req ApproveBookingRequest, approverID int) (ApproveBookingResponse, error) {
+func (s *BookingService) Approve(ctx context.Context, id int32, req ApproveBookingRequest, actor AuditActor) (ApproveBookingResponse, error) {
+	approverID := int(actor.UserID)
 	b, err := s.q.GetBookingByID(ctx, id)
 	if err != nil {
 		return ApproveBookingResponse{}, util.ErrNotFound
@@ -723,9 +749,19 @@ func (s *BookingService) Approve(ctx context.Context, id int32, req ApproveBooki
 		Action:     "APPROVE",
 		Note:       sql.NullString{String: req.Note, Valid: req.Note != ""},
 	})
+	// Persetujuan dulu HANYA masuk approval_logs, bukan audit_logs - padahal
+	// timeline aktivitas booking dibaca dari audit_logs (lihat
+	// GetBookingActivity). Efeknya langkah terpenting di alur booking justru
+	// tidak pernah muncul di riwayat. Reject sudah menulis keduanya; Approve
+	// sekarang disamakan.
+	approveDesc := "Booking disetujui"
+	if req.Note != "" {
+		approveDesc += ": " + req.Note
+	}
+	logAudit(ctx, s.q, actor, "APPROVE", "Booking", id, approveDesc)
 
 	full, _ := s.q.GetBookingByID(ctx, id)
-	
+
 	// Notifikasi persetujuan.
 	if s.notif != nil {
 		// Pemohon (karyawan).
@@ -751,7 +787,8 @@ func (s *BookingService) Approve(ctx context.Context, id int32, req ApproveBooki
 	}, nil
 }
 
-func (s *BookingService) Reject(ctx context.Context, id int32, req RejectBookingRequest, approverID int) (map[string]any, error) {
+func (s *BookingService) Reject(ctx context.Context, id int32, req RejectBookingRequest, actor AuditActor) (map[string]any, error) {
+	approverID := int(actor.UserID)
 	b, err := s.q.GetBookingByID(ctx, id)
 	if err != nil {
 		return nil, util.ErrNotFound
@@ -775,13 +812,7 @@ func (s *BookingService) Reject(ctx context.Context, id int32, req RejectBooking
 		Action:     repository.ApprovalActionREJECTED,
 		Note:       sql.NullString{String: req.Note, Valid: true},
 	})
-	_, _ = s.q.CreateAuditLog(ctx, repository.CreateAuditLogParams{
-		UserId:      sql.NullInt32{Int32: int32(approverID), Valid: true},
-		Action:      "REJECT",
-		EntityType:  "Booking",
-		EntityId:    sql.NullInt32{Int32: id, Valid: true},
-		Description: sql.NullString{String: "Booking rejected: " + req.Note, Valid: true},
-	})
+	logAudit(ctx, s.q, actor, "REJECT", "Booking", id, "Booking ditolak: "+req.Note)
 
 	full, _ := s.q.GetBookingByID(ctx, id)
 	if s.notif != nil {
@@ -792,7 +823,7 @@ func (s *BookingService) Reject(ctx context.Context, id int32, req RejectBooking
 	return serializeBookingByID(full), nil
 }
 
-func (s *BookingService) AssignVehicle(ctx context.Context, id int32, req AssignVehicleRequest, adminID int) (map[string]any, error) {
+func (s *BookingService) AssignVehicle(ctx context.Context, id int32, req AssignVehicleRequest, actor AuditActor) (map[string]any, error) {
 	b, err := s.q.GetBookingByID(ctx, id)
 	if err != nil {
 		return nil, util.ErrNotFound
@@ -846,17 +877,11 @@ func (s *BookingService) AssignVehicle(ctx context.Context, id int32, req Assign
 	}
 
 	isReassigned := vehicle.ResourceId != b.ResourceId
-	desc := "Driver and vehicle assigned to booking"
+	desc := "Supir dan kendaraan ditugaskan ke booking"
 	if isReassigned {
-		desc = "Vehicle reassigned: resource updated from original booking resource"
+		desc = "Kendaraan dialihkan: resource diperbarui dari permintaan awal"
 	}
-	_, _ = s.q.CreateAuditLog(ctx, repository.CreateAuditLogParams{
-		UserId:      sql.NullInt32{Int32: int32(adminID), Valid: true},
-		Action:      "ASSIGN",
-		EntityType:  "Booking",
-		EntityId:    sql.NullInt32{Int32: id, Valid: true},
-		Description: sql.NullString{String: desc, Valid: true},
-	})
+	logAudit(ctx, s.q, actor, "ASSIGN", "Booking", id, desc)
 
 	full, _ := s.q.GetBookingByID(ctx, id)
 	
@@ -871,7 +896,8 @@ func (s *BookingService) AssignVehicle(ctx context.Context, id int32, req Assign
 	return serializeBookingByID(full), nil
 }
 
-func (s *BookingService) Start(ctx context.Context, id int32, odometer *int32, location, photoURL string, userID int, role string) (map[string]any, error) {
+func (s *BookingService) Start(ctx context.Context, id int32, odometer *int32, location, photoURL string, actor AuditActor, role string) (map[string]any, error) {
+	userID := int(actor.UserID)
 	b, err := s.q.GetBookingByID(ctx, id)
 	if err != nil {
 		return nil, util.ErrNotFound
@@ -961,14 +987,12 @@ func (s *BookingService) Start(ctx context.Context, id int32, odometer *int32, l
 			sql.NullString{String: photoURL, Valid: photoURL != ""},
 		)
 	}
-	_, _ = s.q.CreateAuditLog(ctx, repository.CreateAuditLogParams{
-		UserId:      sql.NullInt32{Int32: int32(userID), Valid: true},
-		Action:      "START",
-		EntityType:  "Booking",
-		EntityId:    sql.NullInt32{Int32: id, Valid: true},
-		Description: sql.NullString{String: "Booking started", Valid: true},
-	})
-	s.syncMergedBookingStatus(ctx, id, repository.BookingStatusONGOING)
+	startDesc := "Perjalanan dimulai"
+	if odometer != nil {
+		startDesc += " (odometer awal " + itoa(*odometer) + " km)"
+	}
+	logAudit(ctx, s.q, actor, "START", "Booking", id, startDesc)
+	s.syncMergedBookingStatus(ctx, id, repository.BookingStatusONGOING, actor)
 
 	full, _ := s.q.GetBookingByID(ctx, id)
 	// Notifikasi: perjalanan dimulai → pemohon.
@@ -985,7 +1009,7 @@ func (s *BookingService) Start(ctx context.Context, id int32, odometer *int32, l
 // status. Skips the acted-upon booking's own side effects (overtime, trip
 // photos, notifications) to avoid double-counting; the partner just needs
 // its status and resource to reflect reality.
-func (s *BookingService) syncMergedBookingStatus(ctx context.Context, bookingID int32, newStatus repository.BookingStatus) {
+func (s *BookingService) syncMergedBookingStatus(ctx context.Context, bookingID int32, newStatus repository.BookingStatus, actor AuditActor) {
 	merges, err := s.q.GetBookingMerges(ctx, bookingID)
 	if err != nil {
 		return
@@ -1020,12 +1044,18 @@ func (s *BookingService) syncMergedBookingStatus(ctx context.Context, bookingID 
 		default:
 			continue
 		}
-		_, _ = s.q.CreateAuditLog(ctx, repository.CreateAuditLogParams{
-			Action:      string(newStatus),
-			EntityType:  "Booking",
-			EntityId:    sql.NullInt32{Int32: partnerID, Valid: true},
-			Description: sql.NullString{String: "Auto-sinkron dari booking gabungan #" + itoa(bookingID), Valid: true},
-		})
+		// Aksinya ditulis sebagai START/COMPLETE, BUKAN string status mentah
+		// ("ONGOING"/"COMPLETED"). Frontend memetakan action → label/ikon
+		// timeline lewat map dengan kunci tertutup, jadi status mentah tadi
+		// tidak punya entri dan bikin detail booking gabungan error saat
+		// dirender. Aktornya tetap orang yang memicu transisi di booking
+		// utama - transisi ini konsekuensi aksinya, bukan aksi sistem.
+		syncAction := "START"
+		if newStatus == repository.BookingStatusCOMPLETED {
+			syncAction = "COMPLETE"
+		}
+		logAudit(ctx, s.q, actor, syncAction, "Booking", partnerID,
+			"Auto-sinkron dari booking gabungan #"+itoa(bookingID))
 		if s.notif != nil {
 			label := "Perjalanan dimulai"
 			code := "BOOKING_STARTED"
@@ -1038,7 +1068,8 @@ func (s *BookingService) syncMergedBookingStatus(ctx context.Context, bookingID 
 	}
 }
 
-func (s *BookingService) Complete(ctx context.Context, id int32, userID int, role string) (map[string]any, error) {
+func (s *BookingService) Complete(ctx context.Context, id int32, actor AuditActor, role string) (map[string]any, error) {
+	userID := int(actor.UserID)
 	b, err := s.q.GetBookingByID(ctx, id)
 	if err != nil {
 		return nil, util.ErrNotFound
@@ -1101,17 +1132,11 @@ func (s *BookingService) Complete(ctx context.Context, id int32, userID int, rol
 		}
 	}
 
-	_, _ = s.q.CreateAuditLog(ctx, repository.CreateAuditLogParams{
-		UserId:      sql.NullInt32{Int32: int32(userID), Valid: true},
-		Action:      "COMPLETE",
-		EntityType:  "Booking",
-		EntityId:    sql.NullInt32{Int32: id, Valid: true},
-		Description: sql.NullString{String: "Booking completed", Valid: true},
-	})
+	logAudit(ctx, s.q, actor, "COMPLETE", "Booking", id, "Booking diselesaikan")
 	// Sinkronkan pasangan merge SEBELUM cek pelepasan supir di bawah, supaya
 	// "booking aktif lain" milik supir ini sudah menghitung status terbaru
 	// pasangannya (bukan status ONGOING lama yang bikin supir tidak dilepas).
-	s.syncMergedBookingStatus(ctx, id, repository.BookingStatusCOMPLETED)
+	s.syncMergedBookingStatus(ctx, id, repository.BookingStatusCOMPLETED, actor)
 
 	// Lepas kepemilikan kendaraan supir bila ia tak punya booking aktif lain.
 	// (Kalau masih ada booking APPROVED/ONGOING lain — mis. hasil merge di
@@ -1153,7 +1178,8 @@ func (s *BookingService) Complete(ctx context.Context, id int32, userID int, rol
 	return out, nil
 }
 
-func (s *BookingService) RateDriver(ctx context.Context, bookingID int32, req RateDriverRequest, userID int) (map[string]any, error) {
+func (s *BookingService) RateDriver(ctx context.Context, bookingID int32, req RateDriverRequest, actor AuditActor) (map[string]any, error) {
+	userID := int(actor.UserID)
 	b, err := s.q.GetBookingByID(ctx, bookingID)
 	if err != nil {
 		return nil, util.ErrNotFound
@@ -1196,6 +1222,11 @@ func (s *BookingService) RateDriver(ctx context.Context, bookingID int32, req Ra
 	if err != nil {
 		return nil, err
 	}
+	// Rating adalah langkah terakhir alur booking kendaraan, jadi ikut dicatat
+	// supaya timeline menutup sampai selesai (frontend sudah punya entri
+	// "Rating Diberikan" yang sebelumnya tidak pernah terpakai).
+	logAudit(ctx, s.q, actor, "RATE_DRIVER", "Booking", bookingID,
+		"Supir dinilai "+itoa(int32(req.Rating))+" bintang")
 	// Notifikasi: supir menerima penilaian.
 	if s.notif != nil {
 		if drv, derr := s.q.GetDriverByID(ctx, b.AssignedDriverId.Int32); derr == nil {
@@ -1294,7 +1325,8 @@ func (s *BookingService) GetBookingDriverRating(ctx context.Context, bookingID i
 // room bookings are never merged.
 // ─────────────────────────────────────────────────────────────────────────
 
-func (s *BookingService) RateRoom(ctx context.Context, bookingID int32, req RateRoomRequest, userID int) (map[string]any, error) {
+func (s *BookingService) RateRoom(ctx context.Context, bookingID int32, req RateRoomRequest, actor AuditActor) (map[string]any, error) {
+	userID := int(actor.UserID)
 	b, err := s.q.GetBookingByID(ctx, bookingID)
 	if err != nil {
 		return nil, util.ErrNotFound
@@ -1331,6 +1363,8 @@ func (s *BookingService) RateRoom(ctx context.Context, bookingID int32, req Rate
 	if err != nil {
 		return nil, err
 	}
+	logAudit(ctx, s.q, actor, "RATE_ROOM", "Booking", bookingID,
+		"Ruangan dinilai "+itoa(int32(req.Rating))+" bintang")
 	return map[string]any{
 		"id":           r.ID,
 		"bookingId":    r.BookingId,
@@ -1413,16 +1447,13 @@ func (s *BookingService) GetApprovalLog(ctx context.Context, bookingID int32) (a
 }
 
 func (s *BookingService) MarkOverdue(ctx context.Context) (int, error) {
-	r1, err := s.q.MarkOverdueBookings(ctx)
-	if err != nil {
-		return 0, err
-	}
-	r2, _ := s.q.MarkExpiredBookings(ctx)
-	r3, _ := s.q.MarkIgnoredBookings(ctx)
-	return len(r1) + len(r2) + len(r3), nil
+	// Sengaja delegasi ke helper yang sama dengan List(), supaya sweep yang
+	// dipicu cron dan sweep yang dipicu pembukaan daftar booking menghasilkan
+	// jejak audit yang identik - bukan dua jalur dengan perilaku beda.
+	return s.sweepStaleBookings(ctx), nil
 }
 
-func (s *BookingService) SubstituteResource(ctx context.Context, id int32, req SubstituteResourceRequest, adminID int) (map[string]any, error) {
+func (s *BookingService) SubstituteResource(ctx context.Context, id int32, req SubstituteResourceRequest, actor AuditActor) (map[string]any, error) {
 	b, err := s.q.GetBookingByID(ctx, id)
 	if err != nil {
 		return nil, util.ErrNotFound
@@ -1463,15 +1494,9 @@ func (s *BookingService) SubstituteResource(ctx context.Context, id int32, req S
 
 	note := req.Note
 	if note == "" {
-		note = "Resource substituted by admin"
+		note = "Resource dialihkan oleh admin"
 	}
-	_, _ = s.q.CreateAuditLog(ctx, repository.CreateAuditLogParams{
-		UserId:      sql.NullInt32{Int32: int32(adminID), Valid: true},
-		Action:      "SUBSTITUTE_RESOURCE",
-		EntityType:  "Booking",
-		EntityId:    sql.NullInt32{Int32: id, Valid: true},
-		Description: sql.NullString{String: note, Valid: true},
-	})
+	logAudit(ctx, s.q, actor, "SUBSTITUTE_RESOURCE", "Booking", id, note)
 
 	full, _ := s.q.GetBookingByID(ctx, id)
 	// Notifikasi: resource dialihkan → pemohon.
@@ -1516,7 +1541,8 @@ func (s *BookingService) GetActivity(ctx context.Context, id int32, callerID int
 	return out, nil
 }
 
-func (s *BookingService) MergeBookings(ctx context.Context, primaryID int32, req MergeBookingRequest, adminID int) (map[string]any, error) {
+func (s *BookingService) MergeBookings(ctx context.Context, primaryID int32, req MergeBookingRequest, actor AuditActor) (map[string]any, error) {
+	adminID := int(actor.UserID)
 	if primaryID == req.TargetBookingID {
 		return nil, util.NewError(400, "cannot merge a booking with itself", util.ErrBadRequest)
 	}
@@ -1654,24 +1680,13 @@ func (s *BookingService) MergeBookings(ctx context.Context, primaryID int32, req
 		return nil, err
 	}
 
-	desc := "Booking merged with #" + itoa(req.TargetBookingID)
+	desc := "Booking digabung dengan #" + itoa(req.TargetBookingID)
 	if req.Reason != "" {
 		desc += ": " + req.Reason
 	}
-	_, _ = s.q.CreateAuditLog(ctx, repository.CreateAuditLogParams{
-		UserId:      sql.NullInt32{Int32: int32(adminID), Valid: true},
-		Action:      "MERGE",
-		EntityType:  "Booking",
-		EntityId:    sql.NullInt32{Int32: primaryID, Valid: true},
-		Description: sql.NullString{String: desc, Valid: true},
-	})
-	_, _ = s.q.CreateAuditLog(ctx, repository.CreateAuditLogParams{
-		UserId:      sql.NullInt32{Int32: int32(adminID), Valid: true},
-		Action:      "MERGE",
-		EntityType:  "Booking",
-		EntityId:    sql.NullInt32{Int32: req.TargetBookingID, Valid: true},
-		Description: sql.NullString{String: "Booking merged into primary #" + itoa(primaryID), Valid: true},
-	})
+	logAudit(ctx, s.q, actor, "MERGE", "Booking", primaryID, desc)
+	logAudit(ctx, s.q, actor, "MERGE", "Booking", req.TargetBookingID,
+		"Booking digabung ke booking utama #"+itoa(primaryID))
 
 	// Notifikasi: pemilik booking sekunder & supir trip utama.
 	if s.notif != nil {
@@ -1744,8 +1759,9 @@ func (s *BookingService) SubmitReturnReport(
 	bookingID int32,
 	note, location string,
 	odometer *int32,
-	userID int,
+	actor AuditActor,
 ) error {
+	userID := int(actor.UserID)
 	b, err := s.q.GetBookingByID(ctx, bookingID)
 	if err != nil {
 		return util.ErrNotFound
@@ -1792,13 +1808,11 @@ func (s *BookingService) SubmitReturnReport(
 		checkAndTriggerAutoMaintenance(ctx, s.q, b.AssignedVehicleId.Int32, int32(userID))
 	}
 
-	_, _ = s.q.CreateAuditLog(ctx, repository.CreateAuditLogParams{
-		UserId:      sql.NullInt32{Int32: int32(userID), Valid: true},
-		Action:      "SUBMIT_RETURN_REPORT",
-		EntityType:  "Booking",
-		EntityId:    sql.NullInt32{Int32: bookingID, Valid: true},
-		Description: sql.NullString{String: "Driver submitted return report", Valid: true},
-	})
+	returnDesc := "Supir mengirim laporan pengembalian"
+	if odometer != nil {
+		returnDesc += " (odometer akhir " + itoa(*odometer) + " km)"
+	}
+	logAudit(ctx, s.q, actor, "SUBMIT_RETURN_REPORT", "Booking", bookingID, returnDesc)
 	// Notifikasi: laporan pengembalian masuk → admin.
 	if s.notif != nil {
 		s.notif.NotifyAdmins("RETURN_REPORT", "Laporan pengembalian",

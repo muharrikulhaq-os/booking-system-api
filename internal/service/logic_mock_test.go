@@ -178,7 +178,7 @@ func TestBookingComplete_NonSPDPastEndDate_RecordsOvertime(t *testing.T) {
 	}
 	svc := &BookingService{q: m}
 
-	if _, err := svc.Complete(context.Background(), 42, 1, "ADMIN"); err != nil {
+	if _, err := svc.Complete(context.Background(), 42, AuditActor{UserID: 1}, "ADMIN"); err != nil {
 		t.Fatalf("Complete() returned error: %v", err)
 	}
 
@@ -206,7 +206,7 @@ func TestBookingComplete_SPD_NoOvertimeRecorded(t *testing.T) {
 	}
 	svc := &BookingService{q: m}
 
-	if _, err := svc.Complete(context.Background(), 43, 1, "ADMIN"); err != nil {
+	if _, err := svc.Complete(context.Background(), 43, AuditActor{UserID: 1}, "ADMIN"); err != nil {
 		t.Fatalf("Complete() returned error: %v", err)
 	}
 
@@ -228,7 +228,7 @@ func TestBookingComplete_NonSPDOnTime_NoOvertimeRecorded(t *testing.T) {
 	}
 	svc := &BookingService{q: m}
 
-	if _, err := svc.Complete(context.Background(), 44, 1, "ADMIN"); err != nil {
+	if _, err := svc.Complete(context.Background(), 44, AuditActor{UserID: 1}, "ADMIN"); err != nil {
 		t.Fatalf("Complete() returned error: %v", err)
 	}
 
