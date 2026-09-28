@@ -17,6 +17,7 @@
 -- correlation, so it joins like an ordinary table (also avoids the original
 -- correlated-subquery instability).
 SELECT d.*, u.name AS user_name, u."employeeId", u.email,
+       u."isActive" AS user_is_active,
        COALESCE(ap."plateNumber", '')::text AS assigned_plate
 FROM drivers d
 JOIN users u ON u.id = d."userId"
@@ -51,6 +52,7 @@ WHERE (sqlc.narg(search)::text IS NULL
 -- name: GetDriverByID :one
 -- See note on ListDrivers above.
 SELECT d.*, u.name AS user_name, u."employeeId", u.email, u."profilePhoto",
+       u."isActive" AS user_is_active,
        COALESCE(ap."plateNumber", '')::text AS assigned_plate
 FROM drivers d
 JOIN users u ON u.id = d."userId"
@@ -129,7 +131,11 @@ FROM drivers d
 JOIN users u ON u.id = d."userId"
 LEFT JOIN driver_assignments da ON da."driverId" = d.id AND da."releasedAt" IS NULL
 LEFT JOIN vehicles v ON v.id = da."vehicleId"
-WHERE d."isActive" = TRUE
+-- Dua flag aktif yang berbeda dan sama-sama harus benar: drivers."isActive"
+-- (menu Driver = "boleh ditugaskan") dan users."isActive" (menu Pengguna =
+-- "akun masih hidup"). Sebelumnya hanya flag pertama yang disaring, jadi
+-- supir yang akunnya dinonaktifkan tetap muncul saat membuat booking.
+WHERE d."isActive" = TRUE AND u."isActive" = TRUE
 ORDER BY overlapping_passengers ASC;
 
 -- name: GetDriverIDsWithActiveSpd :many

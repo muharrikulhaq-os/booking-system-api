@@ -137,6 +137,7 @@ func (q *Queries) GetDriverAssignmentHistory(ctx context.Context, driverid int32
 
 const getDriverByID = `-- name: GetDriverByID :one
 SELECT d.id, d."userId", d."licenseNumber", d."phoneNumber", d."isActive", d."createdAt", u.name AS user_name, u."employeeId", u.email, u."profilePhoto",
+       u."isActive" AS user_is_active,
        COALESCE(ap."plateNumber", '')::text AS assigned_plate
 FROM drivers d
 JOIN users u ON u.id = d."userId"
@@ -162,7 +163,10 @@ type GetDriverByIDRow struct {
 	EmployeeId    string         `json:"employeeId"`
 	Email         string         `json:"email"`
 	ProfilePhoto  sql.NullString `json:"profilePhoto"`
-	AssignedPlate string         `json:"assigned_plate"`
+	// Status akun user-nya, terpisah dari IsActive milik baris drivers -
+	// keduanya harus TRUE agar supir bisa ditugaskan.
+	UserIsActive  bool   `json:"user_is_active"`
+	AssignedPlate string `json:"assigned_plate"`
 }
 
 // See note on ListDrivers above.
@@ -180,6 +184,7 @@ func (q *Queries) GetDriverByID(ctx context.Context, id int32) (GetDriverByIDRow
 		&i.EmployeeId,
 		&i.Email,
 		&i.ProfilePhoto,
+		&i.UserIsActive,
 		&i.AssignedPlate,
 	)
 	return i, err
@@ -283,7 +288,12 @@ FROM drivers d
 JOIN users u ON u.id = d."userId"
 LEFT JOIN driver_assignments da ON da."driverId" = d.id AND da."releasedAt" IS NULL
 LEFT JOIN vehicles v ON v.id = da."vehicleId"
-WHERE d."isActive" = TRUE
+-- Dua flag aktif yang berbeda dan sama-sama harus benar: drivers."isActive"
+-- (dikelola dari menu Driver = "boleh ditugaskan") dan users."isActive"
+-- (dikelola dari menu Pengguna = "akun masih hidup"). Sebelumnya hanya flag
+-- pertama yang disaring, jadi supir yang akunnya dinonaktifkan dari menu
+-- Pengguna tetap muncul sebagai pilihan saat membuat booking.
+WHERE d."isActive" = TRUE AND u."isActive" = TRUE
 ORDER BY overlapping_passengers ASC
 `
 
@@ -337,6 +347,7 @@ func (q *Queries) ListAvailableDrivers(ctx context.Context, arg ListAvailableDri
 
 const listDrivers = `-- name: ListDrivers :many
 SELECT d.id, d."userId", d."licenseNumber", d."phoneNumber", d."isActive", d."createdAt", u.name AS user_name, u."employeeId", u.email,
+       u."isActive" AS user_is_active,
        COALESCE(ap."plateNumber", '')::text AS assigned_plate
 FROM drivers d
 JOIN users u ON u.id = d."userId"
@@ -388,7 +399,9 @@ type ListDriversRow struct {
 	UserName      string    `json:"user_name"`
 	EmployeeId    string    `json:"employeeId"`
 	Email         string    `json:"email"`
-	AssignedPlate string    `json:"assigned_plate"`
+	// Lihat catatan pada GetDriverByIDRow.UserIsActive.
+	UserIsActive  bool   `json:"user_is_active"`
+	AssignedPlate string `json:"assigned_plate"`
 }
 
 // assigned_plate: sqlc v1.31.1's nullability inference for anything but a
@@ -428,6 +441,7 @@ func (q *Queries) ListDrivers(ctx context.Context, arg ListDriversParams) ([]Lis
 			&i.UserName,
 			&i.EmployeeId,
 			&i.Email,
+			&i.UserIsActive,
 			&i.AssignedPlate,
 		); err != nil {
 			return nil, err

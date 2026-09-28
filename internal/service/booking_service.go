@@ -439,6 +439,14 @@ func (s *BookingService) Create(ctx context.Context, req CreateBookingRequest, a
 			vehicleID = sql.NullInt32{Int32: vid, Valid: true}
 		}
 	case req.DriverID != nil:
+		// Supir pilihan pemohon wajib divalidasi di sini: daftar pilihan di FE
+		// sudah menyaring supir non-aktif, tapi driverId datang dari request
+		// jadi tanpa cek ini booking masih bisa dibuat untuk supir yang
+		// sudah dinonaktifkan (baik dari menu Driver maupun menu Pengguna).
+		drv, dErr := s.q.GetDriverByID(ctx, *req.DriverID)
+		if dErr != nil || !drv.IsActive || !drv.UserIsActive {
+			return nil, util.NewError(400, "supir yang dipilih tidak aktif", util.ErrBadRequest)
+		}
 		driverID = sql.NullInt32{Int32: *req.DriverID, Valid: true}
 		explicitDriverPick = true
 		// Supir yang sudah "memegang" kendaraan (punya booking aktif) → pakai
@@ -835,9 +843,12 @@ func (s *BookingService) AssignVehicle(ctx context.Context, id int32, req Assign
 		return nil, util.NewError(400, "assignment only applies to vehicle bookings", util.ErrBadRequest)
 	}
 
+	// Dua flag aktif yang harus sama-sama benar - lihat catatan di
+	// ListAvailableDrivers. Sebelumnya hanya driver.IsActive yang dicek, jadi
+	// supir yang akunnya dinonaktifkan dari menu Pengguna masih bisa ditugaskan.
 	driver, err := s.q.GetDriverByID(ctx, req.DriverID)
-	if err != nil || !driver.IsActive {
-		return nil, util.NewError(404, "active driver not found", util.ErrNotFound)
+	if err != nil || !driver.IsActive || !driver.UserIsActive {
+		return nil, util.NewError(404, "supir aktif tidak ditemukan", util.ErrNotFound)
 	}
 
 	vehicle, err := s.q.GetVehicleByID(ctx, req.VehicleID)

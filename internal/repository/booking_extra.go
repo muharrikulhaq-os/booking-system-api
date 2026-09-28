@@ -357,8 +357,12 @@ func (q *Queries) GetFreeDriver(ctx context.Context) (int32, error) {
 	var id int32
 	err := q.db.QueryRowContext(ctx, `
 		SELECT d.id FROM drivers d
+		JOIN users u ON u.id = d."userId"
 		LEFT JOIN driver_assignments da ON da."driverId" = d.id AND da."releasedAt" IS NULL
-		WHERE d."isActive" = TRUE AND da.id IS NULL
+		-- users."isActive" ikut disaring: auto-pick tidak boleh menjatuhkan
+		-- booking ke supir yang akunnya sudah dinonaktifkan (lihat catatan
+		-- dua-flag di ListAvailableDrivers).
+		WHERE d."isActive" = TRUE AND u."isActive" = TRUE AND da.id IS NULL
 		ORDER BY d.id ASC LIMIT 1`).Scan(&id)
 	return id, err
 }

@@ -48,6 +48,12 @@ func serializeDriverRow(d repository.ListDriversRow, fixedVehicle any) map[strin
 		"licenseNumber": d.LicenseNumber,
 		"phoneNumber":   d.PhoneNumber,
 		"isActive":      d.IsActive,
+		// Status akun user-nya. Ada DUA flag terpisah: isActive (menu Driver,
+		// "boleh ditugaskan") dan userIsActive (menu Pengguna, "akun hidup").
+		// Keduanya harus true agar supir bisa dipilih di booking, jadi status
+		// akun ikut dikirim supaya UI bisa menjelaskan kenapa seorang supir
+		// tidak muncul sebagai pilihan meski di daftar driver tampak aktif.
+		"userIsActive":  d.UserIsActive,
 		"assignedPlate": plate,
 		// Kendaraan tetap milik supir ini (vehicles.fixedDriverId) - beda
 		// dari assignedPlate yang mengikuti booking aktif, ini permanen
@@ -74,6 +80,8 @@ func serializeDriverByID(d repository.GetDriverByIDRow, fixedVehicle any) map[st
 		"licenseNumber": d.LicenseNumber,
 		"phoneNumber":   d.PhoneNumber,
 		"isActive":      d.IsActive,
+		// Lihat catatan di serializeDriverRow.
+		"userIsActive":  d.UserIsActive,
 		"assignedPlate": plate,
 		"fixedVehicle":  fixedVehicle,
 	}
