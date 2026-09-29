@@ -19,14 +19,27 @@ const (
 	TopicMaintenance = "maintenance"
 )
 
+const (
+	// HeaderDataChanged ada di respons request tulis yang sukses, berisi topik
+	// yang berubah (dipisah koma) — klien pengirim meng-invalidate datanya
+	// sendiri seketika tanpa menunggu WebSocket.
+	HeaderDataChanged = "X-Data-Changed"
+	// HeaderClientID dikirim klien (id acak per tab/aplikasi) dan diteruskan
+	// sebagai `origin` di event DATA_CHANGED, supaya pengirim bisa
+	// mengabaikan event miliknya sendiri (sudah ditangani lewat header di
+	// atas) dan tidak fetch dua kali.
+	HeaderClientID = "X-Client-Id"
+)
+
 // DataChanged memanggil publish setelah request TULIS (POST/PUT/PATCH/DELETE)
-// sukses, dengan topik data yang berubah. Klien memakainya untuk memuat ulang
-// hanya data yang memang berubah — tanpa polling.
+// sukses, dengan topik data yang berubah dan id klien pengirimnya. Klien
+// memakainya untuk memuat ulang hanya data yang memang berubah — tanpa
+// polling.
 //
 // Topik yang dikirim adalah data yang DITULIS langsung; data turunan (mis.
 // status kendaraan ikut berubah saat booking dimulai) ditangani klien yang
 // bergantung pada topik tersebut.
-func DataChanged(publish func(topics []string)) fiber.Handler {
+func DataChanged(publish func(topics []string, origin string)) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		if err := c.Next(); err != nil {
 			return err // gagal → tidak ada data yang berubah
@@ -40,10 +53,27 @@ func DataChanged(publish func(topics []string)) fiber.Handler {
 			return nil
 		}
 		if topics := TopicsForPath(c.Path()); len(topics) > 0 {
-			publish(topics)
+			c.Set(HeaderDataChanged, strings.Join(topics, ","))
+			publish(topics, clientID(c.Get(HeaderClientID)))
 		}
 		return nil
 	}
+}
+
+// clientID menerima id klien hanya bila berbentuk token pendek yang aman
+// (huruf, angka, '-', '_'); selain itu dianggap tidak ada.
+func clientID(v string) string {
+	if v == "" || len(v) > 64 {
+		return ""
+	}
+	for _, r := range v {
+		ok := r == '-' || r == '_' ||
+			(r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9')
+		if !ok {
+			return ""
+		}
+	}
+	return v
 }
 
 // TopicsForPath memetakan path request tulis ke topik data yang berubah.

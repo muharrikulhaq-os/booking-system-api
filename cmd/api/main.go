@@ -42,8 +42,10 @@ func main() {
 	app.Use(fiberlog.New())
 	app.Use(cors.New(cors.Config{
 		AllowOrigins: config.C.FrontendOrigin,
-		AllowHeaders: "Origin, Content-Type, Accept, Authorization",
+		AllowHeaders: "Origin, Content-Type, Accept, Authorization, X-Client-Id",
 		AllowMethods: "GET, POST, PUT, PATCH, DELETE, OPTIONS",
+		// Dibaca frontend (lintas origin saat dev) untuk invalidasi lokal.
+		ExposeHeaders: "X-Data-Changed",
 	}))
 
 	// health check
@@ -65,8 +67,12 @@ func main() {
 
 	// Setiap request tulis yang sukses → event DATA_CHANGED ke semua klien,
 	// supaya web & mobile memuat ulang HANYA data yang berubah (tanpa polling).
-	app.Use(middleware.DataChanged(func(topics []string) {
-		wsHub.SendToAll(fiber.Map{"type": "DATA_CHANGED", "topics": topics})
+	app.Use(middleware.DataChanged(func(topics []string, origin string) {
+		msg := fiber.Map{"type": "DATA_CHANGED", "topics": topics}
+		if origin != "" {
+			msg["origin"] = origin
+		}
+		wsHub.SendToAll(msg)
 	}))
 
 	// init services
