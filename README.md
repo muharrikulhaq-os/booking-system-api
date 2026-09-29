@@ -50,6 +50,15 @@ ws.onmessage = function(event) {
 - `NEW_BOOKING`: Diterima oleh Driver saat ditugaskan ke booking baru (saat booking di-approve atau re-assign).
 - `BOOKING_APPROVED`: Diterima oleh User saat booking mereka disetujui oleh Admin.
 
+**Event sinkronisasi data — `DATA_CHANGED` (ke SEMUA klien):**
+Setiap request tulis (`POST/PUT/PATCH/DELETE`) yang sukses mengirim sinyal ringan tanpa isi data:
+```json
+{ "type": "DATA_CHANGED", "topics": ["vehicle"] }
+```
+Klien cukup memuat ulang data yang bergantung pada topik tersebut (padanan `invalidateQueries`), tanpa polling. Topik: `booking`, `vehicle`, `room`, `driver`, `user`, `roomKeeper`, `fuel`, `maintenance` — pemetaan path → topik ada di `internal/middleware/data_changed.go`. Topik = data yang ditulis langsung; data turunan (mis. status kendaraan saat booking dimulai) ditangani klien yang bergantung pada topik `booking`.
+
+> Setiap pesan WebSocket dikirim sebagai **satu frame berisi satu objek JSON**.
+
 ---
 
 ### REST API Success Response

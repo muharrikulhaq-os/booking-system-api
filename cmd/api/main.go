@@ -63,6 +63,12 @@ func main() {
 	wsHub := ws.NewHub()
 	go wsHub.Run()
 
+	// Setiap request tulis yang sukses → event DATA_CHANGED ke semua klien,
+	// supaya web & mobile memuat ulang HANYA data yang berubah (tanpa polling).
+	app.Use(middleware.DataChanged(func(topics []string) {
+		wsHub.SendToAll(fiber.Map{"type": "DATA_CHANGED", "topics": topics})
+	}))
+
 	// init services
 	authSvc := service.NewAuthService(db)
 	userSvc := service.NewUserService(db)
