@@ -3,6 +3,7 @@ package middleware
 import (
 	"net/http/httptest"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/gofiber/fiber/v2"
@@ -96,5 +97,50 @@ func TestDataChanged_PublishesOnlySuccessfulWrites(t *testing.T) {
 	want := [][]string{{TopicBooking}}
 	if !reflect.DeepEqual(published, want) {
 		t.Errorf("published = %v, want %v", published, want)
+	}
+}
+
+func TestClientID(t *testing.T) {
+	long := strings.Repeat("a", 64)
+	cases := map[string]string{
+		"":                      "",
+		"abc-DEF_123":           "abc-DEF_123",
+		long:                    long,
+		long + "a":              "", // > 64
+		"a b":                   "",
+		"a/b":                   "",
+		"ä":                     "",
+		"550e8400-e29b-41d4-a7": "550e8400-e29b-41d4-a7",
+	}
+	for in, want := range cases {
+		if got := clientID(in); got != want {
+			t.Errorf("clientID(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+func TestDataChanged_HeaderOnlyOnSuccessfulWrites(t *testing.T) {
+	app := fiber.New()
+	app.Use(DataChanged(func([]string, string) {}))
+	app.Get("/api/v1/vehicles", func(c *fiber.Ctx) error { return c.SendStatus(200) })
+	app.Delete("/api/v1/vehicles/1", func(c *fiber.Ctx) error { return c.SendStatus(204) })
+	app.Post("/api/v1/bookings", func(c *fiber.Ctx) error {
+		return fiber.NewError(fiber.StatusConflict, "bentrok")
+	})
+	app.Post("/api/v1/auth/login", func(c *fiber.Ctx) error { return c.SendStatus(200) })
+
+	for _, tc := range []struct{ method, path, want string }{
+		{"GET", "/api/v1/vehicles", ""},
+		{"DELETE", "/api/v1/vehicles/1", TopicVehicle},
+		{"POST", "/api/v1/bookings", ""},   // error → tidak ada perubahan
+		{"POST", "/api/v1/auth/login", ""}, // bukan data bersama
+	} {
+		resp, err := app.Test(httptest.NewRequest(tc.method, tc.path, nil))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := resp.Header.Get(HeaderDataChanged); got != tc.want {
+			t.Errorf("%s %s: %s = %q, want %q", tc.method, tc.path, HeaderDataChanged, got, tc.want)
+		}
 	}
 }
