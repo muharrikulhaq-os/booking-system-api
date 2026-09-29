@@ -40,10 +40,39 @@ func TestTopicsForPath(t *testing.T) {
 	}
 }
 
+func TestDataChanged_HeaderAndOrigin(t *testing.T) {
+	var origins []string
+	app := fiber.New()
+	app.Use(DataChanged(func(_ []string, origin string) { origins = append(origins, origin) }))
+	app.Patch("/api/v1/bookings/1/start", func(c *fiber.Ctx) error { return c.SendStatus(200) })
+
+	req := httptest.NewRequest("PATCH", "/api/v1/bookings/1/start", nil)
+	req.Header.Set(HeaderClientID, "tab-3f2a_9")
+	resp, err := app.Test(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := resp.Header.Get(HeaderDataChanged); got != TopicBooking {
+		t.Errorf("%s = %q, want %q", HeaderDataChanged, got, TopicBooking)
+	}
+
+	// Id klien yang tidak aman diabaikan (origin kosong).
+	req = httptest.NewRequest("PATCH", "/api/v1/bookings/1/start", nil)
+	req.Header.Set(HeaderClientID, `"><script>`)
+	if _, err := app.Test(req); err != nil {
+		t.Fatal(err)
+	}
+
+	want := []string{"tab-3f2a_9", ""}
+	if !reflect.DeepEqual(origins, want) {
+		t.Errorf("origins = %q, want %q", origins, want)
+	}
+}
+
 func TestDataChanged_PublishesOnlySuccessfulWrites(t *testing.T) {
 	var published [][]string
 	app := fiber.New()
-	app.Use(DataChanged(func(topics []string) { published = append(published, topics) }))
+	app.Use(DataChanged(func(topics []string, _ string) { published = append(published, topics) }))
 	app.Post("/api/v1/bookings", func(c *fiber.Ctx) error { return c.SendStatus(201) })
 	app.Get("/api/v1/bookings", func(c *fiber.Ctx) error { return c.SendStatus(200) })
 	app.Patch("/api/v1/vehicles/1/status", func(c *fiber.Ctx) error {
