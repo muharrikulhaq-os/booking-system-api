@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"time"
 
 	"booking-system-api/internal/repository"
 	"booking-system-api/internal/util"
@@ -50,7 +51,9 @@ func (s *MasterSettingService) ListFuelPrices(ctx context.Context) (any, error) 
 				Grade:        grade,
 				PricePerUnit: price,
 				Unit:         r.Unit.String,
-				UpdatedAt:    r.UpdatedAt.Format("2006-01-02T15:04:05Z"),
+				// Dulu Format("...Z") pada waktu ber-zona lokal: jam WIB
+				// ditempeli huruf Z sehingga terbaca 7 jam lebih maju.
+				UpdatedAt: r.UpdatedAt.UTC().Format(time.RFC3339),
 			})
 		}
 	}

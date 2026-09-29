@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"log"
+	"time"
 
 	"booking-system-api/internal/config"
 	httph "booking-system-api/internal/delivery/http"
@@ -17,6 +18,12 @@ import (
 )
 
 func main() {
+	// Semua time.Time yang keluar sebagai JSON diserialisasi dalam UTC ("Z"),
+	// apa pun zona waktu OS server. Logika hari/bulan/jam kerja memakai
+	// util.WIB secara eksplisit — lihat internal/util/timezone.go. Harus
+	// menjadi pernyataan pertama, sebelum ada nilai waktu yang dibuat.
+	time.Local = time.UTC
+
 	config.Load()
 	repository.Connect(config.C.DatabaseURL)
 	defer repository.DB.Close()

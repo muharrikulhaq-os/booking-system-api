@@ -617,8 +617,12 @@ func effectiveConflictWindow(bookingType repository.BookingType, start, end time
 	if bookingType != repository.BookingTypeSPD {
 		return start, end
 	}
-	dayStart := time.Date(start.Year(), start.Month(), start.Day(), 0, 0, 0, 0, start.Location())
-	dayEnd := time.Date(end.Year(), end.Month(), end.Day(), 0, 0, 0, 0, end.Location()).AddDate(0, 0, 1)
+	// Hari kalender WIB, bukan zona nilai yang masuk. Dulu dipotong di
+	// start.Location(): klien yang mengirim UTC ("Z", mis. mobile) mendapat
+	// "hari" 07:00–07:00 WIB, sedangkan klien yang mengirim +07:00 (web)
+	// mendapat 00:00–24:00 — aturan yang sama berperilaku beda per klien.
+	dayStart := util.StartOfDayWIB(start)
+	dayEnd := util.StartOfDayWIB(end).AddDate(0, 0, 1)
 	return dayStart, dayEnd
 }
 

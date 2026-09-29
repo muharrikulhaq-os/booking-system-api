@@ -1,17 +1,38 @@
 package http
 
 import (
+	"database/sql"
 	"fmt"
 	"reflect"
 	"time"
 
 	"booking-system-api/internal/service"
+	"booking-system-api/internal/util"
 	"github.com/gofiber/fiber/v2"
 	"github.com/xuri/excelize/v2"
 )
 
 type ExcelHandler struct {
 	svc *service.ReportService
+}
+
+// excelCellValue menyiapkan nilai sebelum ditulis ke sel. Excel tidak punya
+// zona waktu: excelize menulis JAM DINDING menurut zona time.Time itu sendiri,
+// sedangkan proses API berjalan dengan time.Local = UTC (lihat
+// internal/util/timezone.go). Tanpa konversi ini jam di file Excel mundur
+// 7 jam dari WIB. sql.NullTime juga dibuka supaya tidak tertulis sebagai
+// struct mentah.
+func excelCellValue(v any) any {
+	switch t := v.(type) {
+	case time.Time:
+		return t.In(util.WIB)
+	case sql.NullTime:
+		if !t.Valid {
+			return ""
+		}
+		return t.Time.In(util.WIB)
+	}
+	return v
 }
 
 func NewExcelHandler(svc *service.ReportService) *ExcelHandler {
@@ -43,7 +64,7 @@ func (h *ExcelHandler) ExportExcel(c *fiber.Ctx) error {
 					row := v.Index(r)
 					for i, k := range keys {
 						cell, _ := excelize.CoordinatesToCellName(i+1, r+2)
-						f.SetCellValue(sheetName, cell, row.MapIndex(k).Interface())
+						f.SetCellValue(sheetName, cell, excelCellValue(row.MapIndex(k).Interface()))
 					}
 					numRows++
 				}
@@ -56,7 +77,7 @@ func (h *ExcelHandler) ExportExcel(c *fiber.Ctx) error {
 					row := v.Index(r)
 					for c := 0; c < row.NumField(); c++ {
 						cell, _ := excelize.CoordinatesToCellName(c+1, r+2)
-						f.SetCellValue(sheetName, cell, row.Field(c).Interface())
+						f.SetCellValue(sheetName, cell, excelCellValue(row.Field(c).Interface()))
 					}
 					numRows++
 				}
@@ -69,7 +90,7 @@ func (h *ExcelHandler) ExportExcel(c *fiber.Ctx) error {
 				cellKey, _ := excelize.CoordinatesToCellName(1, r+2)
 				cellVal, _ := excelize.CoordinatesToCellName(2, r+2)
 				f.SetCellValue(sheetName, cellKey, k.String())
-				f.SetCellValue(sheetName, cellVal, v.MapIndex(k).Interface())
+				f.SetCellValue(sheetName, cellVal, excelCellValue(v.MapIndex(k).Interface()))
 				numRows++
 			}
 		}
