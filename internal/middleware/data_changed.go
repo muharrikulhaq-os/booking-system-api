@@ -62,7 +62,19 @@ func DataChanged(publish func(topics []string, origin string)) fiber.Handler {
 
 // clientID menerima id klien hanya bila berbentuk token pendek yang aman
 // (huruf, angka, '-', '_'); selain itu dianggap tidak ada.
+//
+// Nilai yang dikembalikan adalah SALINAN: string dari c.Get() di Fiber
+// menunjuk ke buffer fasthttp yang dipakai ulang request berikutnya, jadi
+// tanpa salinan origin yang dipakai di luar handler bisa berubah isi.
 func clientID(v string) string {
+	v = safeClientID(v)
+	if v == "" {
+		return ""
+	}
+	return strings.Clone(v)
+}
+
+func safeClientID(v string) string {
 	if v == "" || len(v) > 64 {
 		return ""
 	}
