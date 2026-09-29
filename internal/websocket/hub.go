@@ -54,7 +54,9 @@ func (h *Hub) Run() {
 			}
 			h.mu.Unlock()
 		case message := <-h.Broadcast:
-			h.mu.RLock()
+			// Lock penuh (bukan RLock): client yang buffernya penuh dihapus
+			// dari map di dalam loop ini.
+			h.mu.Lock()
 			for client := range h.Clients {
 				select {
 				case client.Send <- message:
@@ -63,7 +65,27 @@ func (h *Hub) Run() {
 					delete(h.Clients, client)
 				}
 			}
-			h.mu.RUnlock()
+			h.mu.Unlock()
+		}
+	}
+}
+
+// SendToAll mengirim pesan ke SEMUA client yang terhubung (mis. event
+// DATA_CHANGED). Non-blocking: client yang buffernya penuh dilewati.
+func (h *Hub) SendToAll(message interface{}) {
+	b, err := json.Marshal(message)
+	if err != nil {
+		log.Printf("Error marshaling WS message: %v", err)
+		return
+	}
+
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	for client := range h.Clients {
+		select {
+		case client.Send <- b:
+		default:
+			// Buffer full or closed
 		}
 	}
 }
@@ -145,20 +167,10 @@ func (c *Client) WritePump() {
 				return
 			}
 
-			w, err := c.Conn.NextWriter(websocket.TextMessage)
-			if err != nil {
-				return
-			}
-			w.Write(message)
-
-			// Add queued chat messages to the current websocket message.
-			n := len(c.Send)
-			for i := 0; i < n; i++ {
-				w.Write([]byte{'\n'})
-				w.Write(<-c.Send)
-			}
-
-			if err := w.Close(); err != nil {
+			// Satu pesan JSON = satu frame. Klien mem-parse tiap frame sebagai
+			// satu objek JSON; menggabungkan pesan antrean dengan '\n' ke satu
+			// frame membuat semuanya gagal di-parse (pesan hilang).
+			if err := c.Conn.WriteMessage(websocket.TextMessage, message); err != nil {
 				return
 			}
 		case <-ticker.C:
