@@ -54,7 +54,8 @@ func (h *BookingHandler) Register(r fiber.Router) {
 	g.Get("/room-keepers/:room_keeper_id/ratings", h.GetRoomRatings)
 	g.Get("/:id", h.GetByID)
 	g.Post("", adminOrEmployee, h.Create)
-	g.Patch("/:id/cancel", h.Cancel)
+	// Pembuat booking hanya ADMIN/EMPLOYEE; kepemilikan dicek di Cancel().
+	g.Patch("/:id/cancel", adminOrEmployee, h.Cancel)
 	g.Post("/:id/approve", admin, h.Approve)
 	g.Post("/:id/reject", admin, h.Reject)
 	g.Patch("/:id/substitute-resource", admin, h.SubstituteResource)

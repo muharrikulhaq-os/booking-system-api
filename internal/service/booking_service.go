@@ -540,7 +540,9 @@ func (s *BookingService) Cancel(ctx context.Context, id int32, actor AuditActor,
 	if err != nil {
 		return nil, util.ErrNotFound
 	}
-	if role == "EMPLOYEE" && int(b.UserId) != userID {
+	// Hanya pemilik booking atau admin. Dulu cek pemilik hanya untuk
+	// EMPLOYEE, sehingga DRIVER/ROOM_KEEPER bisa membatalkan booking orang lain.
+	if role != "ADMIN" && int(b.UserId) != userID {
 		return nil, util.ErrForbidden
 	}
 	if b.Status != repository.BookingStatusPENDING {

@@ -143,49 +143,7 @@ Mengecek status aplikasi dan koneksi database.
 
 ## 🔐 Modul 1 — Autentikasi (`/api/v1/auth`)
 
-### `POST /api/v1/auth/register`
-Mendaftarkan akun pengguna baru.
-
-**Akses:** Public
-
-**Request Body:**
-```json
-{
-  "employeeId": "EMP-001",
-  "name": "Budi Santoso",
-  "email": "budi@example.com",
-  "password": "password123",
-  "roleId": 2,
-  "departmentId": 3
-}
-```
-
-| Field | Type | Required | Keterangan |
-|-------|------|----------|-----------|
-| `employeeId` | string | ✅ | ID karyawan unik |
-| `name` | string | ✅ | Nama lengkap |
-| `email` | string | ✅ | Format email valid |
-| `password` | string | ✅ | Minimal 8 karakter |
-| `roleId` | integer | ✅ | ID role (dari `/users/roles`) |
-| `departmentId` | integer | ✅ | ID departemen (dari `/users/departments`) |
-
-**Response `201`:**
-```json
-{
-  "success": true,
-  "message": "Registration successful",
-  "data": {
-    "id": 1,
-    "employeeId": "EMP-001",
-    "name": "Budi Santoso",
-    "email": "budi@example.com",
-    "role": { "id": 2, "name": "USER" },
-    "department": { "id": 3, "name": "Operations" },
-    "isActive": true,
-    "createdAt": "2025-05-26T10:00:00Z"
-  }
-}
-```
+> 🔒 **Tidak ada pendaftaran publik** (dihapus 2026-09-30): akun hanya dibuat admin lewat `POST /api/v1/users`. Endpoint lama `POST /auth/register` menerima `roleId` apa pun sehingga siapa pun bisa membuat akun ADMIN.
 
 ---
 
