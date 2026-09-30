@@ -228,6 +228,14 @@ func (s *BookingService) sweepStaleBookings(ctx context.Context) int {
 	expired, _ := s.q.MarkExpiredBookings(ctx) // APPROVED + endDate lewat, tidak pernah dimulai → EXPIRED
 	ignored, _ := s.q.MarkIgnoredBookings(ctx) // PENDING + endDate lewat, admin tidak merespons → IGNORED
 
+	// Booking yang hangus tidak lagi aktif → supirnya dilepas (B4: dulu supir
+	// tertahan "memegang" kendaraan selamanya setelah booking EXPIRED).
+	var drivers []sql.NullInt32
+	for _, b := range append(expired, ignored...) {
+		drivers = append(drivers, b.AssignedDriverId)
+	}
+	syncDriverHolds(ctx, s.q, drivers...)
+
 	total := 0
 	for _, sw := range []sweep{
 		{overdue, "OVERDUE", "Booking belum diselesaikan setelah waktu selesai terlewati"},
@@ -687,6 +695,16 @@ func (s *BookingService) Approve(ctx context.Context, id int32, req ApproveBooki
 				util.ErrConflict)
 		}
 	}
+	// Satu supir tidak boleh disetujui untuk dua perjalanan yang jamnya
+	// bertumpuk (supir otomatis saat Create bisa saja sudah dipakai booking
+	// lain yang disetujui lebih dulu).
+	if b.AssignedDriverId.Valid {
+		if dc, derr := s.hasDriverConflict(ctx, b.AssignedDriverId.Int32, b); derr == nil && dc {
+			return ApproveBookingResponse{}, util.NewError(409,
+				"supir ini sudah ditugaskan di booking lain yang bentrok jadwalnya - pilih supir lain atau gabungkan (merge) sebelum menyetujui",
+				util.ErrConflict)
+		}
+	}
 
 	// SPD day-exclusivity - hard block, tanpa opsi merge (beda dari
 	// pengecekan di atas). Jaring pengaman kedua: Create()/AssignVehicle()
@@ -744,18 +762,8 @@ func (s *BookingService) Approve(ctx context.Context, id int32, req ApproveBooki
 		return ApproveBookingResponse{}, err
 	}
 
-	// Kepemilikan kendaraan mengikuti siklus booking: begitu booking disetujui,
-	// supir "memegang" kendaraan booking ini bila belum punya penugasan aktif.
-	// (Supir yang sudah punya kendaraan = sedang aktif di booking lain / hasil merge,
-	// jadi jangan ditimpa.) Penugasan ini dilepas lagi saat booking selesai.
-	if b.AssignedDriverId.Valid && b.AssignedVehicleId.Valid {
-		if _, aerr := s.q.GetDriverCurrentAssignment(ctx, b.AssignedDriverId.Int32); aerr != nil {
-			_, _ = s.q.AssignDriverToVehicle(ctx, repository.AssignDriverToVehicleParams{
-				DriverId:  b.AssignedDriverId.Int32,
-				VehicleId: b.AssignedVehicleId.Int32,
-			})
-		}
-	}
+	// Kepemilikan kendaraan mengikuti booking aktif supir (lihat syncDriverHold).
+	syncDriverHolds(ctx, s.q, b.AssignedDriverId)
 
 	_, _ = s.q.CreateApprovalLog(ctx, repository.CreateApprovalLogParams{
 		BookingId:  id,
@@ -871,6 +879,9 @@ func (s *BookingService) AssignVehicle(ctx context.Context, id int32, req Assign
 	if count > 0 {
 		return nil, util.NewError(409, "vehicle is already assigned to another booking in this period", util.ErrConflict)
 	}
+	if dc, derr := s.hasDriverConflict(ctx, req.DriverID, b); derr == nil && dc {
+		return nil, util.NewError(409, "supir ini sudah ditugaskan di booking lain yang bentrok jadwalnya", util.ErrConflict)
+	}
 
 	// SPD day-exclusivity - lihat vehicleSpdConflict/driverSpdConflict.
 	// Cek terpisah dari CheckVehicleConflict di atas karena itu jam-presisi
@@ -892,6 +903,9 @@ func (s *BookingService) AssignVehicle(ctx context.Context, id int32, req Assign
 	if err = s.q.AssignVehicleAndUpdateResource(ctx, id, req.DriverID, req.VehicleID, vehicle.ResourceId); err != nil {
 		return nil, err
 	}
+	// Supir lama melepas / pindah ke booking aktif berikutnya; supir baru
+	// memegang kendaraan ini (B5 — dulu catatan penugasan tidak ikut berubah).
+	syncDriverHolds(ctx, s.q, b.AssignedDriverId, sql.NullInt32{Int32: req.DriverID, Valid: true})
 
 	isReassigned := vehicle.ResourceId != b.ResourceId
 	desc := "Supir dan kendaraan ditugaskan ke booking"
@@ -1010,6 +1024,8 @@ func (s *BookingService) Start(ctx context.Context, id int32, odometer *int32, l
 	}
 	logAudit(ctx, s.q, actor, "START", "Booking", id, startDesc)
 	s.syncMergedBookingStatus(ctx, id, repository.BookingStatusONGOING, actor)
+	// Trip yang berjalan menjadi kendaraan yang dipegang supir.
+	syncDriverHolds(ctx, s.q, b.AssignedDriverId)
 
 	full, _ := s.q.GetBookingByID(ctx, id)
 	// Notifikasi: perjalanan dimulai → pemohon.
@@ -1155,15 +1171,9 @@ func (s *BookingService) Complete(ctx context.Context, id int32, actor AuditActo
 	// pasangannya (bukan status ONGOING lama yang bikin supir tidak dilepas).
 	s.syncMergedBookingStatus(ctx, id, repository.BookingStatusCOMPLETED, actor)
 
-	// Lepas kepemilikan kendaraan supir bila ia tak punya booking aktif lain.
-	// (Kalau masih ada booking APPROVED/ONGOING lain — mis. hasil merge di
-	// kendaraan yang sama yang belum ikut selesai — kepemilikan dipertahankan.)
-	if b.AssignedDriverId.Valid {
-		other, _ := s.q.CountActiveBookingsByDriver(ctx, b.AssignedDriverId.Int32, b.ID)
-		if other == 0 {
-			_ = s.q.ReleaseDriver(ctx, b.AssignedDriverId.Int32)
-		}
-	}
+	// Lepas kepemilikan kendaraan supir bila ia tak punya booking aktif lain;
+	// kalau masih ada, pegangan pindah ke booking aktif berikutnya.
+	syncDriverHolds(ctx, s.q, b.AssignedDriverId)
 
 	full, _ := s.q.GetBookingByID(ctx, id)
 	// Notifikasi penyelesaian + overtime.
@@ -1502,10 +1512,14 @@ func (s *BookingService) SubstituteResource(ctx context.Context, id int32, req S
 		return nil, util.NewError(409, "new resource has a schedule conflict in this period", util.ErrConflict)
 	}
 
-	if _, err = s.q.UpdateBookingResource(ctx, repository.UpdateBookingResourceParams{
-		ID:         id,
-		ResourceId: req.ResourceID,
-	}); err != nil {
+	// Kendaraan yang ditugaskan ikut pindah & asal dicatat (B6: dulu hanya
+	// resourceId yang berubah — supir memegang dan bentrok dicek di kendaraan
+	// lama, penanda "Dialihkan" kosong).
+	var newVehicleID sql.NullInt32
+	if vid, verr := s.q.GetVehicleIDByResourceID(ctx, req.ResourceID); verr == nil {
+		newVehicleID = sql.NullInt32{Int32: vid, Valid: true}
+	}
+	if err = s.q.SubstituteBookingResource(ctx, id, req.ResourceID, newVehicleID); err != nil {
 		return nil, err
 	}
 
@@ -1643,6 +1657,9 @@ func (s *BookingService) MergeBookings(ctx context.Context, primaryID int32, req
 		}
 	}
 
+	// Supir utama SEBELUM (mungkin) diganti — ikut diselaraskan setelah merge.
+	origPrimaryDriver := primary.AssignedDriverId
+
 	// Update primary booking's driver if requested
 	if req.DriverID != nil {
 		driverID := sql.NullInt32{Int32: *req.DriverID, Valid: true}
@@ -1696,6 +1713,9 @@ func (s *BookingService) MergeBookings(ctx context.Context, primaryID int32, req
 	if err != nil {
 		return nil, err
 	}
+	// Supir lama booking target (bila sudah APPROVED) atau supir utama yang
+	// diganti bisa kehilangan booking aktifnya → selaraskan pegangannya.
+	syncDriverHolds(ctx, s.q, target.AssignedDriverId, origPrimaryDriver, primary.AssignedDriverId)
 
 	desc := "Booking digabung dengan #" + itoa(req.TargetBookingID)
 	if req.Reason != "" {
