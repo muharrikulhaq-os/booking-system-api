@@ -131,7 +131,7 @@ SET status = 'COMPLETED', "returnedAt" = NOW(), "updatedAt" = NOW()
 WHERE id = $1 RETURNING *;
 
 -- name: CancelBooking :one
-UPDATE bookings SET status = 'CANCELLED', "updatedAt" = NOW() WHERE id = $1 RETURNING *;
+UPDATE bookings SET status = 'CANCELLED', "updatedAt" = NOW() WHERE id = $1 AND status IN ('PENDING', 'APPROVED') RETURNING *;
 
 -- name: CheckBookingConflict :one
 SELECT COUNT(*) FROM bookings

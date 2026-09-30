@@ -98,6 +98,12 @@ func main() {
 	publishSystemChange := func(topics ...string) {
 		wsHub.SendToAll(fiber.Map{"type": "DATA_CHANGED", "topics": topics})
 	}
+	// Token akun yang dinonaktifkan / diubah role-nya langsung tidak berlaku (AU-05b).
+	accountQ := repository.New(db)
+	middleware.SetAccountLookup(func(ctx context.Context, userID int) (middleware.AccountState, error) {
+		active, role, err := accountQ.GetAccountState(ctx, int32(userID))
+		return middleware.AccountState{Active: active, Role: role}, err
+	})
 	bookingSvc.SetPublisher(publishSystemChange)
 	vehicleSvc.SetPublisher(publishSystemChange)
 	dashboardSvc.SetBeforeRead(bookingSvc.SweepNow)

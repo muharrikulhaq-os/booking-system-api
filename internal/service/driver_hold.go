@@ -4,8 +4,10 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"strings"
 
 	"booking-system-api/internal/repository"
+	"booking-system-api/internal/util"
 )
 
 // syncDriverHold menyelaraskan driver_assignments ("supir memegang kendaraan")
@@ -73,4 +75,23 @@ func (s *BookingService) hasDriverConflict(ctx context.Context, driverID int32, 
 		}
 	}
 	return false, nil
+}
+
+// driverStillAssigned menolak penonaktifan supir yang masih punya booking
+// APPROVED/berjalan (DU-03): admin memindahkan booking itu ke supir lain dulu.
+func driverStillAssigned(ctx context.Context, q repository.ExtendedQuerier, driverID int32) error {
+	ids, err := q.ListDriverActiveBookingIDs(ctx, driverID)
+	if err != nil {
+		return err
+	}
+	if len(ids) == 0 {
+		return nil
+	}
+	list := make([]string, len(ids))
+	for i, id := range ids {
+		list[i] = "#" + itoa(id)
+	}
+	return util.NewError(409,
+		"supir ini masih ditugaskan di booking "+strings.Join(list, ", ")+" - pindahkan ke supir lain dulu sebelum dinonaktifkan",
+		util.ErrConflict)
 }

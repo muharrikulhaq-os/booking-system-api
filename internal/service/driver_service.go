@@ -173,6 +173,11 @@ func (s *DriverService) ToggleActive(ctx context.Context, id int32, actor AuditA
 	if err != nil {
 		return nil, util.ErrNotFound
 	}
+	if d.IsActive {
+		if err := driverStillAssigned(ctx, s.q, id); err != nil {
+			return nil, err
+		}
+	}
 	if _, err := s.q.ToggleDriverActive(ctx, id); err != nil {
 		return nil, err
 	}

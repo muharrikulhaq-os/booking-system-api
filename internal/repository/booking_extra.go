@@ -363,7 +363,10 @@ func (q *Queries) GetFreeDriver(ctx context.Context) (int32, error) {
 		-- booking ke supir yang akunnya sudah dinonaktifkan (lihat catatan
 		-- dua-flag di ListAvailableDrivers).
 		WHERE d."isActive" = TRUE AND u."isActive" = TRUE AND da.id IS NULL
-		ORDER BY d.id ASC LIMIT 1`).Scan(&id)
+		-- Utamakan supir bebas; supir TETAP kendaraan lain baru dipakai bila
+		-- tidak ada supir bebas sama sekali (SP-13).
+		ORDER BY EXISTS (SELECT 1 FROM vehicles v WHERE v."fixedDriverId" = d.id) ASC, d.id ASC
+		LIMIT 1`).Scan(&id)
 	return id, err
 }
 

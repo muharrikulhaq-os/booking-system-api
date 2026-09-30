@@ -31,6 +31,11 @@ func Auth() fiber.Handler {
 			return fiber.NewError(fiber.StatusUnauthorized, "invalid or expired token")
 		}
 
+		// Akun dinonaktifkan / role berubah → token lama langsung tidak berlaku.
+		if !accountAllowed(c.UserContext(), claims.UserID, claims.Role) {
+			return fiber.NewError(fiber.StatusUnauthorized, "sesi tidak berlaku lagi - silakan masuk kembali")
+		}
+
 		c.Locals(LocalUserID, claims.UserID)
 		c.Locals(LocalUserRole, claims.Role)
 		return c.Next()

@@ -69,3 +69,25 @@ func (q *Queries) SubstituteBookingResource(ctx context.Context, bookingID, reso
 		WHERE id = $1`, bookingID, resourceID, vehicleID)
 	return err
 }
+
+// ListDriverActiveBookingIDs: booking APPROVED/ONGOING/OVERDUE yang masih
+// ditugaskan ke supir ini - supir tidak boleh dinonaktifkan selama ada.
+func (q *Queries) ListDriverActiveBookingIDs(ctx context.Context, driverID int32) ([]int32, error) {
+	rows, err := q.db.QueryContext(ctx, `
+		SELECT id FROM bookings
+		WHERE "assignedDriverId" = $1 AND status IN ('APPROVED', 'ONGOING', 'OVERDUE')
+		ORDER BY "startDate"`, driverID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var ids []int32
+	for rows.Next() {
+		var id int32
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
+}

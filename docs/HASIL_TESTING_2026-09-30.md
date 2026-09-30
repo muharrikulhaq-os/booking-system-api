@@ -13,6 +13,8 @@ semua migrasi, SMTP & FCM dimatikan). Tidak ada data production yang disentuh.
 | 💥 Error runner | 0 |
 
 > **Setelah semua perbaikan B1–B21 (runner terakhir, 2026-09-30):** ✅ 178 lulus · ❌ 0 gagal · ℹ️ 9 perlu keputusan · ⏭️ 3 dilewati.
+>
+> **Setelah keputusan bisnis diterapkan:** ✅ 186 lulus · ❌ 0 gagal · ℹ️ 1 (FL-06, ditunda) · ⏭️ 3 dilewati.
 
 Ulangi pengujian (mis. setelah perbaikan): lihat [`tests/skenario/README.md`](../tests/skenario/README.md).
 
@@ -47,18 +49,18 @@ Ulangi pengujian (mis. setelah perbaikan): lihat [`tests/skenario/README.md`](..
 ## Dugaan yang terbantah
 - **VH-10** — kendaraan baru ternyata mendapat baseline servis = odometer saat didaftarkan (nilai 0 hanya ada di data seed). Bukan bug.
 
-## Perlu keputusan bisnis (ℹ️)
-| Skenario | Perilaku saat ini |
+## Keputusan bisnis (diputuskan 2026-09-30, sudah diterapkan)
+| Skenario | Keputusan |
 |---|---|
-| CN-03 / CN-04 | Booking APPROVED tidak bisa dibatalkan siapa pun (supir tetap memegang kendaraan) |
-| ST-07 | Admin bisa memulai booking kendaraan **tanpa supir** lewat API |
-| ST-11 | Penjaga ruangan mana pun bisa memulai booking ruangan yang bukan jagaannya |
-| SP-13 | Pemilihan otomatis bisa mengambil **supir tetap kendaraan lain** padahal ada supir bebas |
-| DU-03 | Supir dinonaktifkan padahal punya booking APPROVED → booking tetap ke supir nonaktif, tanpa peringatan |
-| AU-05b | Access token akun yang baru dinonaktifkan tetap berlaku sampai kedaluwarsa (±15 menit) |
-| FL-04 | API menerima isi "Listrik" untuk kendaraan BBM (UI mengunci) |
-| FL-06 | Hapus catatan BBM tidak memundurkan odometer kendaraan |
-| MT-15 | Maintenance otomatis berstatus `ongoing`; enum mobile hanya `pending`/`completed` → cek tampilan di HP |
+| CN-03 / CN-04 | Booking APPROVED yang belum dimulai **hanya bisa dibatalkan admin**; supir dilepas, pemohon & supir dapat notifikasi |
+| ST-07 | API menolak memulai booking kendaraan tanpa supir |
+| ST-11 | Hanya penjaga ruangan itu (plus admin & pemilik) yang boleh memulai/menyelesaikan booking ruangan |
+| SP-13 | Pemilihan otomatis mengutamakan supir bebas; supir tetap kendaraan lain hanya bila tidak ada yang bebas |
+| DU-03 | Supir yang masih punya booking APPROVED/berjalan tidak bisa dinonaktifkan (atau diganti role-nya) sebelum booking dipindah |
+| AU-05b | Token akun yang dinonaktifkan / diubah role-nya langsung ditolak (cache status akun 15 detik) |
+| FL-04 | API memvalidasi jenis bahan bakar sesuai energi kendaraan (HYBRID boleh keduanya) |
+| FL-06 | **Ditunda** — dikaji ulang bersama rancangan fitur voucher BBM berbasis odometer (task terpisah) |
+| MT-15 | Masih perlu dicek tampilannya di HP (record lama berstatus `ongoing`) |
 
 ## Belum diuji di putaran ini
 - **Tampilan & sinkronisasi di aplikasi** (SY-01..13 selain header, TZ tampilan, NT push/FCM, semua 📱): butuh web/mobile yang berjalan — putaran berikutnya lewat browser (web lokal) dan HP.
