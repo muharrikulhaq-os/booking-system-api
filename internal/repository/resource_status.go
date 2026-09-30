@@ -1,6 +1,9 @@
 package repository
 
-import "context"
+import (
+	"context"
+	"time"
+)
 
 // activeMaintenanceSQL: maintenance kendaraan yang SEDANG berlangsung — belum
 // selesai, sudah dimulai, dan belum lewat tanggal selesainya (endDate NULL =
@@ -49,4 +52,18 @@ func (q *Queries) PromoteDueMaintenance(ctx context.Context) (int64, error) {
 		return 0, err
 	}
 	return res.RowsAffected()
+}
+
+// CountActiveResourceOverlap menghitung booking APPROVED/ONGOING/OVERDUE lain
+// di resource yang sama yang jamnya bertumpuk dengan [start, end). Dipakai
+// untuk ruangan: satu ruangan tidak bisa dipakai dua rapat sekaligus.
+func (q *Queries) CountActiveResourceOverlap(ctx context.Context, resourceID int32, start, end time.Time, excludeID int32) (int64, error) {
+	var n int64
+	err := q.db.QueryRowContext(ctx, `
+		SELECT COUNT(*) FROM bookings
+		WHERE "resourceId" = $1
+		  AND status IN ('APPROVED', 'ONGOING', 'OVERDUE')
+		  AND "startDate" < $3 AND "endDate" > $2
+		  AND id != $4`, resourceID, start, end, excludeID).Scan(&n)
+	return n, err
 }

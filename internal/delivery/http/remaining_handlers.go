@@ -5,8 +5,8 @@ import (
 
 	"booking-system-api/internal/middleware"
 	"booking-system-api/internal/service"
-	"mime/multipart"
 	"booking-system-api/internal/util"
+	"mime/multipart"
 
 	"github.com/gofiber/fiber/v2"
 )
@@ -28,7 +28,8 @@ func (h *FuelExpenseHandler) Register(r fiber.Router) {
 	g := r.Group("/fuel-expenses", auth)
 	g.Get("", h.List)
 	g.Get("/:id", h.GetByID)
-	g.Post("", h.Create)
+	// Pencatatan BBM hanya ADMIN & DRIVER (B20; mobile: izin fuelInput).
+	g.Post("", middleware.RequireRole("ADMIN", "DRIVER"), h.Create)
 	g.Delete("/:id", admin, h.Delete)
 }
 
@@ -61,7 +62,7 @@ func (h *FuelExpenseHandler) GetByID(c *fiber.Ctx) error {
 
 func (h *FuelExpenseHandler) Create(c *fiber.Ctx) error {
 	var req service.CreateFuelExpenseRequest
-	
+
 	// Read multipart fields
 	req.VehicleID = int32(util.ParseStringToInt(c.FormValue("vehicleId")))
 	req.FuelTypeID = int32(util.ParseStringToInt(c.FormValue("fuelTypeId")))
@@ -69,7 +70,7 @@ func (h *FuelExpenseHandler) Create(c *fiber.Ctx) error {
 		parsed := int32(util.ParseStringToInt(bid))
 		req.BookingID = &parsed
 	}
-	
+
 	req.FuelGrade = c.FormValue("fuelGrade")
 	req.Liter = util.ParseStringToFloat64(c.FormValue("liter"))
 	req.PricePerLiter = util.ParseStringToFloat64(c.FormValue("pricePerLiter"))
@@ -84,10 +85,10 @@ func (h *FuelExpenseHandler) Create(c *fiber.Ctx) error {
 	if err != nil {
 		return fiber.NewError(fiber.StatusBadRequest, "proofPhoto is required")
 	}
-	
+
 	// Check driver ID from token
 	recordedByID := int32(middleware.GetUserID(c))
-	
+
 	// In a real implementation we would get driver ID based on user ID if the user is a driver.
 	// We'll pass the recordedByID for now, or you could do a query to find the driver ID.
 	driverID := &recordedByID // Simplified, typically we lookup driver by user_id
@@ -188,7 +189,7 @@ func (h *MaintenanceHandler) Complete(c *fiber.Ctx) error {
 	if err != nil {
 		return err
 	}
-	
+
 	form, formErr := c.MultipartForm()
 	var photos []*multipart.FileHeader
 	if formErr == nil {
@@ -197,7 +198,7 @@ func (h *MaintenanceHandler) Complete(c *fiber.Ctx) error {
 			photos = form.File["photo"] // fallback
 		}
 	}
-	
+
 	data, err := h.svc.Complete(c.Context(), id, photos)
 	if err != nil {
 		return err

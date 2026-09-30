@@ -18,7 +18,7 @@ var (
 	ErrBookingConflict   = errors.New("schedule conflict with an existing booking")
 	ErrInvalidDateRange  = errors.New("end date must be after start date")
 	ErrBookingNotPending = errors.New("booking is not in PENDING status")
-	ErrSelfApproval      = errors.New("you cannot approve your own booking")
+	ErrSelfApproval      = errors.New("booking milik sendiri harus disetujui atau ditolak admin lain")
 )
 
 type AppError struct {

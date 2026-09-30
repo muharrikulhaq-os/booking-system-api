@@ -110,12 +110,12 @@ UPDATE bookings SET status = $2, "updatedAt" = NOW() WHERE id = $1 RETURNING *;
 -- name: ApproveBooking :one
 UPDATE bookings
 SET status = 'APPROVED', "approvedById" = $2, "approvedAt" = NOW(), "updatedAt" = NOW()
-WHERE id = $1 RETURNING *;
+WHERE id = $1 AND status = 'PENDING' RETURNING *;
 
 -- name: RejectBooking :one
 UPDATE bookings
 SET status = 'REJECTED', "approvedById" = $2, "approvedAt" = NOW(), "updatedAt" = NOW()
-WHERE id = $1 RETURNING *;
+WHERE id = $1 AND status = 'PENDING' RETURNING *;
 
 -- name: AssignVehicleToBooking :one
 UPDATE bookings

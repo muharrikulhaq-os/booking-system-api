@@ -3,8 +3,9 @@ package service
 import (
 	"context"
 	"database/sql"
-	"strings"
+	"errors"
 	"strconv"
+	"strings"
 	"time"
 
 	"booking-system-api/internal/repository"
@@ -12,8 +13,9 @@ import (
 )
 
 type BookingService struct {
-	q     repository.ExtendedQuerier
-	notif *NotificationService
+	q       repository.ExtendedQuerier
+	notif   *NotificationService
+	publish Publisher
 }
 
 func NewBookingService(db *sql.DB, notif *NotificationService) *BookingService {
@@ -238,7 +240,7 @@ func (s *BookingService) sweepStaleBookings(ctx context.Context) int {
 
 	// Maintenance terjadwal yang sudah tiba waktunya → kendaraan MAINTENANCE
 	// (B11: tidak lagi dikunci sejak maintenance dibuat).
-	_, _ = s.q.PromoteDueMaintenance(ctx)
+	promoteDueMaintenance(ctx, s.q, s.publish)
 
 	total := 0
 	for _, sw := range []sweep{
@@ -250,6 +252,11 @@ func (s *BookingService) sweepStaleBookings(ctx context.Context) int {
 			logAudit(ctx, s.q, AuditActor{}, sw.action, "Booking", b.ID, sw.desc)
 			total++
 		}
+	}
+	// Perubahan oleh sistem tidak lewat middleware DataChanged → siarkan
+	// sendiri (B17). Supir yang dilepas ikut mengubah daftar supir/kendaraan.
+	if total > 0 && s.publish != nil {
+		s.publish(topicBooking, topicDriver, topicVehicle)
 	}
 	return total
 }
@@ -350,6 +357,9 @@ func (s *BookingService) List(ctx context.Context,
 }
 
 func (s *BookingService) GetByID(ctx context.Context, id int32, currentUserID int, currentRole string) (map[string]any, error) {
+	// Detail tidak boleh menampilkan status basi (B17: dulu transisi hanya
+	// jalan saat DAFTAR booking dibuka).
+	s.sweepStaleBookings(ctx)
 	b, err := s.q.GetBookingByID(ctx, id)
 	if err != nil {
 		return nil, util.ErrNotFound
@@ -394,6 +404,10 @@ func (s *BookingService) Create(ctx context.Context, req CreateBookingRequest, a
 	if !req.EndDate.After(req.StartDate) {
 		return nil, util.ErrInvalidDateRange
 	}
+	// Tanggal lampau ditolak (B15); toleransi kecil untuk jeda mengisi form.
+	if req.StartDate.Before(time.Now().Add(-bookingStartGrace)) {
+		return nil, util.NewError(400, "waktu mulai booking sudah lewat - pilih waktu mulai dari sekarang", util.ErrBadRequest)
+	}
 
 	resource, err := s.q.GetResourceByID(ctx, req.ResourceID)
 	if err != nil {
@@ -401,6 +415,9 @@ func (s *BookingService) Create(ctx context.Context, req CreateBookingRequest, a
 	}
 	if resource.Status == repository.ResourceStatusMAINTENANCE {
 		return nil, util.NewError(409, "resource is currently under maintenance", util.ErrConflict)
+	}
+	if err := s.checkResourceBookable(ctx, req.ResourceID); err != nil {
+		return nil, err
 	}
 
 	var driverID sql.NullInt32
@@ -676,8 +693,27 @@ func (s *BookingService) Approve(ctx context.Context, id int32, req ApproveBooki
 	if err != nil {
 		return ApproveBookingResponse{}, util.ErrNotFound
 	}
+	// Sama dengan Reject: admin tidak boleh memutuskan booking miliknya
+	// sendiri (B21) - butuh admin lain.
+	if int(b.UserId) == approverID {
+		return ApproveBookingResponse{}, util.ErrSelfApproval
+	}
 	if b.Status != repository.BookingStatusPENDING {
 		return ApproveBookingResponse{}, util.ErrBookingNotPending
+	}
+	if err := s.checkResourceBookable(ctx, b.ResourceId); err != nil {
+		return ApproveBookingResponse{}, err
+	}
+	// Ruangan tidak bisa dipakai dua rapat sekaligus (B8). Booking PENDING
+	// yang bentrok boleh ada; yang disetujui lebih dulu menang.
+	if b.ResourceType == repository.ResourceTypeROOM {
+		if n, rerr := s.q.CountActiveResourceOverlap(ctx, b.ResourceId, b.StartDate, b.EndDate, b.ID); rerr != nil {
+			return ApproveBookingResponse{}, rerr
+		} else if n > 0 {
+			return ApproveBookingResponse{}, util.NewError(409,
+				"ruangan ini sudah dipakai booking lain yang disetujui pada jam tersebut - alihkan ke ruangan lain atau tolak booking ini",
+				util.ErrConflict)
+		}
 	}
 
 	// Menyetujui tidak boleh menabrak kendaraan/supir yang sudah dipakai booking
@@ -758,10 +794,15 @@ func (s *BookingService) Approve(ctx context.Context, id int32, req ApproveBooki
 		}
 	}
 
+	// UPDATE bersyarat status PENDING: dua admin yang menyetujui bersamaan
+	// tidak bisa sama-sama berhasil (AP-12).
 	_, err = s.q.ApproveBooking(ctx, repository.ApproveBookingParams{
 		ID:           id,
 		ApprovedById: sql.NullInt32{Int32: int32(approverID), Valid: true},
 	})
+	if errors.Is(err, sql.ErrNoRows) {
+		return ApproveBookingResponse{}, util.ErrBookingNotPending
+	}
 	if err != nil {
 		return ApproveBookingResponse{}, err
 	}
@@ -772,7 +813,9 @@ func (s *BookingService) Approve(ctx context.Context, id int32, req ApproveBooki
 	_, _ = s.q.CreateApprovalLog(ctx, repository.CreateApprovalLogParams{
 		BookingId:  id,
 		ApproverId: int32(approverID),
-		Action:     "APPROVE",
+		// Nilai enum approval_action adalah APPROVED; dulu "APPROVE" sehingga
+		// insert selalu ditolak & riwayat persetujuan kosong (B13).
+		Action: repository.ApprovalActionAPPROVED,
 		Note:       sql.NullString{String: req.Note, Valid: req.Note != ""},
 	})
 	// Persetujuan dulu HANYA masuk approval_logs, bukan audit_logs - padahal
@@ -828,7 +871,9 @@ func (s *BookingService) Reject(ctx context.Context, id int32, req RejectBooking
 
 	if _, err = s.q.RejectBooking(ctx, repository.RejectBookingParams{
 		ID: id, ApprovedById: sql.NullInt32{Int32: int32(approverID), Valid: true},
-	}); err != nil {
+	}); errors.Is(err, sql.ErrNoRows) {
+		return nil, util.ErrBookingNotPending
+	} else if err != nil {
 		return nil, err
 	}
 
@@ -1663,11 +1708,35 @@ func (s *BookingService) MergeBookings(ctx context.Context, primaryID int32, req
 
 	// Update primary booking's driver if requested
 	if req.DriverID != nil {
+		drv, dErr := s.q.GetDriverByID(ctx, *req.DriverID)
+		if dErr != nil || !drv.IsActive || !drv.UserIsActive {
+			return nil, util.NewError(400, "supir yang dipilih tidak aktif", util.ErrBadRequest)
+		}
+		// Supir baru tidak boleh sedang bertugas di trip lain yang bentrok
+		// (pasangan merge - termasuk booking yang sedang digabung - dikecualikan).
+		if ids, cErr := s.q.ListDriverConflictBookingIDs(ctx, *req.DriverID, effectiveStart, effectiveEnd, primaryID); cErr == nil {
+			partners := map[int32]bool{req.TargetBookingID: true}
+			if merges, _ := s.q.GetBookingMerges(ctx, primaryID); len(merges) > 0 {
+				for _, m := range merges {
+					partners[m.OtherBookingID] = true
+				}
+			}
+			for _, cid := range ids {
+				if !partners[cid] {
+					return nil, util.NewError(409,
+						"supir ini sudah ditugaskan di booking lain yang bentrok jadwalnya", util.ErrConflict)
+				}
+			}
+		}
 		driverID := sql.NullInt32{Int32: *req.DriverID, Valid: true}
-		var vehicleID sql.NullInt32
-		da, err := s.q.GetDriverCurrentAssignment(ctx, *req.DriverID)
-		if err == nil {
-			vehicleID = sql.NullInt32{Int32: da.VehicleId, Valid: true}
+		// Hanya supir yang berganti - kendaraan trip utama tetap (B9: dulu
+		// diambil dari kendaraan yang sedang dipegang supir baru, sehingga
+		// kosong bila supir itu belum memegang kendaraan).
+		vehicleID := primary.AssignedVehicleId
+		if !vehicleID.Valid {
+			if vid, verr := s.q.GetVehicleIDByResourceID(ctx, primary.ResourceId); verr == nil {
+				vehicleID = sql.NullInt32{Int32: vid, Valid: true}
+			}
 		}
 		_, err = s.q.AssignVehicleToBooking(ctx, repository.AssignVehicleToBookingParams{
 			ID:                primaryID,
