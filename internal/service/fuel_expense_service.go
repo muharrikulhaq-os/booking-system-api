@@ -161,6 +161,17 @@ func (s *FuelExpenseService) Create(ctx context.Context, req CreateFuelExpenseRe
 	if req.OdometerAfter <= req.OdometerBefore {
 		return nil, util.NewError(400, "odometer sesudah harus lebih besar dari odometer sebelum", util.ErrBadRequest)
 	}
+	// Jenis bahan bakar harus sesuai sumber energi kendaraan (FL-04): BBM ↔ BBM,
+	// LISTRIK ↔ LISTRIK, HYBRID boleh keduanya. UI sudah mengunci; API ikut.
+	fuelType, ftErr := s.q.GetFuelTypeByID(ctx, req.FuelTypeID)
+	if ftErr != nil {
+		return nil, util.NewError(400, "jenis bahan bakar tidak ditemukan", util.ErrBadRequest)
+	}
+	if vehicle.EnergyType != repository.EnergyTypeHYBRID && string(vehicle.EnergyType) != string(fuelType.Type) {
+		return nil, util.NewError(400,
+			fmt.Sprintf("kendaraan ini berenergi %s - jenis \"%s\" (%s) tidak sesuai", vehicle.EnergyType, fuelType.Name, fuelType.Type),
+			util.ErrBadRequest)
+	}
 
 	var totalCost float64
 	var quantity float64
@@ -175,11 +186,8 @@ func (s *FuelExpenseService) Create(ctx context.Context, req CreateFuelExpenseRe
 	}
 
 	// Jika frontend tidak mengirim harga (0), ambil dari default_price di master fuel_types
-	if pricePerUnit <= 0 {
-		fuelType, err := s.q.GetFuelTypeByID(ctx, req.FuelTypeID)
-		if err == nil && fuelType.DefaultPrice.Valid {
-			pricePerUnit = util.ParseStringToFloat64(fuelType.DefaultPrice.String)
-		}
+	if pricePerUnit <= 0 && fuelType.DefaultPrice.Valid {
+		pricePerUnit = util.ParseStringToFloat64(fuelType.DefaultPrice.String)
 	}
 
 	totalCost = quantity * pricePerUnit

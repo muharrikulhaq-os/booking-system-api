@@ -51,3 +51,31 @@ func TestCancel_OnlyOwnerOrAdmin(t *testing.T) {
 		})
 	}
 }
+
+// Booking APPROVED (belum dimulai) hanya bisa dibatalkan admin (CN-03/04);
+// status lain tidak bisa dibatalkan sama sekali.
+func TestCancel_ApprovedOnlyAdmin(t *testing.T) {
+	const ownerID = 10
+	cases := []struct {
+		name    string
+		status  repository.BookingStatus
+		actorID int32
+		role    string
+		wantErr error
+	}{
+		{"APPROVED oleh pemilik", repository.BookingStatusAPPROVED, ownerID, "EMPLOYEE", util.ErrForbidden},
+		{"APPROVED oleh admin", repository.BookingStatusAPPROVED, 99, "ADMIN", nil},
+		{"ONGOING oleh admin", repository.BookingStatusONGOING, 99, "ADMIN", util.ErrBadRequest},
+		{"COMPLETED oleh pemilik", repository.BookingStatusCOMPLETED, ownerID, "EMPLOYEE", util.ErrBadRequest},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			m := &MockQuerier{booking: repository.GetBookingByIDRow{ID: 1, UserId: ownerID, Status: tc.status}}
+			svc := &BookingService{q: m}
+			_, err := svc.Cancel(context.Background(), 1, AuditActor{UserID: tc.actorID}, tc.role)
+			if !errors.Is(err, tc.wantErr) && err != tc.wantErr {
+				t.Errorf("err = %v, want %v", err, tc.wantErr)
+			}
+		})
+	}
+}

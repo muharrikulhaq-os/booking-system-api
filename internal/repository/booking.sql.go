@@ -94,7 +94,7 @@ func (q *Queries) AssignVehicleToBooking(ctx context.Context, arg AssignVehicleT
 }
 
 const cancelBooking = `-- name: CancelBooking :one
-UPDATE bookings SET status = 'CANCELLED', "updatedAt" = NOW() WHERE id = $1 RETURNING id, "userId", "resourceId", "startDate", "endDate", purpose, "passengerCount", status, "approvedById", "approvedAt", "assignedDriverId", "assignedVehicleId", "assignedAt", "returnedAt", "createdAt", "updatedAt", "originalResourceId", "bookingType", "odometerStart", "startLocation", "startPhotoUrl"
+UPDATE bookings SET status = 'CANCELLED', "updatedAt" = NOW() WHERE id = $1 AND status IN ('PENDING', 'APPROVED') RETURNING id, "userId", "resourceId", "startDate", "endDate", purpose, "passengerCount", status, "approvedById", "approvedAt", "assignedDriverId", "assignedVehicleId", "assignedAt", "returnedAt", "createdAt", "updatedAt", "originalResourceId", "bookingType", "odometerStart", "startLocation", "startPhotoUrl"
 `
 
 func (q *Queries) CancelBooking(ctx context.Context, id int32) (Booking, error) {

@@ -121,7 +121,7 @@ tidak dipilih otomatis untuk booking lain.
 | AU-02 | Login password salah | Pesan "password salah", tetap di halaman login, pesan tidak hilang karena reload | — |
 | AU-03 | Login email tidak terdaftar | Pesan email tidak ditemukan | — |
 | AU-04 | Login akun yang dinonaktifkan admin | Ditolak "akun tidak aktif" | — |
-| AU-05 | Akun dinonaktifkan admin **saat sedang login** | Paling lambat saat token di-refresh (±15 menit) sesi berakhir & kembali ke login | PG |
+| AU-05 | Akun dinonaktifkan admin **saat sedang login** | Sesi berakhir paling lambat ±15 detik: token lama langsung ditolak 401 (AU-05b; juga bila role diubah → token baru dengan role baru) (✅ diputuskan 2026-09-30) | PG |
 | AU-06 | Biarkan aplikasi diam > masa access token lalu klik menu | Token diperbarui diam-diam, request berhasil, tidak ter-logout | — |
 | AU-07 | Refresh token kedaluwarsa / dicabut | Ke halaman login, tanpa layar error | — |
 | AU-08 | Logout | Token dicabut; tombol back tidak membuka halaman terproteksi | — |
@@ -193,7 +193,7 @@ tidak dipilih otomatis untuk booking lain.
 | SP-10 | Hapus supir tetap K1 | Booking K1 berikutnya memakai supir kosong otomatis | KD, DR |
 | SP-11 | Picker supir di form booking | Menampilkan supir aktif, sisa kursi kendaraan yang dipegang, tujuan trip yang bentrok, badge "Digunakan SPD" | PK |
 | SP-12 | Booking K2 tanpa pilih supir → DRV-2 ditempel; sebelum approve DRV-2 di-approve di booking lain yang jamnya bentrok | Saat approve: ditolak & admin menugaskan supir lain (✅ B7) | AQ |
-| SP-13 | ❓ Ada supir bebas & supir tetap kendaraan lain; booking kendaraan tanpa supir tetap | Usulan: supir bebas diutamakan; saat ini bisa mengambil supir tetap kendaraan lain | PK |
+| SP-13 | Ada supir bebas & supir tetap kendaraan lain; booking kendaraan tanpa supir tetap | Supir bebas diutamakan; supir tetap kendaraan lain hanya bila tidak ada supir bebas (✅ diputuskan 2026-09-30) | PK |
 
 ## 5. Persetujuan & penolakan — AP
 
@@ -251,8 +251,8 @@ tidak dipilih otomatis untuk booking lain.
 |---|---|---|---|
 | CN-01 | EMP-A membatalkan booking PENDING miliknya | CANCELLED; admin & supir (bila ada) dapat notifikasi; jadwal bebas di kalender | LB, DB, AQ, DS, KL, NT |
 | CN-02 | Booking PENDING K1 dengan supir DRV-1 dibatalkan → cek K1 & DRV-1 | K1 tetap AVAILABLE & DRV-1 tetap kosong (PENDING belum memegang apa pun); keduanya bisa langsung dipakai booking lain | KD, DR, PK |
-| CN-03 | ❓ EMP-A membatalkan booking **APPROVED** (rencana berubah) | Usulan: **boleh** sebelum mulai, dan supir + kendaraan dilepas kembali. Saat ini ditolak "booking tidak PENDING" untuk semua role | — |
-| CN-04 | ❓ Admin membatalkan booking APPROVED (mis. kendaraan rusak) | Usulan: boleh, dengan alasan; supir & kendaraan dilepas. Saat ini tidak ada jalannya | — |
+| CN-03 | EMP-A membatalkan booking **APPROVED** (rencana berubah) | **Ditolak 403** — booking yang sudah disetujui hanya bisa dibatalkan admin; karyawan menghubungi admin (✅ diputuskan 2026-09-30) | — |
+| CN-04 | Admin membatalkan booking APPROVED (mis. kendaraan rusak) | Boleh selama belum dimulai; supir dilepas, pemohon & supir dapat notifikasi (✅ diputuskan 2026-09-30) | — |
 | CN-05 | Batalkan booking ONGOING / COMPLETED | Ditolak | — |
 | CN-06 | EMP-B membatalkan booking EMP-A (API) | 403 | — |
 | CN-07 | Admin membatalkan booking PENDING milik karyawan | CANCELLED; tercatat pelakunya admin di timeline | DB |
@@ -269,11 +269,11 @@ tidak dipilih otomatis untuk booking lain.
 | ST-04 | Odometer awal < odometer kendaraan tercatat | Ditolak, pesan menyebut angka tercatat | — |
 | ST-05 | Supir yang tidak ditugaskan mencoba mulai (API) | 403 | — |
 | ST-06 | Supir mencoba mulai booking ruangan | Ditolak | — |
-| ST-07 | Booking kendaraan APPROVED tanpa supir → tombol mulai | Tidak muncul di UI; ❓ API admin saat ini tetap bisa memulai | DB |
+| ST-07 | Booking kendaraan APPROVED tanpa supir → tombol mulai | Tidak muncul di UI; API juga menolak 400 "tugaskan supir dulu" (✅ diputuskan 2026-09-30) | DB |
 | ST-08 | EMP-A memulai booking **ruangan** miliknya (self-service) | ONGOING; R1 → IN_USE | RG, DS |
 | ST-09 | EMP-A memulai booking kendaraan miliknya | Ditolak (kendaraan dimulai supir/admin) | — |
 | ST-10 | RK-1 memulai booking R1 | Berhasil | RG |
-| ST-11 | ❓ RK-2 (tidak menjaga R1) memulai booking R1 | Usulan: ditolak (bukan ruangannya). Saat ini semua penjaga aktif boleh | — |
+| ST-11 | RK-2 (tidak menjaga R1) memulai booking R1 | Ditolak 403 "Anda bukan penjaga ruangan ini" — berlaku juga untuk menyelesaikan (✅ diputuskan 2026-09-30) | — |
 | ST-12 | Maintenance K2 dijadwalkan setelah booking di-approve, lalu mulai | Ditolak 409 → admin harus pindah kendaraan (AS-02) | — |
 | ST-13 | Mulai booking utama yang punya booking gabungan | Booking gabungan ikut ONGOING otomatis, pemiliknya dapat notifikasi | LB, DB sekunder |
 | ST-14 | 📱 Mulai perjalanan tanpa izin lokasi / kamera | Pesan jelas; tidak crash | — |
@@ -403,7 +403,7 @@ tidak dipilih otomatis untuk booking lain.
 |---|---|---|---|
 | DU-01 | Buat pengguna role DRIVER tanpa no. SIM / telepon | Ditolak | — |
 | DU-02 | Buat pengguna DRIVER lengkap | Muncul di menu Driver & picker supir | PG, DR, PK |
-| DU-03 | Nonaktifkan supir (menu Driver) yang punya booking APPROVED | ❓ Usulan: peringatan ada booking aktif; supir tidak muncul di picker | DR, PK |
+| DU-03 | Nonaktifkan supir (menu Driver) yang punya booking APPROVED | **Ditolak 409** dengan daftar booking yang harus dipindah ke supir lain dulu (menu Driver, toggle akun, maupun ganti role); approve booking dengan supir nonaktif juga ditolak (✅ diputuskan 2026-09-30) | DR, PK |
 | DU-04 | Nonaktifkan **akun** supir (menu Pengguna) | Tidak muncul di picker & tidak dipilih otomatis; tidak bisa login | PG, DR, PK |
 | DU-05 | Aktifkan kembali | Muncul lagi di picker | DR, PK |
 | DU-06 | Hapus pengguna yang punya riwayat booking | Ditolak "nonaktifkan saja" | — |
@@ -421,9 +421,9 @@ tidak dipilih otomatis untuk booking lain.
 | FL-01 | DRV-2 mencatat BBM K2 (odometer sebelum ≥ tercatat, sesudah > sebelum, liter, foto) | Tersimpan; odometer K2 maju; biaya dihitung dari harga master bila harga kosong | BBM, KD, DB (bila terkait booking), LP (biaya) |
 | FL-02 | Odometer sebelum < tercatat | Ditolak, menyebut angka tercatat | — |
 | FL-03 | Odometer sesudah ≤ sebelum | Ditolak | — |
-| FL-04 | Isi "listrik" untuk kendaraan BBM | UI mengunci jenis sesuai energi kendaraan; ❓ API saat ini menerima | — |
+| FL-04 | Isi "listrik" untuk kendaraan BBM | UI mengunci jenis sesuai energi kendaraan; API menolak 400 (HYBRID boleh keduanya) (✅ diputuskan 2026-09-30) | — |
 | FL-05 | Pengisian dengan odometer jauh melewati 10.000 km | Lihat MT-11: tidak ada maintenance otomatis | MT, KD |
-| FL-06 | ❓ Admin menghapus catatan BBM | Terhapus; odometer kendaraan **tidak** mundur (usulan: tampilkan peringatan) | BBM, LP |
+| FL-06 | ❓ Admin menghapus catatan BBM | Terhapus; odometer kendaraan **tidak** mundur (usulan: tampilkan peringatan) — _dikaji ulang bersama rancangan fitur voucher BBM berbasis odometer (task terpisah)_ | BBM, LP |
 | FL-07 | 📱 Mencatat BBM hanya lewat kamera | Galeri tidak bisa dipakai sebagai bukti | — |
 | FL-08 | Ubah harga master jenis BBM (web) | Pengisian berikutnya memakai harga baru; yang lama tidak berubah | BBM |
 | FL-09 | Catatan BBM di booking gabungan | Lihat MG-12 | DB |

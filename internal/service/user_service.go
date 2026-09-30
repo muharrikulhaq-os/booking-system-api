@@ -214,8 +214,17 @@ func (s *UserService) Create(ctx context.Context, req CreateUserRequest, actor A
 }
 
 func (s *UserService) Update(ctx context.Context, id int32, req UpdateUserRequest, actor AuditActor) (map[string]any, error) {
-	if _, err := s.q.GetUserByID(ctx, id); err != nil {
+	before, err := s.q.GetUserByID(ctx, id)
+	if err != nil {
 		return nil, util.ErrNotFound
+	}
+	// Supir yang role-nya diganti tidak bisa lagi menjalankan trip (DU-03).
+	if string(before.RoleName) == "DRIVER" && req.RoleID != before.RoleId {
+		if d, derr := s.q.GetDriverByUserID(ctx, id); derr == nil {
+			if err := driverStillAssigned(ctx, s.q, d.ID); err != nil {
+				return nil, err
+			}
+		}
 	}
 	// employeeId UNIQUE di DB - cek dulu supaya errornya jelas (409), bukan
 	// bocor sebagai raw constraint violation. existing.ID != id: employeeId
@@ -335,6 +344,14 @@ func (s *UserService) ToggleActive(ctx context.Context, id int32, actor AuditAct
 	u, err := s.q.GetUserByID(ctx, id)
 	if err != nil {
 		return nil, util.ErrNotFound
+	}
+	// Akun supir yang dinonaktifkan ikut menghentikan supirnya (DU-03).
+	if u.IsActive {
+		if d, derr := s.q.GetDriverByUserID(ctx, id); derr == nil {
+			if err := driverStillAssigned(ctx, s.q, d.ID); err != nil {
+				return nil, err
+			}
+		}
 	}
 	if _, err := s.q.ToggleUserActive(ctx, id); err != nil {
 		return nil, err

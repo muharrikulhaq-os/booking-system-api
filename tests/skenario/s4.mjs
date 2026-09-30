@@ -216,9 +216,10 @@ export async function runBatch4() {
   await scenario('DU-03', async () => {
     const d = await newDriver('DRVDU3'); const v = await newVehicle();
     const b = await bookApproved(U.EMPA.token, v.resourceId, wib(6, 9), wib(6, 10), { driverId: d.driverId });
-    await api('PATCH', `/drivers/${d.driverId}/toggle-active`, { token: A() });
-    const g = (await getBooking(b.id)).data;
-    record('DU-03', 'INFO', `Supir dinonaktifkan padahal punya booking APPROVED → booking tetap ditugaskan ke supir nonaktif (${g.assignedDriver?.name}), tanpa peringatan`);
+    const t = await api('PATCH', `/drivers/${d.driverId}/toggle-active`, { token: A() });
+    const u = await api('PATCH', `/users/${d.id}/toggle-active`, { token: A() });
+    check('DU-03', t.status === 409 && u.status === 409,
+      `Supir punya booking APPROVED → nonaktifkan ditolak (supir ${t.status}, akun ${u.status}) "${t.msg}"`);
   });
 
   // ── FL ────────────────────────────────────────────────────────────────
@@ -236,11 +237,11 @@ export async function runBatch4() {
   await scenario('FL-04/06', async () => {
     const d = await newDriver('DRVFL4'); const v = await newVehicle({ odometer: 10000, energy: 'BBM' });
     const f = await fuel(d.token, v, 10000, 10050, { fuelTypeId: 4, liter: 0, kwh: 20 });
-    record('FL-04', 'INFO', `Isi "Listrik PLN" untuk kendaraan BBM lewat API → ${f.status} (UI mengunci; API tidak memvalidasi)`);
+    check('FL-04', f.status === 400, `Isi "Listrik PLN" untuk kendaraan BBM lewat API → ${f.status} "${f.msg}"`);
     const f2 = await fuel(d.token, v, 10050, 10200);
     await api('DELETE', `/fuel-expenses/${f2.data.id}`, { token: A() });
     const odo = sqlInt(`select "currentOdometer" from vehicles where id=${v.id}`);
-    record('FL-06', 'INFO', `Catatan BBM dihapus → odometer kendaraan tetap ${odo} (tidak mundur)`);
+    record('FL-06', 'INFO', `Catatan BBM dihapus → odometer kendaraan tetap ${odo} (tidak mundur) — dikaji ulang bersama fitur voucher BBM`);
   });
 
   // ── SY (header X-Data-Changed; WebSocket diuji di browser) ────────────

@@ -40,7 +40,7 @@ export async function runBatch1() {
     const rf = await api('POST', '/auth/refresh', { body: { refreshToken: refresh } });
     check('AU-05', rf.status >= 400, `Refresh token akun yang baru dinonaktifkan → ${rf.status} "${rf.msg}"`);
     const me = await api('GET', '/auth/me', { token: l.data.accessToken });
-    record('AU-05b', 'INFO', `Access token lama akun nonaktif masih dipakai /auth/me → ${me.status} (berlaku sampai kedaluwarsa)`);
+    check('AU-05b', me.status === 401, `Access token lama akun nonaktif langsung ditolak → ${me.status}`);
   });
   await scenario('AU-08', async () => {
     const u = await createUser('EMPLOGOUT', ROLE.EMPLOYEE);
@@ -295,8 +295,7 @@ export async function runBatch1() {
     const v = await newVehicle();
     const b = await onlyDrivers([dFixed.driverId, dFree.driverId], () => book(U.EMPA.token, v.resourceId, wib(16, 9), wib(16, 10)));
     const got = b.data?.assignedDriver?.id;
-    record('SP-13', got === dFree.driverId ? 'PASS' : 'INFO',
-      got === dFree.driverId ? 'Supir tanpa kendaraan tetap diutamakan untuk pemilihan otomatis'
-        : `Pemilihan otomatis mengambil supir tetap kendaraan LAIN (${b.data?.assignedDriver?.name}) padahal ada supir bebas`);
+    check('SP-13', got === dFree.driverId, 'Supir tanpa kendaraan tetap diutamakan untuk pemilihan otomatis',
+      `Pemilihan otomatis mengambil supir tetap kendaraan LAIN (${b.data?.assignedDriver?.name}) padahal ada supir bebas`);
   });
 }

@@ -72,8 +72,10 @@ export async function runBatch3() {
     const b = await onlyDrivers([], () => book(U.EMPA.token, v.resourceId, inMin(5), inMin(90)));
     await approve(b.data.id);
     const s = await startB(b.data.id);
-    record('ST-07', 'INFO', `Admin memulai booking kendaraan TANPA supir → ${s.status} (UI menyembunyikan tombol; perlu keputusan apakah API juga menolak)`);
-    if (ok2(s)) { await completeB(b.data.id); noDriverCompleted = b.data.id; }
+    check('ST-07', s.status === 400, `Admin memulai booking kendaraan TANPA supir → ${s.status} "${s.msg}"`);
+    // RT-04 butuh booking kendaraan tanpa supir yang selesai → dibuat lewat SQL.
+    sql(`update bookings set status='COMPLETED', "returnedAt"=now() where id=${b.data.id}`);
+    noDriverCompleted = b.data.id;
   });
   await scenario('ST-09', async () => {
     const d = await newDriver('DRVST9'); const v = await newVehicle();
@@ -89,7 +91,7 @@ export async function runBatch3() {
     const r2 = await newRoom({ keeperId: U.RK1.rkId });
     const b2 = await bookApproved(U.EMPA.token, r2.resourceId, inMin(5), inMin(60));
     const s11 = await startB(b2.id, U.RK2.token);
-    record('ST-11', 'INFO', `Penjaga ruangan LAIN (bukan penjaga ruangan itu) memulai → ${s11.status}`);
+    check('ST-11', s11.status === 403, `Penjaga ruangan LAIN (bukan penjaga ruangan itu) memulai → ${s11.status} "${s11.msg}"`);
   });
   await scenario('ST-12', async () => {
     const d = await newDriver('DRVST12'); const v = await newVehicle();

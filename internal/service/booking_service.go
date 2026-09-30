@@ -574,20 +574,46 @@ func (s *BookingService) Cancel(ctx context.Context, id int32, actor AuditActor,
 	if role != "ADMIN" && int(b.UserId) != userID {
 		return nil, util.ErrForbidden
 	}
-	if b.Status != repository.BookingStatusPENDING {
-		return nil, util.ErrBookingNotPending
+	// PENDING: pemilik atau admin. APPROVED yang belum dimulai: hanya admin
+	// (keputusan bisnis CN-03/04) - karyawan menghubungi admin.
+	switch b.Status {
+	case repository.BookingStatusPENDING:
+	case repository.BookingStatusAPPROVED:
+		if role != "ADMIN" {
+			return nil, util.NewError(403,
+				"booking yang sudah disetujui hanya bisa dibatalkan admin - hubungi admin", util.ErrForbidden)
+		}
+	default:
+		return nil, util.NewError(400,
+			"hanya booking yang menunggu persetujuan atau disetujui (belum dimulai) yang bisa dibatalkan", util.ErrBadRequest)
 	}
-	if _, err = s.q.CancelBooking(ctx, id); err != nil {
+	// UPDATE bersyarat status: tidak menimpa booking yang baru saja dimulai.
+	if _, err = s.q.CancelBooking(ctx, id); errors.Is(err, sql.ErrNoRows) {
+		return nil, util.NewError(409, "status booking baru saja berubah - muat ulang lalu coba lagi", util.ErrConflict)
+	} else if err != nil {
 		return nil, err
+	}
+	// Supir booking yang dibatalkan dilepas bila tidak punya booking aktif lain.
+	syncDriverHolds(ctx, s.q, b.AssignedDriverId)
+
+	byAdmin := role == "ADMIN" && int(b.UserId) != userID
+	cancelDesc := "Booking dibatalkan oleh pemohon"
+	if byAdmin {
+		cancelDesc = "Booking dibatalkan oleh admin"
 	}
 	// Pembatalan sebelumnya sama sekali tidak tercatat di audit_logs, padahal
 	// frontend sudah punya entri "Dibatalkan" di timeline - akibatnya booking
 	// yang dibatalkan kelihatan berhenti mendadak tanpa jejak pelakunya.
-	logAudit(ctx, s.q, actor, "CANCEL", "Booking", id, "Booking dibatalkan oleh pemohon")
-	// Notifikasi: pembatalan → admin, dan supir yang ditugaskan (bila ada).
+	logAudit(ctx, s.q, actor, "CANCEL", "Booking", id, cancelDesc)
+	// Notifikasi: pembatalan → admin, pemohon (bila dibatalkan admin), dan
+	// supir yang ditugaskan (bila ada).
 	if s.notif != nil {
 		s.notif.NotifyAdmins("BOOKING_CANCELLED", "Booking dibatalkan",
-			"Booking dibatalkan oleh pemohon", map[string]any{"bookingId": id})
+			cancelDesc, map[string]any{"bookingId": id})
+		if byAdmin {
+			s.notif.Notify(b.UserId, "BOOKING_CANCELLED", "Booking dibatalkan",
+				"Booking Anda dibatalkan oleh admin", map[string]any{"bookingId": id})
+		}
 		if b.AssignedDriverId.Valid {
 			if drv, derr := s.q.GetDriverByID(ctx, b.AssignedDriverId.Int32); derr == nil {
 				s.notif.Notify(drv.UserId, "BOOKING_CANCELLED", "Booking dibatalkan",
@@ -739,6 +765,11 @@ func (s *BookingService) Approve(ctx context.Context, id int32, req ApproveBooki
 	// bertumpuk (supir otomatis saat Create bisa saja sudah dipakai booking
 	// lain yang disetujui lebih dulu).
 	if b.AssignedDriverId.Valid {
+		// Supir yang dinonaktifkan setelah booking dibuat (DU-03).
+		if drv, derr := s.q.GetDriverByID(ctx, b.AssignedDriverId.Int32); derr == nil && (!drv.IsActive || !drv.UserIsActive) {
+			return ApproveBookingResponse{}, util.NewError(409,
+				"supir booking ini sudah nonaktif - alihkan ke supir lain sebelum menyetujui", util.ErrConflict)
+		}
 		if dc, derr := s.hasDriverConflict(ctx, b.AssignedDriverId.Int32, b); derr == nil && dc {
 			return ApproveBookingResponse{}, util.NewError(409,
 				"supir ini sudah ditugaskan di booking lain yang bentrok jadwalnya - pilih supir lain atau gabungkan (merge) sebelum menyetujui",
@@ -999,9 +1030,8 @@ func (s *BookingService) Start(ctx context.Context, id int32, odometer *int32, l
 		if b.ResourceType != repository.ResourceTypeROOM {
 			return nil, util.NewError(400, "room keeper can only start room bookings", util.ErrBadRequest)
 		}
-		rk, err := s.q.GetRoomKeeperByUserID(ctx, int32(userID))
-		if err != nil || !rk.IsActive {
-			return nil, util.ErrForbidden
+		if err := s.requireRoomKeeperOf(ctx, int32(userID), b.ResourceId); err != nil {
+			return nil, err
 		}
 	case "EMPLOYEE":
 		// Booking owner can self-serve room bookings (no room keeper needed on-site).
@@ -1015,6 +1045,12 @@ func (s *BookingService) Start(ctx context.Context, id int32, odometer *int32, l
 		// admin can start any type
 	default:
 		return nil, util.ErrForbidden
+	}
+
+	// Booking kendaraan wajib punya supir sebelum dimulai (ST-07) - UI sudah
+	// menyembunyikan tombolnya, API kini ikut menolak.
+	if b.ResourceType == repository.ResourceTypeVEHICLE && !b.AssignedDriverId.Valid {
+		return nil, util.NewError(400, "booking kendaraan belum punya supir - tugaskan supir dulu", util.ErrBadRequest)
 	}
 
 	// Jadwal maintenance - jaring pengaman ketiga (setelah Create/Approve):
@@ -1162,9 +1198,8 @@ func (s *BookingService) Complete(ctx context.Context, id int32, actor AuditActo
 		if b.ResourceType != repository.ResourceTypeROOM {
 			return nil, util.NewError(400, "room keeper can only complete room bookings", util.ErrBadRequest)
 		}
-		rk, err := s.q.GetRoomKeeperByUserID(ctx, int32(userID))
-		if err != nil || !rk.IsActive {
-			return nil, util.ErrForbidden
+		if err := s.requireRoomKeeperOf(ctx, int32(userID), b.ResourceId); err != nil {
+			return nil, err
 		}
 	case "EMPLOYEE":
 		// Booking owner can self-serve room bookings (no room keeper needed on-site).

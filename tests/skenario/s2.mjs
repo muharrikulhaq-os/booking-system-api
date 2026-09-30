@@ -217,8 +217,12 @@ export async function runBatch2() {
     const b = await bookApproved(U.EMPA.token, v.resourceId, wib(38, 9), wib(38, 12), { driverId: d.driverId });
     const c1 = await cancelB(b.id, U.EMPA.token);
     const c2 = await cancelB(b.id, U.ADM.token);
-    record('CN-03', 'INFO', `Karyawan membatalkan booking APPROVED → ${c1.status} "${c1.msg}" (perlu keputusan)`);
-    record('CN-04', 'INFO', `Admin membatalkan booking APPROVED → ${c2.status} "${c2.msg}" (perlu keputusan); supir tetap memegang kendaraan=${heldVehicle(d.driverId) === v.id}`);
+    const g = (await getBooking(b.id)).data;
+    const held = heldVehicle(d.driverId);
+    const nE = await hasNotif(U.EMPA.token, 'BOOKING_CANCELLED', b.id);
+    check('CN-03', c1.status === 403, `Karyawan membatalkan booking APPROVED → ${c1.status} "${c1.msg}" (hanya admin)`);
+    check('CN-04', ok2(c2) && g.status === 'CANCELLED' && held === null && nE,
+      `Admin membatalkan booking APPROVED → ${c2.status} ${g.status}; supir dilepas=${held === null}; notif pemohon=${nE}`);
   });
   await scenario('CN-05', async () => {
     const id = U.ongoingForCN;
