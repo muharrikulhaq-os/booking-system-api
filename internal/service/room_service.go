@@ -137,6 +137,9 @@ func (s *RoomService) UpdateStatus(ctx context.Context, id int32, status string,
 	if err != nil {
 		return nil, util.ErrNotFound
 	}
+	if err := guardManualStatusChange(ctx, s.q, r.ResourceId, repository.ResourceStatus(status)); err != nil {
+		return nil, err
+	}
 	if _, err = s.q.UpdateResourceStatus(ctx, repository.UpdateResourceStatusParams{
 		ID: r.ResourceId, Status: repository.ResourceStatus(status),
 	}); err != nil {
