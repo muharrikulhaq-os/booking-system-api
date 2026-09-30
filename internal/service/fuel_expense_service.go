@@ -221,7 +221,6 @@ func (s *FuelExpenseService) Create(ctx context.Context, req CreateFuelExpenseRe
 		_, _ = s.q.UpdateVehicleOdometer(ctx, repository.UpdateVehicleOdometerParams{
 			ID: req.VehicleID, CurrentOdometer: req.OdometerAfter,
 		})
-		checkAndTriggerAutoMaintenance(ctx, s.q, req.VehicleID, recordedByID)
 	}
 
 	logAudit(ctx, s.q, actor, "CREATE", "FuelExpense", fe.ID,

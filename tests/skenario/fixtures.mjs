@@ -43,7 +43,7 @@ export async function createUser(code, role, extra = {}) {
   return u;
 }
 
-export async function newVehicle({ capacity = 6, energy = "BBM", odometer = 10000, fixedDriverId, status, keepZeroBaseline = false } = {}) {
+export async function newVehicle({ capacity = 6, energy = "BBM", odometer = 10000, fixedDriverId, status } = {}) {
   const plate = `T ${uniq()} KCE`.slice(0, 20);
   const r = await api('POST', '/vehicles', {
     token: U.ADM.token,
@@ -57,8 +57,6 @@ export async function newVehicle({ capacity = 6, energy = "BBM", odometer = 1000
     const f = await api('PATCH', `/vehicles/${v.id}/fixed-driver`, { token: U.ADM.token, body: { driverId: fixedDriverId } });
     if (!ok2(f)) throw new Error(`set supir tetap gagal: ${f.status} ${f.msg}`);
   }
-  // Baseline servis = odometer saat didaftarkan (lihat temuan VH-10).
-  if (!keepZeroBaseline) sql(`update vehicles set "lastMaintenanceOdometer"="currentOdometer" where id=${v.id}`);
   if (status) await setVehicleStatus(v, status);
   return v;
 }

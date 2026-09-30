@@ -7,6 +7,8 @@
 >
 > Guest booking **tidak diuji** — fitur sudah tidak dipakai (2026-09-30).
 >
+> **Maintenance hanya diajukan admin** — tidak ada maintenance otomatis / pengingat km (keputusan 2026-09-30).
+>
 > Menambah skenario: lanjutkan nomor terakhir di bagiannya (mis. `BC-25`), jangan
 > mengubah nomor yang sudah ada — nomor dipakai sebagai rujukan laporan bug.
 
@@ -72,7 +74,7 @@ Siapkan sekali sebelum testing (nama boleh diganti, peran & sifatnya jangan):
 | RK-1 | Penjaga ruangan aktif | Menjaga R1 |
 | RK-2 | Penjaga ruangan aktif | Tidak menjaga ruangan mana pun |
 | K1 | Avanza, kapasitas 6, BBM | Supir tetap DRV-1 |
-| K2 | Innova, kapasitas 7, BBM | Tanpa supir tetap, odometer 9.900 km dari batas maintenance (interval 10.000) |
+| K2 | Innova, kapasitas 7, BBM | Tanpa supir tetap |
 | K3 | Ioniq, kapasitas 4, LISTRIK | Tanpa supir tetap |
 | K4 | Kendaraan status **INACTIVE** | |
 | R1 | Ruang Melati | Penjaga RK-1 |
@@ -289,7 +291,7 @@ tidak dipilih otomatis untuk booking lain.
 | CP-07 | EMP-A menyelesaikan booking ruangan miliknya | COMPLETED; R1 AVAILABLE; langsung muncul form rating ruangan | RG, DS |
 | CP-08 | Supir DRV-2 punya 2 booking APPROVED/ONGOING, satu diselesaikan | DRV-2 **tetap** memegang kendaraan (masih ada booking aktif) | DR |
 | CP-09 | Selesaikan booking utama hasil merge | Booking gabungan ikut COMPLETED; supir baru dilepas setelah semuanya selesai | LB, DB, DR |
-| CP-10 | 🔴 K2 masuk maintenance otomatis dari laporan pengembalian (RR-05) saat trip, lalu booking diselesaikan | K2 **tetap MAINTENANCE**; saat ini tertimpa AVAILABLE | KD, DS, MT |
+| CP-10 | 🔴 Admin membuat maintenance K2 saat trip K2 sedang berjalan, lalu booking diselesaikan | K2 **tetap MAINTENANCE**; saat ini tertimpa AVAILABLE | KD, DS, MT |
 
 ## 11. Transisi otomatis berbasis waktu — TO
 
@@ -329,7 +331,7 @@ tidak dipilih otomatis untuk booking lain.
 | RR-02 | Kirim saat OVERDUE | Diterima | DB |
 | RR-03 | Kirim kedua kalinya | Ditolak "sudah dikirim" | — |
 | RR-04 | Odometer akhir < odometer awal trip | Ditolak, menyebut angka awal | — |
-| RR-05 | Odometer akhir melewati batas interval servis K2 | Maintenance otomatis dibuat; K2 → MAINTENANCE (lihat CP-10) | MT, KD, DS |
+| RR-05 | Odometer akhir jauh melewati 10.000 km sejak servis terakhir | **Tidak ada** maintenance otomatis; K2 tetap sesuai statusnya (maintenance hanya diajukan admin) | MT, KD |
 | RR-06 | Admin / pemohon mengirim laporan | Tidak ada tombol; API 403 (hanya supir) | — |
 | RR-07 | Laporan untuk booking ruangan | Ditolak | — |
 | RR-08 | Pemohon & admin membuka laporan | Foto & alamat lokasi tampil | DB |
@@ -360,13 +362,13 @@ tidak dipilih otomatis untuk booking lain.
 | MT-08 | 🔴 Buat maintenance langsung berstatus "selesai" | K2 tidak terkunci; saat ini K2 terkunci MAINTENANCE & tidak bisa "diselesaikan" lagi | KD |
 | MT-09 | 🔴 Hapus maintenance saat K2 sedang IN_USE (trip berjalan) | K2 tetap IN_USE; saat ini jadi AVAILABLE | KD, DS |
 | MT-10 | Hapus maintenance terbuka (K2 tidak dipakai) | K2 → AVAILABLE, bisa dibooking | MT, KD, PK |
-| MT-11 | Maintenance otomatis: isi BBM dengan odometer melewati batas interval | Maintenance otomatis (tanda "otomatis"), K2 → MAINTENANCE | MT, KD, BBM |
-| MT-12 | Batas interval terlewati lagi saat maintenance otomatis masih terbuka | Tidak ada maintenance dobel | MT |
+| MT-11 | Isi BBM dengan odometer jauh melewati 10.000 km sejak servis terakhir | **Tidak ada** maintenance otomatis; K2 tetap AVAILABLE | MT, KD, BBM |
+| MT-12 | _(dihapus 2026-09-30 — maintenance otomatis ditiadakan)_ | — | — |
 | MT-13 | Maintenance tanpa tanggal selesai | Memblokir semua tanggal setelah tanggal mulai sampai diselesaikan | KL |
 | MT-14 | Setelah maintenance selesai, booking K2 untuk tanggal yang tadinya diblokir | Diterima | PK |
-| MT-15 | 📱 Maintenance otomatis (status `ongoing`) tampil di mobile | Tampil "Berlangsung", tidak error | MT |
+| MT-15 | 📱 Record maintenance lama hasil sistem (status `ongoing`) tampil di mobile | Tampil "Berlangsung", bisa diselesaikan admin, tidak error | MT |
 | MT-16 | Karyawan/supir membuka menu maintenance | Tidak ada menu; API 403 | — |
-| MT-17 | Sisa km sampai servis berikutnya di detail kendaraan | Benar sesuai odometer & baseline; berubah setelah BBM / laporan pengembalian | KD |
+| MT-17 | _(dihapus 2026-09-30 — pengingat sisa km servis ditiadakan)_ | — | — |
 
 ## 16. Kendaraan — VH
 
@@ -376,12 +378,12 @@ tidak dipilih otomatis untuk booking lain.
 | VH-02 | 🔴 Admin ubah status manual jadi AVAILABLE saat K2 sedang IN_USE / MAINTENANCE | Ditolak atau minta konfirmasi; saat ini diterima tanpa pengecekan | KD, DS |
 | VH-03 | 📱 Ubah status dari mobile | Berhasil; web ikut berubah tanpa reload | KD (web), DS |
 | VH-04 | Odometer diturunkan saat edit | Ditolak, menyebut angka tercatat | — |
-| VH-05 | Odometer dinaikkan melewati interval | Maintenance otomatis | MT, KD |
+| VH-05 | Odometer dinaikkan jauh (edit kendaraan) | **Tidak ada** maintenance otomatis | MT, KD |
 | VH-06 | Plat nomor duplikat | Ditolak | — |
 | VH-07 | 🔴 Hapus kendaraan yang punya riwayat booking | Ditolak dengan pesan jelas (bukan error server) | — |
 | VH-08 | Ganti foto kendaraan | Foto baru tampil di daftar, detail, picker, dan kartu booking | KD, PK, LB |
 | VH-09 | Ubah nama/kapasitas kendaraan | Nama baru tampil di booking terkait; sisa kursi di picker ikut berubah | LB, DB, PK |
-| VH-10 | Daftarkan kendaraan baru dengan odometer 15.000 km | Tidak langsung jatuh tempo servis (baseline = odometer awal) | KD, MT |
+| VH-10 | _(dihapus 2026-09-30 — tidak ada lagi baseline/interval servis)_ | — | — |
 
 ## 17. Ruangan & penjaga ruangan — RM
 
@@ -418,7 +420,7 @@ tidak dipilih otomatis untuk booking lain.
 | FL-02 | Odometer sebelum < tercatat | Ditolak, menyebut angka tercatat | — |
 | FL-03 | Odometer sesudah ≤ sebelum | Ditolak | — |
 | FL-04 | Isi "listrik" untuk kendaraan BBM | UI mengunci jenis sesuai energi kendaraan; ❓ API saat ini menerima | — |
-| FL-05 | Pengisian melewati batas interval servis | Maintenance otomatis (MT-11) | MT, KD |
+| FL-05 | Pengisian dengan odometer jauh melewati 10.000 km | Lihat MT-11: tidak ada maintenance otomatis | MT, KD |
 | FL-06 | ❓ Admin menghapus catatan BBM | Terhapus; odometer kendaraan **tidak** mundur (usulan: tampilkan peringatan) | BBM, LP |
 | FL-07 | 📱 Mencatat BBM hanya lewat kamera | Galeri tidak bisa dipakai sebagai bukti | — |
 | FL-08 | Ubah harga master jenis BBM (web) | Pengisian berikutnya memakai harga baru; yang lama tidak berubah | BBM |
@@ -508,7 +510,7 @@ Rangkaian yang menggabungkan banyak skenario di atas — jalankan berurutan, cek
 | E2E-05 | **Dua karyawan searah** | EMP-A & EMP-B booking kendaraan berbeda di jam berdekatan → ADM gabung (MG-01) → satu supir, satu kendaraan → mulai & selesai sekali untuk keduanya (MG-10) → rating hanya dari booking utama (MG-11) |
 | E2E-06 | **Dinas SPD 2 hari** | Booking SPD K1 H+2 06:00 – H+3 18:00 → booking lain K1 / DRV-1 di H+2 atau H+3 ditolak (BC-14, SP-07) → selesai terlambat tanpa overtime (CP-03) |
 | E2E-07 | **Booking terlupakan** | Booking PENDING tak direspons → IGNORED (TO-01) · booking APPROVED tak dimulai → EXPIRED → supir & kendaraan kembali kosong (TO-02, TO-03) |
-| E2E-08 | **Servis berkala** | Isi BBM K2 melewati 10.000 km (MT-11) → K2 tidak bisa dibooking → ADM selesaikan maintenance (MT-05) → K2 bisa dibooking lagi, sisa km kembali 10.000 (MT-17) |
+| E2E-08 | **Servis kendaraan (diajukan admin)** | ADM membuat maintenance K2 (MT-01) → K2 tidak bisa dibooking & tidak muncul di picker → ADM selesaikan dengan foto bukti (MT-05) → K2 bisa dibooking lagi (MT-14). Isi BBM sebanyak apa pun tidak pernah membuat maintenance sendiri (MT-11) |
 | E2E-09 | **Rapat di ruangan** | EMP-A booking R1 → approve (AP-07, RK-1 dapat notifikasi) → EMP-A mulai & selesai sendiri (ST-08, CP-07) → rating ruangan masuk ringkasan RK-1 (RT-06) |
 | E2E-10 | **Supir keluar perusahaan** | Nonaktifkan akun DRV-2 (DU-04) saat masih punya booking APPROVED → cek picker, pemilihan otomatis, dan nasib booking-nya (DU-03 ❓) |
 
