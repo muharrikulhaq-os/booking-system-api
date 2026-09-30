@@ -16,7 +16,7 @@ Ulangi pengujian (mis. setelah perbaikan): lihat [`tests/skenario/README.md`](..
 
 ## Bug terkonfirmasi (urut prioritas)
 
-> ✅ **Sudah diperbaiki (2026-09-30):** B1, B2, B3 — diverifikasi ulang dengan runner (AU-16, AU-18, RL-07 lulus).
+> ✅ **Sudah diperbaiki (2026-09-30):** B1, B2, B3 (AU-16, AU-18, RL-07 lulus) · B4, B5, B6, B7 (TO-03, TO-03b, AS-01..04, SB-02, SB-03, SP-12 lulus) — diverifikasi ulang dengan runner.
 
 | # | Bug | Skenario | Letak kode | Dampak nyata |
 |---|---|---|---|---|

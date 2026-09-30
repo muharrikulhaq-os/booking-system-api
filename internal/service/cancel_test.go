@@ -2,12 +2,22 @@ package service
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"testing"
 
 	"booking-system-api/internal/repository"
 	"booking-system-api/internal/util"
 )
+
+// Complete() menyelaraskan pegangan supir; di fixture tidak ada booking aktif lain.
+func (m *MockQuerier) GetDriverHoldVehicleID(ctx context.Context, driverID int32) (int32, error) {
+	return 0, sql.ErrNoRows
+}
+
+func (m *MockQuerier) GetDriverCurrentAssignment(ctx context.Context, driverID int32) (repository.GetDriverCurrentAssignmentRow, error) {
+	return repository.GetDriverCurrentAssignmentRow{}, sql.ErrNoRows
+}
 
 func (m *MockQuerier) CancelBooking(ctx context.Context, id int32) (repository.Booking, error) {
 	return repository.Booking{ID: id, Status: repository.BookingStatusCANCELLED}, nil
