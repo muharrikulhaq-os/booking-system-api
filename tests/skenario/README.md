@@ -26,5 +26,8 @@ KCE_PGPASS=<password postgres> PSQL_PATH="..." node run.mjs 2 3                 
 Batch: `1` AU/RL/BC/SP · `2` AP/SB/AS/CN · `3` ST/CP/TO/MG/RR/RT · `4` MT/VH/RM/DU/FL/SY/TZ/DL.
 Hasil per run ditulis ke `results-<run>.json` (tidak di-commit).
 
+Admin pertama dibuat langsung di database (pendaftaran publik sudah ditutup) memakai hash dari
+`go run generate_password.go` di root repo — jadi `go` harus ada di PATH.
+
 Setiap akun uji memakai email `@kce-test.local` dan password acak per run (tidak disimpan).
 Setiap skenario membuat kendaraan/supir/ruangan sendiri agar tidak saling mengganggu.

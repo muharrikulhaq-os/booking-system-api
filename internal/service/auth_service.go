@@ -23,15 +23,6 @@ type LoginRequest struct {
 	Password string `json:"password" validate:"required"`
 }
 
-type RegisterRequest struct {
-	EmployeeID   string `json:"employeeId"   validate:"required"`
-	Name         string `json:"name"         validate:"required"`
-	Email        string `json:"email"        validate:"required,email"`
-	Password     string `json:"password"     validate:"required,min=8"`
-	RoleID       int32  `json:"roleId"       validate:"required"`
-	DepartmentID int32  `json:"departmentId" validate:"required"`
-}
-
 type RefreshRequest struct {
 	RefreshToken string `json:"refreshToken" validate:"required"`
 }
@@ -111,40 +102,6 @@ func (s *AuthService) Login(ctx context.Context, req LoginRequest, actor AuditAc
 			"role":       string(user.RoleName),
 			"department": user.DepartmentName,
 		},
-	}, nil
-}
-
-func (s *AuthService) Register(ctx context.Context, req RegisterRequest) (map[string]any, error) {
-	if _, err := s.q.GetUserByEmail(ctx, req.Email); err == nil {
-		return nil, util.ErrDuplicate
-	}
-
-	hashed, err := util.HashPassword(req.Password)
-	if err != nil {
-		return nil, err
-	}
-
-	user, err := s.q.CreateUser(ctx, repository.CreateUserParams{
-		EmployeeId:   req.EmployeeID,
-		Name:         req.Name,
-		Email:        req.Email,
-		Password:     hashed,
-		IsActive:     true,
-		RoleId:       req.RoleID,
-		DepartmentId: req.DepartmentID,
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	full, _ := s.q.GetUserByID(ctx, user.ID)
-	return map[string]any{
-		"id":         full.ID,
-		"employeeId": full.EmployeeId,
-		"name":       full.Name,
-		"email":      full.Email,
-		"role":       string(full.RoleName),
-		"department": full.DepartmentName,
 	}, nil
 }
 

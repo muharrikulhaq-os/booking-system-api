@@ -18,7 +18,8 @@ func NewAuthHandler(svc *service.AuthService) *AuthHandler {
 
 func (h *AuthHandler) Register(r fiber.Router) {
 	g := r.Group("/auth")
-	g.Post("/register", h.Register_)
+	// Tidak ada pendaftaran publik: akun dibuat admin lewat POST /users.
+	// (Dulu /register menerima roleId apa pun → siapa pun bisa jadi ADMIN.)
 	g.Post("/login", h.Login)
 	g.Post("/refresh", h.Refresh)
 	g.Post("/logout", middleware.Auth(), h.Logout)
@@ -27,18 +28,6 @@ func (h *AuthHandler) Register(r fiber.Router) {
 	g.Post("/reset-password", h.ResetPassword)
 	g.Patch("/change-password", middleware.Auth(), h.ChangePassword)
 	g.Get("/me", middleware.Auth(), h.Me)
-}
-
-func (h *AuthHandler) Register_(c *fiber.Ctx) error {
-	var req service.RegisterRequest
-	if err := bindAndValidate(c, &req); err != nil {
-		return err
-	}
-	data, err := h.svc.Register(c.Context(), req)
-	if err != nil {
-		return err
-	}
-	return util.Created(c, "Registration successful", data)
 }
 
 func (h *AuthHandler) Login(c *fiber.Ctx) error {

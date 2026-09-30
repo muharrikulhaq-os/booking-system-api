@@ -36,6 +36,10 @@ func CreateRefreshToken(userID int) (string, time.Time, error) {
 		UserID: userID,
 		Type:   "refresh",
 		RegisteredClaims: jwt.RegisteredClaims{
+			// ID unik (jti): tanpa ini dua login di detik yang sama (klik
+			// ganda, web + HP bersamaan) menghasilkan token IDENTIK yang
+			// melanggar unique refresh_tokens.token → error 500.
+			ID:        GenerateToken(24),
 			Subject:   fmt.Sprintf("%d", userID),
 			ExpiresAt: jwt.NewNumericDate(expiresAt),
 			IssuedAt:  jwt.NewNumericDate(time.Now()),

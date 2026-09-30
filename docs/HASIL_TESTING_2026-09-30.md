@@ -16,6 +16,8 @@ Ulangi pengujian (mis. setelah perbaikan): lihat [`tests/skenario/README.md`](..
 
 ## Bug terkonfirmasi (urut prioritas)
 
+> ✅ **Sudah diperbaiki (2026-09-30):** B1, B2, B3 — diverifikasi ulang dengan runner (AU-16, AU-18, RL-07 lulus).
+
 | # | Bug | Skenario | Letak kode | Dampak nyata |
 |---|---|---|---|---|
 | B1 | 🔒 `POST /auth/register` publik bisa membuat akun **ADMIN** (`roleId` bebas) | AU-16 | `internal/service/auth_service.go` `Register` | Siapa pun bisa jadi admin |

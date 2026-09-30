@@ -1,3 +1,5 @@
+import { spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import { api, ok2, sql, sqlInt, RUN, PASSWORD, record } from './lib.mjs';
 
 export const ROLE = { EMPLOYEE: 1, ADMIN: 2, DRIVER: 3, ROOM_KEEPER: 4 };
@@ -13,15 +15,36 @@ export async function login(email, password = PASSWORD) {
 export const U = {}; // kode → { id, email, token, driverId?, rkId? }
 
 /** Admin pertama lewat /auth/register publik — sekaligus membuktikan AU-16. */
+/** Hash bcrypt lewat generate_password.go di root repo (tanpa dependensi JS). */
+function bcryptHash(password) {
+  const repoRoot = fileURLToPath(new URL('../../', import.meta.url));
+  // Windows Smart App Control kadang memblokir binary sementara `go run`;
+  // tiap variasi flag menghasilkan binary baru yang dinilai ulang.
+  const variants = [[], ['-trimpath'], ['-ldflags=-s -w'], ['-trimpath', '-ldflags=-s -w']];
+  let last = '';
+  for (const flags of variants) {
+    const r = spawnSync('go', ['run', ...flags, 'generate_password.go', password], { cwd: repoRoot, encoding: 'utf8' });
+    const m = `${r.stdout}\n${r.stderr}`.match(/Hashed password:\s*(\$2[aby]\$\S+)/);
+    if (m) return m[1];
+    last = String(r.error ?? r.stderr).trim();
+  }
+  throw new Error(`gagal membuat hash password (go run): ${last}`);
+}
+
+/**
+ * Admin pertama dibuat langsung di DB test (pendaftaran publik sudah ditutup),
+ * sekaligus membuktikan AU-16: /auth/register tidak boleh bisa membuat admin.
+ */
 export async function bootstrapAdmin() {
   const email = `adm.${RUN}@kce-test.local`;
   const r = await api('POST', '/auth/register', {
-    body: { employeeId: `ADM-${RUN}`, name: `Admin Uji ${RUN}`, email, password: PASSWORD, roleId: ROLE.ADMIN, departmentId: 1 },
+    body: { employeeId: `ADMREG-${RUN}`, name: `Penyusup ${RUN}`, email: `reg.${RUN}@kce-test.local`, password: PASSWORD, roleId: ROLE.ADMIN, departmentId: 1 },
   });
   record('AU-16', ok2(r) ? 'FAIL' : 'PASS',
-    ok2(r) ? `Register publik BERHASIL membuat akun ADMIN (role=${r.data?.role})` : `Register admin ditolak (${r.status})`);
-  if (!ok2(r)) throw new Error('Tidak bisa bootstrap admin lewat register; butuh jalur lain');
-  U.ADM = { id: r.data.id, email, token: await login(email) };
+    ok2(r) ? `Register publik BERHASIL membuat akun ADMIN (role=${r.data?.role})` : `Pendaftaran publik ditolak (${r.status})`);
+  const id = sqlInt(`insert into users ("employeeId","name","email","password","roleId","departmentId")
+    values ('ADM-${RUN}','Admin Uji ${RUN}','${email}','${bcryptHash(PASSWORD)}',${ROLE.ADMIN},1) returning id`);
+  U.ADM = { id, email, token: await login(email) };
   return U.ADM;
 }
 
