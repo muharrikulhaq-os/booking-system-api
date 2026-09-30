@@ -1,4 +1,4 @@
-// Batch 5: VD (vendor), KP (kepemilikan kendaraan), IS (laporan kendala supir), DS (pengaturan dokumen)
+// Batch 5: VD (vendor), KP (kepemilikan kendaraan), IS (laporan kendala supir), KS (kop surat / pengaturan dokumen)
 import { api, ok2, sqlInt, check, scenario, inMin, fakePhoto } from './lib.mjs';
 import { U, newVehicle, newDriver, bookApproved, startB, hasNotif, maintPlan } from './fixtures.mjs';
 
@@ -92,18 +92,18 @@ export async function runBatch5() {
   });
 
   // ── DS ────────────────────────────────────────────────────────────────
-  await scenario('DS-01..02', async () => {
+  await scenario('KS-01..02', async () => {
     const put = await api('PUT', '/document-settings', { token: A(), body: {
       companyName: 'PT Uji Skenario', companyAddress: 'Jl. Uji 99', companyPhone: '021-1', companyEmail: 'uji@kce-test.local',
       signerName: 'Budi Uji', signerTitle: 'Kepala Umum', letterCode: 'KCE-MNT' } });
     const bad = await api('PUT', '/document-settings', { token: A(), body: { companyName: 'X', letterCode: 'KCE/MNT' } });
     const emp = await api('GET', '/document-settings', { token: U.EMPA.token });
-    check('DS-01', ok2(put) && put.data.signerName === 'Budi Uji' && bad.status === 400 && emp.status === 403,
+    check('KS-01', ok2(put) && put.data.signerName === 'Budi Uji' && bad.status === 400 && emp.status === 403,
       `Simpan kop & penandatangan ${put.status}; kode surat mengandung '/' ${bad.status}; karyawan ${emp.status}`);
     const logo = await api('POST', '/document-settings/logo', { token: A(), form: { logo: pngLogo() } });
     const badLogo = await api('POST', '/document-settings/logo', { token: A(), form: { logo: fakePhoto() } });
     const rm = await api('DELETE', '/document-settings/logo', { token: A() });
-    check('DS-02', ok2(logo) && !!logo.data.logoUrl && ok2(rm) && rm.data.logoUrl === null,
+    check('KS-02', ok2(logo) && !!logo.data.logoUrl && ok2(rm) && rm.data.logoUrl === null,
       `Unggah logo ${logo.status} (${logo.data?.logoUrl}); hapus logo ${rm.status}; jpg-bernama-foto ${badLogo.status}`);
   });
 }
