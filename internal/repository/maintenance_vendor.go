@@ -512,6 +512,22 @@ type DriverVehicle struct {
 	OnTrip      bool          `json:"onTrip"`
 }
 
+// MarshalJSON: bookingId sebagai angka/null (sql.NullInt32 bawaan
+// terserialisasi {"Int32":0,"Valid":false}).
+func (d DriverVehicle) MarshalJSON() ([]byte, error) {
+	var bid *int32
+	if d.BookingID.Valid {
+		bid = &d.BookingID.Int32
+	}
+	return json.Marshal(struct {
+		VehicleID   int32  `json:"vehicleId"`
+		Name        string `json:"name"`
+		PlateNumber string `json:"plateNumber"`
+		BookingID   *int32 `json:"bookingId"`
+		OnTrip      bool   `json:"onTrip"`
+	}{d.VehicleID, d.Name, d.PlateNumber, bid, d.OnTrip})
+}
+
 func (q *Queries) ListDriverVehicles(ctx context.Context, driverID int32) ([]DriverVehicle, error) {
 	rows, err := q.db.QueryContext(ctx, `
 		WITH linked AS (

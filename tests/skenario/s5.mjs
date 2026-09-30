@@ -62,7 +62,7 @@ export async function runBatch5() {
     const r = await api('POST', '/vehicle-issues', { token: d.token,
       form: { vehicleId: v.id, description: 'Ban kiri depan bocor di tol', location: 'KM 23 Tol Cikampek', canContinue: 'false', 'photos[]': fakePhoto() } });
     const nA = await hasNotif(A(), 'VEHICLE_ISSUE', null);
-    check('IS-01', (mine.data ?? []).some((x) => x.vehicleId === v.id && x.onTrip) && r.status === 201 && r.data.bookingId === b.id
+    check('IS-01', (mine.data ?? []).some((x) => x.vehicleId === v.id && x.onTrip && x.bookingId === b.id) && r.status === 201 && r.data.bookingId === b.id
       && r.data.canContinue === false && r.data.photos.length === 1 && (r.changed ?? '').includes('maintenance') && nA,
       `Supir melapor kendaraan tripnya → ${r.status}, tertaut booking #${r.data?.bookingId}, foto ${r.data?.photos?.length}, notif admin=${nA}`);
     const other = await newVehicle();
