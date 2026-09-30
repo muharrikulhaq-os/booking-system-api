@@ -132,6 +132,7 @@ tidak dipilih otomatis untuk booking lain.
 | AU-15 | Admin mengubah **nama/departemen/role** akun yang sedang login di perangkat lain | Nama/role di header ikut berubah tanpa reload; bila role turun dari ADMIN, menu admin hilang (🌐 sudah; 🔴 📱 profil baru diperbarui saat app dibuka ulang) | HD, PG |
 | AU-16 | 🔴 API: `POST /auth/register` dengan `roleId` admin | **Ditolak** (pendaftaran publik tidak boleh memilih role admin) | PG |
 | AU-17 | Login di 2 perangkat bersamaan | Keduanya jalan; logout di satu tidak mengeluarkan yang lain | — |
+| AU-18 | 🔴 Login akun yang sama dua kali di detik yang sama (klik ganda, web + HP) | Keduanya berhasil; saat ini yang kedua error 500 | — |
 
 ## 2. Hak akses per role — RL
 
@@ -189,7 +190,8 @@ tidak dipilih otomatis untuk booking lain.
 | SP-09 | Ubah kendaraan tetap DRV-2 ke K3 (dari menu **Driver**) | K1 kehilangan supir tetap, K3 = DRV-2 | KD, DR |
 | SP-10 | Hapus supir tetap K1 | Booking K1 berikutnya memakai supir kosong otomatis | KD, DR |
 | SP-11 | Picker supir di form booking | Menampilkan supir aktif, sisa kursi kendaraan yang dipegang, tujuan trip yang bentrok, badge "Digunakan SPD" | PK |
-| SP-12 | Booking K2 tanpa pilih supir → DRV-2 ditempel; sebelum approve DRV-2 di-approve di booking lain | Saat approve: bila bentrok, ditolak & admin menugaskan supir lain | AQ |
+| SP-12 | 🔴 Booking K2 tanpa pilih supir → DRV-2 ditempel; sebelum approve DRV-2 di-approve di booking lain yang jamnya bentrok | Saat approve: ditolak & admin menugaskan supir lain; saat ini supir yang sama disetujui untuk dua perjalanan bentrok | AQ |
+| SP-13 | ❓ Ada supir bebas & supir tetap kendaraan lain; booking kendaraan tanpa supir tetap | Usulan: supir bebas diutamakan; saat ini bisa mengambil supir tetap kendaraan lain | PK |
 
 ## 5. Persetujuan & penolakan — AP
 
@@ -209,6 +211,7 @@ tidak dipilih otomatis untuk booking lain.
 | AP-12 | Dua admin approve booking yang sama hampir bersamaan | Yang kedua ditolak "tidak PENDING"; tidak ada data ganda | AQ |
 | AP-13 | Admin approve dari **mobile** saat admin lain membuka AQ di **web** | Baris hilang dari AQ web tanpa reload | AQ, DS |
 | AP-14 | Booking PENDING tanpa supir (SP-04) di-approve | APPROVED tanpa supir; tombol "Mulai" tidak muncul sampai ditugaskan supir+kendaraan | DB |
+| AP-15 | 🔴 Riwayat persetujuan setelah approve | Tercatat (siapa, kapan, catatan); saat ini log APPROVE tidak pernah tersimpan | DB, LP |
 
 ## 6. Alihkan resource (substitute) — SB
 
@@ -311,7 +314,7 @@ tidak dipilih otomatis untuk booking lain.
 | MG-06 | Gabung booking ONGOING/COMPLETED | Ditolak | — |
 | MG-07 | Jendela gabungan bentrok dengan booking lain di kendaraan yang sama | Ditolak 409 | — |
 | MG-08 | Total penumpang > kapasitas setelah gabung | Peringatan kapasitas | — |
-| MG-09 | Gabung sambil memilih supir lain | Supir & kendaraan booking utama ikut berganti, sekunder mewarisi | DB, DR |
+| MG-09 | 🔴 Gabung sambil memilih supir lain | Supir berganti, kendaraan tetap, sekunder mewarisi; saat ini kendaraan booking utama jadi kosong | DB, DR |
 | MG-10 | Mulai / selesaikan booking utama | Sekunder ikut ONGOING / COMPLETED (lihat ST-13, CP-09) | LB |
 | MG-11 | Rating dari booking sekunder | Ditolak "beri rating dari booking utama #..." | — |
 | MG-12 | BBM dicatat di booking utama | Tampil juga di detail booking sekunder, tanpa dobel | DB |
@@ -378,6 +381,7 @@ tidak dipilih otomatis untuk booking lain.
 | VH-07 | 🔴 Hapus kendaraan yang punya riwayat booking | Ditolak dengan pesan jelas (bukan error server) | — |
 | VH-08 | Ganti foto kendaraan | Foto baru tampil di daftar, detail, picker, dan kartu booking | KD, PK, LB |
 | VH-09 | Ubah nama/kapasitas kendaraan | Nama baru tampil di booking terkait; sisa kursi di picker ikut berubah | LB, DB, PK |
+| VH-10 | Daftarkan kendaraan baru dengan odometer 15.000 km | Tidak langsung jatuh tempo servis (baseline = odometer awal) | KD, MT |
 
 ## 17. Ruangan & penjaga ruangan — RM
 
@@ -482,7 +486,7 @@ tidak dipilih otomatis untuk booking lain.
 
 | ID | Skenario | Diharapkan |
 |---|---|---|
-| DL-01 | Angka dashboard admin (pending, kendaraan tersedia, ruangan tersedia, supir) | Sama dengan jumlah nyata di menu masing-masing |
+| DL-01 | 🔴 Angka dashboard admin (kendaraan, ruangan, supir tersedia) | Sama dengan jumlah nyata di menu masing-masing; saat ini "supir tersedia" dihitung beda dari picker |
 | DL-02 | Setiap aksi di §3–§15 | Angka dashboard terkait langsung berubah |
 | DL-03 | Dashboard karyawan | Hanya data miliknya |
 | DL-04 | Laporan tab Booking/Resource/Keuangan/Driver/Audit dengan filter periode | Angka konsisten antar tab & dengan data mentah; tidak ada angka > 100% |
@@ -511,6 +515,10 @@ Rangkaian yang menggabungkan banyak skenario di atas — jalankan berurutan, cek
 ---
 
 ## Temuan dari membaca kode
+
+> **Status (run 2026-09-30):** hasil pengujian nyata tiap temuan — terkonfirmasi, terbantah, dan temuan baru
+> (B1–B21) — ada di [HASIL_TESTING_2026-09-30.md](HASIL_TESTING_2026-09-30.md). Tabel di bawah adalah
+> dugaan awal sebelum diuji.
 
 Perilaku berikut ditemukan dari membaca kode backend (commit `aed39c6`, 2026-09-30) dan
 **belum dibuktikan** di aplikasi berjalan — skenario 🔴 terkait wajib diuji untuk memastikan.
