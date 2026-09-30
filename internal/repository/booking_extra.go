@@ -559,7 +559,10 @@ func (q *Queries) CheckMaintenanceConflict(ctx context.Context, arg CheckMainten
 	query := `
 		SELECT COUNT(*) FROM maintenance_records
 		WHERE "vehicleId" = $1
-		  AND status != 'completed'
+		  -- Jendela [startDate, endDate) dijaga MaintenanceService: rencana
+		  -- (SUBMITTED), jadwal vendor (SCHEDULED), atau terbuka sejak serah
+		  -- terima (IN_PROGRESS, endDate NULL).
+		  AND status IN ('SUBMITTED', 'SCHEDULED', 'IN_PROGRESS')
 		  AND "startDate" < $2
 		  AND ("endDate" IS NULL OR "endDate" > $3)`
 	var count int64

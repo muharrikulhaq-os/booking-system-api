@@ -2,7 +2,7 @@
 import { api, ok2, sql, sqlInt, record, check, scenario, wib, inMin, fakePhoto } from './lib.mjs';
 import {
   U, newVehicle, newRoom, newDriver, book, getBooking, approve, startB, completeB, cancelB,
-  hasNotif, onlyDrivers, bookApproved, heldVehicle, resourceStatus, setDates, sweep,
+  hasNotif, onlyDrivers, bookApproved, heldVehicle, resourceStatus, setDates, sweep, maintPlan,
 } from './fixtures.mjs';
 
 const activity = async (id) => (await api('GET', `/bookings/${id}/activity`, { token: U.ADM.token })).data ?? [];
@@ -11,8 +11,7 @@ const returnReport = (id, token, odometer) => api('POST', `/bookings/${id}/retur
   token, form: { note: 'Kendaraan kembali baik', location: '-6.2088,106.8456', odometer, 'photos[]': fakePhoto() } });
 const rateDriver = (id, token, rating = 5) => api('POST', `/bookings/${id}/rate-driver`, { token, body: { rating, review: 'Supir ramah' } });
 const rateRoom = (id, token, rating = 4) => api('POST', `/bookings/${id}/rate-room`, { token, body: { rating, review: 'Ruang bersih' } });
-const maint = (vehicleId, start, end) => api('POST', '/maintenance', { token: U.ADM.token,
-  body: { vehicleId, type: 'REPAIR', status: 'pending', description: 'Uji', location: 'Bengkel', startDate: start, endDate: end } });
+const maint = (vehicleId, start) => maintPlan(vehicleId, start, 1); // pengajuan yang memblokir tanggal
 
 /** Booking kendaraan ONGOING milik EMPA dengan supir d (sekarang dalam jendela mulai). */
 async function ongoingVehicle(d, v, extra = {}, odometerStart) {
@@ -192,11 +191,15 @@ export async function runBatch3() {
     const autoM = sqlInt(`select count(*) from maintenance_records where "vehicleId"=${v.id}`);
     check('RR-05', autoM === 0 && resourceStatus(v.resourceId) === 'IN_USE',
       `Odometer akhir +10.500 km → tidak ada maintenance otomatis (${autoM}), kendaraan tetap ${resourceStatus(v.resourceId)}`);
-    // Maintenance diajukan admin saat trip masih berjalan (mis. mobil dilaporkan rusak).
-    await maint(v.id, inMin(-5), inMin(600));
+    // Maintenance diajukan admin saat trip masih berjalan (mis. mobil dilaporkan rusak):
+    // serah terima ke vendor baru bisa setelah trip selesai.
+    const m = await maint(v.id, inMin(-5));
+    const early = await api('POST', `/maintenance/${m.data.id}/handover`, { token: U.ADM.token, body: { receiverName: 'Bengkel' } });
     await completeB(bid);
-    check('CP-10', resourceStatus(v.resourceId) === 'MAINTENANCE', `Setelah booking selesai, kendaraan tetap MAINTENANCE`,
-      `Maintenance terbuka, tapi setelah booking selesai status kendaraan jadi ${resourceStatus(v.resourceId)}`);
+    const afterTrip = resourceStatus(v.resourceId);
+    const h = await api('POST', `/maintenance/${m.data.id}/handover`, { token: U.ADM.token, body: { receiverName: 'Bengkel' } });
+    check('CP-10', early.status === 409 && afterTrip === 'AVAILABLE' && ok2(h) && resourceStatus(v.resourceId) === 'MAINTENANCE',
+      `Serah terima saat trip berjalan ditolak (${early.status}); trip selesai → ${afterTrip}; diserahkan → ${resourceStatus(v.resourceId)}`);
   });
 
   // ── TO ────────────────────────────────────────────────────────────────

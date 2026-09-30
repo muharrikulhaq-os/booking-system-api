@@ -20,6 +20,7 @@ const batches = {
   2: async () => (await import('./s2.mjs')).runBatch2(),
   3: async () => (await import('./s3.mjs')).runBatch3(),
   4: async () => (await import('./s4.mjs')).runBatch4(),
+  5: async () => (await import('./s5.mjs')).runBatch5(),
 };
 for (const [k, fn] of Object.entries(batches)) {
   if (only.length && !only.includes(k)) continue;

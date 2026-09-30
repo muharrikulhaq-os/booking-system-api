@@ -31,6 +31,37 @@ type ExtendedQuerier interface {
 	PromoteDueMaintenance(ctx context.Context) (int64, error)
 	ListDriverActiveBookingIDs(ctx context.Context, driverID int32) ([]int32, error)
 	CountActiveResourceOverlap(ctx context.Context, resourceID int32, start, end time.Time, excludeID int32) (int64, error)
+	ListVendors(ctx context.Context, p ListVendorsParams) ([]Vendor, error)
+	GetVendor(ctx context.Context, id int32) (Vendor, error)
+	CreateVendor(ctx context.Context, p VendorParams) (Vendor, error)
+	UpdateVendor(ctx context.Context, id int32, p VendorParams) (Vendor, error)
+	SetVendorActive(ctx context.Context, id int32, active bool) error
+	DeleteVendor(ctx context.Context, id int32) error
+	ListVehicleOwnership(ctx context.Context, vehicleIDs []int32) (map[int32]VehicleOwnership, error)
+	GetVehicleOwnership(ctx context.Context, vehicleID int32) (VehicleOwnership, error)
+	SetVehicleOwnership(ctx context.Context, vehicleID int32, ownership string, vendorID sql.NullInt32, contractNo sql.NullString) error
+	ListMaintenanceRecords(ctx context.Context, p ListMaintenanceRecordsParams) ([]MaintenanceItem, int64, error)
+	GetMaintenanceRecord(ctx context.Context, id int32) (MaintenanceItem, error)
+	GetOpenMaintenanceID(ctx context.Context, vehicleID, excludeID int32) (int32, error)
+	InsertMaintenance(ctx context.Context, p MaintenancePlan, sourceIssue sql.NullInt32, recordedBy int32) (int32, error)
+	UpdateMaintenancePlan(ctx context.Context, id int32, p MaintenancePlan, allowed []string) (bool, error)
+	TransitionMaintenance(ctx context.Context, id int32, from []string, to string, set string, args ...any) (bool, error)
+	UpdateMaintenanceCost(ctx context.Context, id int32, estimated, actual, bearer sql.NullString) error
+	DeleteMaintenanceRecord(ctx context.Context, id int32, allowed []string) (bool, error)
+	NextDocumentNumber(ctx context.Context, key string) (int, error)
+	GetDocumentSettings(ctx context.Context) (DocumentSettings, error)
+	UpdateDocumentSettings(ctx context.Context, s DocumentSettings) error
+	SetDocumentLogo(ctx context.Context, url sql.NullString) error
+	ListMaintenanceDocuments(ctx context.Context, maintenanceID int32) ([]MaintenanceDocument, error)
+	InsertMaintenanceDocument(ctx context.Context, d MaintenanceDocument) (int32, error)
+	GetMaintenanceDocument(ctx context.Context, id int32) (MaintenanceDocument, error)
+	DeleteMaintenanceDocument(ctx context.Context, id int32) error
+	ListVehicleIssues(ctx context.Context, p ListVehicleIssuesParams) ([]VehicleIssue, int64, error)
+	GetVehicleIssue(ctx context.Context, id int32) (VehicleIssue, error)
+	InsertVehicleIssue(ctx context.Context, vehicleID int32, bookingID sql.NullInt32, reportedBy int32, description string, location sql.NullString, photos []string, canContinue bool) (int32, error)
+	ResolveVehicleIssue(ctx context.Context, id int32, status string, handledBy int32, note sql.NullString, maintenanceID sql.NullInt32) (bool, error)
+	CountOpenVehicleIssues(ctx context.Context) (int64, error)
+	ListDriverVehicles(ctx context.Context, driverID int32) ([]DriverVehicle, error)
 	CreateReturnReport(ctx context.Context, bookingID, submittedByID int32, note, location string, odometer sql.NullInt32) (BookingReturnReport, error)
 	GetReturnReport(ctx context.Context, bookingID int32) (BookingReturnReportRow, error)
 	SetBookingStartTrip(ctx context.Context, bookingID int32, odometer sql.NullInt32, location, photoURL sql.NullString) error

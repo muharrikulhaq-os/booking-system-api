@@ -5,17 +5,15 @@ import (
 	"time"
 )
 
-// activeMaintenanceSQL: maintenance kendaraan yang SEDANG berlangsung — belum
-// selesai, sudah dimulai, dan belum lewat tanggal selesainya (endDate NULL =
-// terbuka). Maintenance terjadwal di masa depan belum mengunci kendaraan;
-// tanggalnya diblokir lewat CheckMaintenanceConflict.
+// activeMaintenanceSQL: kendaraan yang SEDANG di vendor — maintenance
+// berstatus IN_PROGRESS (sudah diserah-terimakan, belum kembali). Dasarnya
+// serah terima nyata, bukan tanggal: pengajuan/jadwal belum mengunci
+// kendaraan (tanggalnya diblokir lewat CheckMaintenanceConflict).
 const activeMaintenanceSQL = `
 	SELECT 1 FROM vehicles v
 	JOIN maintenance_records m ON m."vehicleId" = v.id
 	WHERE v."resourceId" = r.id
-	  AND m.status <> 'completed'
-	  AND m."startDate" <= NOW()
-	  AND (m."endDate" IS NULL OR m."endDate" > NOW())`
+	  AND m.status = 'IN_PROGRESS'`
 
 const activeTripSQL = `
 	SELECT 1 FROM bookings b
@@ -38,8 +36,8 @@ func (q *Queries) GetResourceStatusFacts(ctx context.Context, resourceID int32) 
 	return f, err
 }
 
-// PromoteDueMaintenance mengubah kendaraan AVAILABLE yang maintenance-nya
-// SUDAH tiba waktunya menjadi MAINTENANCE (tidak ada penjadwal; dipanggil
+// PromoteDueMaintenance: jaring pengaman — kendaraan AVAILABLE yang ternyata
+// sedang di vendor (maintenance IN_PROGRESS) dijadikan MAINTENANCE (dipanggil
 // saat daftar booking/kendaraan dibuka). Kendaraan yang sedang dipakai trip
 // dibiarkan IN_USE — akan jadi MAINTENANCE saat trip selesai.
 func (q *Queries) PromoteDueMaintenance(ctx context.Context) (int64, error) {

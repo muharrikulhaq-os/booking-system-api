@@ -1,6 +1,6 @@
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { api, ok2, sql, sqlInt, RUN, PASSWORD, record } from './lib.mjs';
+import { api, ok2, sql, sqlInt, RUN, PASSWORD, record, inMin } from './lib.mjs';
 
 export const ROLE = { EMPLOYEE: 1, ADMIN: 2, DRIVER: 3, ROOM_KEEPER: 4 };
 let seq = 0;
@@ -150,4 +150,31 @@ export async function bookApproved(token, resourceId, start, end, extra = {}) {
   const a = await approve(b.data.id);
   if (!ok2(a)) throw new Error(`approve gagal ${a.status} ${a.msg}`);
   return (await getBooking(b.data.id)).data;
+}
+
+// ── Maintenance vendor ────────────────────────────────────────────────────
+let workshopCache;
+/** Bengkel rekanan uji (dibuat sekali per run). */
+export async function workshop() {
+  if (workshopCache) return workshopCache;
+  const r = await api('POST', '/vendors', { token: U.ADM.token,
+    body: { name: `Bengkel Uji ${RUN}`, type: 'WORKSHOP', address: 'Jl. Uji No. 1', picName: 'Pak Uji', phone: '0812000111' } });
+  if (!ok2(r)) throw new Error(`buat vendor gagal: ${r.status} ${r.msg}`);
+  workshopCache = r.data;
+  return workshopCache;
+}
+/** Pengajuan maintenance langsung DIAJUKAN (memblokir tanggal rencana selama `days` hari). */
+export async function maintPlan(vehicleId, planned, days = 1, extra = {}) {
+  const w = await workshop();
+  return api('POST', '/maintenance', { token: U.ADM.token,
+    body: { vehicleId, vendorId: w.id, category: 'REPAIR', description: 'Uji skenario', plannedDate: planned, estimatedDays: days, submit: true, ...extra } });
+}
+/** Maintenance yang kendaraannya sudah diserahkan ke vendor (IN_PROGRESS). */
+export async function maintActive(vehicleId, handover = {}) {
+  const m = await maintPlan(vehicleId, inMin(-5));
+  if (!ok2(m)) throw new Error(`ajukan maintenance gagal: ${m.status} ${m.msg}`);
+  const h = await api('POST', `/maintenance/${m.data.id}/handover`, { token: U.ADM.token,
+    body: { receiverName: 'Petugas Bengkel', ...handover } });
+  if (!ok2(h)) throw new Error(`serah terima gagal: ${h.status} ${h.msg}`);
+  return h.data;
 }

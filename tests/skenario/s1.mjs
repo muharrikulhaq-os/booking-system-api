@@ -3,7 +3,7 @@ import { api, ok2, sql, sqlInt, record, check, scenario, wib, inMin, PASSWORD } 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 import {
   U, ROLE, login, createUser, newVehicle, newRoom, newDriver, setVehicleStatus, book, getBooking,
-  approve, cancelB, hasNotif, onlyDrivers, bookApproved, heldVehicle,
+  approve, cancelB, hasNotif, onlyDrivers, bookApproved, heldVehicle, maintPlan,
 } from './fixtures.mjs';
 
 export async function runBatch1() {
@@ -145,7 +145,7 @@ export async function runBatch1() {
   });
   await scenario('BC-06/07', async () => {
     const d = await newDriver('DRVBC6'); const v = await newVehicle();
-    const m = await api('POST', '/maintenance', { token: A(), body: { vehicleId: v.id, type: 'REPAIR', status: 'pending', description: 'Uji', location: 'Bengkel', startDate: wib(3, 8), endDate: wib(4, 17) } });
+    const m = await maintPlan(v.id, wib(3, 8), 2); // diajukan: H+3 08.00 s.d. H+5 08.00
     const statusAfter = sql(`select status from resources where id=${v.resourceId}`);
     const b7 = await book(U.EMPA.token, v.resourceId, wib(5, 9), wib(5, 10), { driverId: d.driverId });
     check('BC-07', b7.status === 201, `Booking H+5 (di luar jadwal maintenance H+3..H+4) diterima`,

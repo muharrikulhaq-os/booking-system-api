@@ -28,6 +28,7 @@ type CreateVehicleRequest struct {
 	CategoryID      int32  `json:"categoryId"      validate:"required"`
 	Capacity        int16  `json:"capacity"        validate:"required,min=1"`
 	EnergyType      string `json:"energyType"      validate:"omitempty,oneof=BBM LISTRIK HYBRID"`
+	VehicleOwnershipInput
 }
 
 type UpdateVehicleRequest struct {
@@ -40,6 +41,7 @@ type UpdateVehicleRequest struct {
 	CategoryID      int32  `json:"categoryId"  validate:"required"`
 	Capacity        int16  `json:"capacity"    validate:"required,min=1"`
 	EnergyType      string `json:"energyType"  validate:"omitempty,oneof=BBM LISTRIK HYBRID"`
+	VehicleOwnershipInput
 }
 
 type UpdateStatusRequest struct {
@@ -119,7 +121,7 @@ func (s *VehicleService) List(ctx context.Context, page, limit int, search *stri
 		}
 	}
 
-	// Maintenance terjadwal yang sudah tiba waktunya → MAINTENANCE (B11).
+	// Jaring pengaman status kendaraan yang sedang di vendor.
 	promoteDueMaintenance(ctx, s.q, s.publish)
 
 	rows, err := s.q.ListVehicles(ctx, params)
@@ -140,6 +142,7 @@ func (s *VehicleService) List(ctx context.Context, page, limit int, search *stri
 	for i, r := range rows {
 		out[i] = serializeVehicleRow(r, spdSet[r.ID])
 	}
+	s.attachOwnership(ctx, out...)
 	return out, total, nil
 }
 
@@ -157,12 +160,18 @@ func (s *VehicleService) GetByID(ctx context.Context, id int32) (map[string]any,
 			break
 		}
 	}
-	return serializeVehicleByID(v, spdActive), nil
+	out := serializeVehicleByID(v, spdActive)
+	s.attachOwnership(ctx, out)
+	return out, nil
 }
 
 func (s *VehicleService) Create(ctx context.Context, req CreateVehicleRequest, actor AuditActor) (map[string]any, error) {
 	if _, err := s.q.GetVehicleByPlate(ctx, req.PlateNumber); err == nil {
 		return nil, util.NewError(409, "plate number already exists", util.ErrDuplicate)
+	}
+	own, ownVendor, contract, hasOwn, err := s.resolveOwnership(ctx, req.VehicleOwnershipInput)
+	if err != nil {
+		return nil, err
 	}
 
 	r, err := s.q.CreateResource(ctx, repository.CreateResourceParams{
@@ -187,6 +196,11 @@ func (s *VehicleService) Create(ctx context.Context, req CreateVehicleRequest, a
 	}
 
 	v, _ := s.q.GetVehicleByPlate(ctx, req.PlateNumber)
+	if hasOwn {
+		if err := s.q.SetVehicleOwnership(ctx, v.ID, own, ownVendor, contract); err != nil {
+			return nil, err
+		}
+	}
 	logAudit(ctx, s.q, actor, "CREATE", "Vehicle", v.ID,
 		"Membuat kendaraan "+req.Name+" ("+req.PlateNumber+")")
 	return s.GetByID(ctx, v.ID)
@@ -205,6 +219,10 @@ func (s *VehicleService) Update(ctx context.Context, id int32, req UpdateVehicle
 			fmt.Sprintf("odometer tidak boleh kurang dari catatan saat ini (%d km)", v.CurrentOdometer),
 			util.ErrBadRequest)
 	}
+	own, ownVendor, contract, hasOwn, err := s.resolveOwnership(ctx, req.VehicleOwnershipInput)
+	if err != nil {
+		return nil, err
+	}
 
 	_ = s.q.UpdateResourceName(ctx, repository.UpdateResourceNameParams{
 		ID: v.ResourceId, Name: req.Name,
@@ -221,6 +239,11 @@ func (s *VehicleService) Update(ctx context.Context, id int32, req UpdateVehicle
 	})
 	if err != nil {
 		return nil, err
+	}
+	if hasOwn {
+		if err := s.q.SetVehicleOwnership(ctx, id, own, ownVendor, contract); err != nil {
+			return nil, err
+		}
 	}
 	logAudit(ctx, s.q, actor, "UPDATE", "Vehicle", id,
 		"Mengubah data kendaraan "+req.Name+" ("+req.PlateNumber+")")

@@ -6,7 +6,6 @@ import (
 	"booking-system-api/internal/middleware"
 	"booking-system-api/internal/service"
 	"booking-system-api/internal/util"
-	"mime/multipart"
 
 	"github.com/gofiber/fiber/v2"
 )
@@ -117,120 +116,6 @@ func (h *FuelExpenseHandler) Delete(c *fiber.Ctx) error {
 		return err
 	}
 	return util.OK(c, "Fuel expense deleted", nil)
-}
-
-// ─── Maintenance Handler ──────────────────────────────────────────────────────
-
-type MaintenanceHandler struct {
-	svc *service.MaintenanceService
-}
-
-func NewMaintenanceHandler(svc *service.MaintenanceService) *MaintenanceHandler {
-	return &MaintenanceHandler{svc: svc}
-}
-
-func (h *MaintenanceHandler) Register(r fiber.Router) {
-	auth := middleware.Auth()
-	admin := middleware.RequireRole("ADMIN")
-
-	g := r.Group("/maintenance", auth, admin)
-	g.Get("", h.List)
-	g.Get("/:id", h.GetByID)
-	g.Post("", h.Create)
-	g.Put("/:id", h.Update)
-	g.Patch("/:id/complete", h.Complete)
-	g.Delete("/:id", h.Delete)
-}
-
-func (h *MaintenanceHandler) List(c *fiber.Ctx) error {
-	page := queryInt(c, "page", 1)
-	limit := queryInt(c, "limit", 20)
-	data, total, err := h.svc.List(c.Context(), page, limit, queryInt32(c, "vehicleId"), c.Query("sortBy"), c.Query("sortOrder"))
-	if err != nil {
-		return err
-	}
-	return util.Paginated(c, "Maintenance records retrieved", data, total, page, limit)
-}
-
-func (h *MaintenanceHandler) GetByID(c *fiber.Ctx) error {
-	id, err := parseID(c, "id")
-	if err != nil {
-		return err
-	}
-	data, err := h.svc.GetByID(c.Context(), id)
-	if err != nil {
-		return err
-	}
-	return util.OK(c, "Maintenance record retrieved", data)
-}
-
-func (h *MaintenanceHandler) Create(c *fiber.Ctx) error {
-	var req service.CreateMaintenanceRequest
-	if err := bindAndValidate(c, &req); err != nil {
-		return err
-	}
-	resp, err := h.svc.Create(c.Context(), req, auditActor(c))
-	if err != nil {
-		return err
-	}
-	if resp.Warning != "" {
-		return c.Status(fiber.StatusCreated).JSON(fiber.Map{
-			"success": true,
-			"message": "Maintenance record created with warning",
-			"warning": resp.Warning,
-			"data":    resp.Data,
-		})
-	}
-	return util.Created(c, "Maintenance record created", resp.Data)
-}
-
-func (h *MaintenanceHandler) Complete(c *fiber.Ctx) error {
-	id, err := parseID(c, "id")
-	if err != nil {
-		return err
-	}
-
-	form, formErr := c.MultipartForm()
-	var photos []*multipart.FileHeader
-	if formErr == nil {
-		photos = form.File["photos[]"]
-		if len(photos) == 0 {
-			photos = form.File["photo"] // fallback
-		}
-	}
-
-	data, err := h.svc.Complete(c.Context(), id, photos)
-	if err != nil {
-		return err
-	}
-	return util.OK(c, "Maintenance record marked as complete", data)
-}
-
-func (h *MaintenanceHandler) Update(c *fiber.Ctx) error {
-	id, err := parseID(c, "id")
-	if err != nil {
-		return err
-	}
-	var req service.UpdateMaintenanceRequest
-	if err := bindAndValidate(c, &req); err != nil {
-		return err
-	}
-	data, err := h.svc.Update(c.Context(), id, req, auditActor(c))
-	if err != nil {
-		return err
-	}
-	return util.OK(c, "Maintenance record updated", data)
-}
-
-func (h *MaintenanceHandler) Delete(c *fiber.Ctx) error {
-	id, err := parseID(c, "id")
-	if err != nil {
-		return err
-	}
-	if err := h.svc.Delete(c.Context(), id, auditActor(c)); err != nil {
-		return err
-	}
-	return util.OK(c, "Maintenance record deleted", nil)
 }
 
 // ─── Attachment Handler (global delete) ──────────────────────────────────────

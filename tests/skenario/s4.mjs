@@ -1,88 +1,106 @@
 // Batch 4: MT, VH, RM, DU, FL, SY (header), TZ, DL
-import { api, ok2, sql, sqlInt, record, check, scenario, wib, inMin, fakePhoto, PASSWORD } from './lib.mjs';
+import { api, apiRaw, ok2, sql, sqlInt, record, check, scenario, wib, inMin, fakePhoto, PASSWORD } from './lib.mjs';
 import {
   U, ROLE, createUser, newVehicle, newRoom, newDriver, book, getBooking, approve, startB, completeB,
-  bookApproved, heldVehicle, resourceStatus, setVehicleStatus,
+  bookApproved, heldVehicle, resourceStatus, setVehicleStatus, workshop, maintPlan, maintActive,
 } from './fixtures.mjs';
 
 const A = () => U.ADM.token;
-const mBody = (vehicleId, start, end, status = 'pending') => ({ vehicleId, type: 'REPAIR', status, description: 'Uji', location: 'Bengkel', startDate: start, endDate: end });
-const maint = (vehicleId, start, end, status) => api('POST', '/maintenance', { token: A(), body: mBody(vehicleId, start, end, status) });
-const maintId = (vehicleId) => sqlInt(`select id from maintenance_records where "vehicleId"=${vehicleId} order by id desc limit 1`);
+const mApi = (method, path, body) => api(method, `/maintenance${path}`, { token: A(), body });
 const fuel = (token, v, before, after, extra = {}) => api('POST', '/fuel-expenses', {
   token, form: { vehicleId: v.id, fuelTypeId: 1, liter: 10, odometerBefore: before, odometerAfter: after, proofPhoto: fakePhoto(), ...extra } });
 const vehicleBody = (v, odometer) => ({ name: `Mobil ${v.plate}`, plateNumber: v.plate, brand: 'Toyota', model: 'Uji', year: 2024, currentOdometer: odometer, categoryId: 1, capacity: 6 });
+const odo = (v) => sqlInt(`select "currentOdometer" from vehicles where id=${v.id}`);
 
 export async function runBatch4() {
-  // ── MT ────────────────────────────────────────────────────────────────
-  await scenario('MT-01/02', async () => {
+  // ── MT (maintenance oleh vendor — docs/RANCANGAN_MAINTENANCE_VENDOR.md) ──
+  await scenario('MT-01/02/03', async () => {
     const v = await newVehicle();
-    const m = await maint(v.id, inMin(-5), inMin(600));
-    const b = await book(U.EMPA.token, v.resourceId, inMin(60), inMin(120));
-    check('MT-01', m.status === 201 && resourceStatus(v.resourceId) === 'MAINTENANCE' && b.status === 409 && m.changed === 'maintenance',
-      `Maintenance hari ini → kendaraan ${resourceStatus(v.resourceId)}, booking ${b.status}, X-Data-Changed=${m.changed}`);
-    const m2 = await maint(v.id, inMin(-5), inMin(600));
-    check('MT-02', m2.status === 409, `Maintenance kedua saat masih terbuka → ${m2.status}`);
-  });
-  await scenario('MT-03', async () => {
-    const d = await newDriver('DRVMT3'); const v = await newVehicle();
-    await bookApproved(U.EMPA.token, v.resourceId, wib(60, 9), wib(60, 12), { driverId: d.driverId });
-    const m = await maint(v.id, wib(60, 7), wib(60, 17));
-    check('MT-03', m.status === 201 && !!m.json?.warning, `Maintenance bentrok dengan booking disetujui → dibuat + peringatan "${m.json?.warning ?? '-'}"`);
+    const w = await workshop();
+    const d = await mApi('POST', '', { vehicleId: v.id, category: 'REPAIR', description: 'Rem bunyi' });
+    const bDraft = await book(U.EMPA.token, v.resourceId, wib(2, 9), wib(2, 10));
+    check('MT-01', d.status === 201 && d.data.status === 'DRAFT' && !d.data.requestNo && resourceStatus(v.resourceId) === 'AVAILABLE'
+      && bDraft.status === 201 && (d.changed ?? '').includes('maintenance'),
+      `Draf → ${d.data?.status}, tanpa nomor surat, kendaraan ${resourceStatus(v.resourceId)}, booking tetap bisa (${bDraft.status}), X-Data-Changed=${d.changed}`);
+    const noVendor = await mApi('POST', `/${d.data.id}/submit`);
+    await mApi('PUT', `/${d.data.id}`, { vehicleId: v.id, vendorId: w.id, category: 'REPAIR', description: 'Rem bunyi', plannedDate: wib(3, 8), estimatedDays: 2 });
+    const s = await mApi('POST', `/${d.data.id}/submit`);
+    const inWin = await book(U.EMPA.token, v.resourceId, wib(4, 9), wib(4, 10));
+    check('MT-02', noVendor.status === 400 && ok2(s) && s.data.status === 'SUBMITTED' && /^\d{3}\/[A-Z-]+\/[IVX]+\/\d{4}$/.test(s.data.requestNo ?? '')
+      && inWin.status === 409,
+      `Ajukan tanpa vendor → ${noVendor.status}; diajukan → ${s.data?.status} nomor ${s.data?.requestNo}; booking di jendela rencana → ${inWin.status}`);
+    const dup = await mApi('POST', '', { vehicleId: v.id, category: 'ROUTINE', description: 'Servis' });
+    check('MT-03', dup.status === 409, `Pengajuan kedua saat masih ada yang berjalan → ${dup.status} "${dup.msg}"`);
   });
   await scenario('MT-04', async () => {
+    const d = await newDriver('DRVMT4'); const v = await newVehicle();
+    await bookApproved(U.EMPA.token, v.resourceId, wib(60, 9), wib(60, 12), { driverId: d.driverId });
+    const m = await maintPlan(v.id, wib(60, 7), 1);
+    check('MT-04', m.status === 201 && !!m.json?.warning, `Diajukan bentrok dengan booking disetujui → dibuat + peringatan "${m.json?.warning ?? '-'}"`);
+  });
+  await scenario('MT-05', async () => {
     const v = await newVehicle();
-    await maint(v.id, wib(7, 8), wib(7, 17));
-    const st = resourceStatus(v.resourceId);
-    const b = await book(U.EMPA.token, v.resourceId, wib(1, 9), wib(1, 10));
-    check('MT-04', st === 'AVAILABLE' && b.status === 201, `Maintenance minggu depan tidak mengunci kendaraan hari ini`,
-      `Maintenance untuk MINGGU DEPAN langsung membuat kendaraan ${st}; booking BESOK ditolak (${b.status})`);
+    const m = await maintPlan(v.id, wib(20, 8), 1);
+    const sc = await mApi('POST', `/${m.data.id}/schedule`, { scheduledDate: wib(22, 8), estimatedDays: 1, note: 'Konfirmasi via telepon' });
+    const oldDay = await book(U.EMPA.token, v.resourceId, wib(20, 9), wib(20, 10));
+    const newDay = await book(U.EMPA.token, v.resourceId, wib(22, 9), wib(22, 10));
+    check('MT-05', ok2(sc) && sc.data.status === 'SCHEDULED' && oldDay.status === 201 && newDay.status === 409 && resourceStatus(v.resourceId) === 'AVAILABLE',
+      `Jadwal vendor → ${sc.data?.status}; tanggal rencana lama bisa dibooking (${oldDay.status}), tanggal jadwal diblokir (${newDay.status}); kendaraan ${resourceStatus(v.resourceId)}`);
   });
-  await scenario('MT-05/06/14', async () => {
-    const v = await newVehicle({ odometer: 30000 });
-    await maint(v.id, inMin(-5), null);
-    const far = await book(U.EMPA.token, v.resourceId, wib(90, 9), wib(90, 10));
-    check('MT-13', far.status === 409, `Maintenance tanpa tanggal selesai memblokir tanggal jauh (${far.status})`);
-    sql(`update vehicles set "currentOdometer"=31000 where id=${v.id}`);
-    const id = maintId(v.id);
-    const c = await api('PATCH', `/maintenance/${id}/complete`, { token: A(), form: { 'photos[]': fakePhoto() } });
-    check('MT-05', ok2(c) && resourceStatus(v.resourceId) === 'AVAILABLE', `Selesai dengan foto bukti → kendaraan ${resourceStatus(v.resourceId)}`);
-    const c2 = await api('PATCH', `/maintenance/${id}/complete`, { token: A(), form: { 'photos[]': fakePhoto() } });
-    check('MT-06', c2.status === 400, `Selesaikan ulang → ${c2.status}`);
-    const b = await book(U.EMPA.token, v.resourceId, wib(90, 9), wib(90, 10));
-    check('MT-14', b.status === 201, `Setelah maintenance selesai, tanggal yang tadinya terblokir bisa dibooking (${b.status})`);
-  });
-  await scenario('MT-07', async () => {
-    const v = await newVehicle();
-    await maint(v.id, inMin(-5), null);
-    const id = maintId(v.id);
-    const u = await api('PUT', `/maintenance/${id}`, { token: A(), body: mBody(v.id, inMin(-5), null, 'completed') });
-    check('MT-07', ok2(u) && resourceStatus(v.resourceId) === 'AVAILABLE', `Edit status → selesai membebaskan kendaraan`,
-      `Edit maintenance jadi "completed" (${u.status}) tapi kendaraan tetap ${resourceStatus(v.resourceId)}`);
-  });
-  await scenario('MT-08', async () => {
-    const v = await newVehicle();
-    const m = await maint(v.id, inMin(-60), null, 'completed');
-    const st = resourceStatus(v.resourceId);
-    const c = await api('PATCH', `/maintenance/${maintId(v.id)}/complete`, { token: A(), form: {} });
-    check('MT-08', st === 'AVAILABLE', `Maintenance yang dibuat sudah selesai tidak mengunci kendaraan`,
-      `Maintenance dibuat berstatus "completed" (${m.status}) tapi kendaraan ${st}; diselesaikan lagi → ${c.status} "${c.msg}" (terkunci)`);
-  });
-  await scenario('MT-09/10', async () => {
-    const d = await newDriver('DRVMT9'); const v = await newVehicle();
+  await scenario('MT-06/07/08', async () => {
+    const d = await newDriver('DRVMT6'); const v = await newVehicle({ odometer: 30000 });
     const b = await bookApproved(U.EMPA.token, v.resourceId, inMin(5), inMin(120), { driverId: d.driverId });
     await startB(b.id, d.token);
-    await maint(v.id, inMin(-5), inMin(600));
-    const afterCreate = resourceStatus(v.resourceId);
-    await api('DELETE', `/maintenance/${maintId(v.id)}`, { token: A() });
-    const afterDelete = resourceStatus(v.resourceId);
-    check('MT-09', afterDelete === 'IN_USE', `Hapus maintenance saat trip berjalan → tetap IN_USE`,
-      `Trip berjalan: buat maintenance → ${afterCreate}, hapus maintenance → ${afterDelete} (seharusnya IN_USE)`);
-    const v2 = await newVehicle();
-    await maint(v2.id, inMin(-5), inMin(600));
-    await api('DELETE', `/maintenance/${maintId(v2.id)}`, { token: A() });
-    const b2 = await book(U.EMPA.token, v2.resourceId, wib(2, 9), wib(2, 10));
-    check('MT-10', resourceStatus(v2.resourceId) === 'AVAILABLE' && b2.status === 201, `Hapus maintenance terbuka → AVAILABLE & bisa dibooking`);
+    const m = await maintPlan(v.id, inMin(-5), 2);
+    const early = await mApi('POST', `/${m.data.id}/handover`, { receiverName: 'Bengkel' });
+    check('MT-07', early.status === 409, `Serah terima saat kendaraan masih dipakai trip → ${early.status} "${early.msg}"`);
+    await completeB(b.id);
+    const lowOdo = await mApi('POST', `/${m.data.id}/handover`, { receiverName: 'Andi', odometer: 29000 });
+    const h = await mApi('POST', `/${m.data.id}/handover`, { receiverName: 'Andi', odometer: 30150, fuelLevel: '1/2',
+      checklist: { stnk: true, mainKey: true, spareTire: true }, note: 'Baret bumper belakang' });
+    const far = await book(U.EMPA.token, v.resourceId, wib(90, 9), wib(90, 10));
+    check('MT-06', lowOdo.status === 400 && ok2(h) && h.data.status === 'IN_PROGRESS' && resourceStatus(v.resourceId) === 'MAINTENANCE'
+      && odo(v) === 30150 && far.status === 409 && h.data.handover?.checklist?.stnk === true,
+      `Odometer mundur → ${lowOdo.status}; diserahkan → ${h.data?.status}, kendaraan ${resourceStatus(v.resourceId)}, odometer ${odo(v)}, booking tanggal jauh ${far.status}`);
+    const cancelInProg = await mApi('POST', `/${m.data.id}/cancel`, { reason: 'uji' });
+    const badTime = await mApi('POST', `/${m.data.id}/return`, { returnedAt: inMin(-120), workDone: 'x' });
+    const noWork = await mApi('POST', `/${m.data.id}/return`, { odometer: 30170 });
+    const r = await mApi('POST', `/${m.data.id}/return`, { odometer: 30170, fuelLevel: '1/4', handlerName: 'Andi',
+      workDone: 'Ganti kampas rem', partsReplaced: 'Kampas rem 1 set', actualCost: 1250000, costBearer: 'COMPANY',
+      checklist: { stnk: true, mainKey: true, spareTire: true } });
+    const again = await book(U.EMPA.token, v.resourceId, wib(90, 9), wib(90, 10));
+    check('MT-08', cancelInProg.status === 409 && badTime.status === 400 && noWork.status === 422 && ok2(r) && r.data.status === 'COMPLETED'
+      && resourceStatus(v.resourceId) === 'AVAILABLE' && odo(v) === 30170 && r.data.actualCost === 1250000 && again.status === 201,
+      `Batal saat dikerjakan ${cancelInProg.status}; kembali sebelum serah terima ${badTime.status}; tanpa uraian pekerjaan ${noWork.status}; `
+      + `diterima kembali → ${r.data?.status}, kendaraan ${resourceStatus(v.resourceId)}, odometer ${odo(v)}, biaya ${r.data?.actualCost}, bisa dibooking ${again.status}`);
+    const pdfs = {};
+    for (const k of ['request', 'handover', 'return']) {
+      const p = await apiRaw('GET', `/maintenance/${m.data.id}/pdf/${k}?download=1`, { token: A() });
+      pdfs[k] = p.status === 200 && p.contentType.includes('application/pdf') && p.bytes.subarray(0, 4).toString() === '%PDF' && p.disposition.includes('attachment');
+    }
+    check('MT-12', Object.values(pdfs).every(Boolean), `PDF surat/BA serah terima/BA pengembalian: ${JSON.stringify(pdfs)}`);
+    const cost = await mApi('PATCH', `/${m.data.id}/cost`, { estimatedCost: 1500000, actualCost: 1300000, costBearer: 'VENDOR' });
+    const up = await api('POST', `/maintenance/${m.data.id}/documents`, { token: A(), form: { kind: 'INVOICE', file: fakePhoto() } });
+    const docId = up.data?.[0]?.id;
+    const del = await api('DELETE', `/maintenance/${m.data.id}/documents/${docId}`, { token: A() });
+    const g = await mApi('GET', `/${m.data.id}`);
+    check('MT-14', ok2(cost) && cost.data.actualCost === 1300000 && up.status === 201 && ok2(del) && (g.data?.documents ?? []).length === 0,
+      `Biaya diubah setelah selesai (${cost.status}, ${cost.data?.actualCost}); unggah invoice ${up.status}; hapus ${del.status}`);
+  });
+  await scenario('MT-09/10', async () => {
+    const v = await newVehicle();
+    const m = await maintPlan(v.id, wib(30, 8), 1);
+    const noReason = await mApi('POST', `/${m.data.id}/cancel`, {});
+    const delSubmitted = await mApi('DELETE', `/${m.data.id}`);
+    const c = await mApi('POST', `/${m.data.id}/cancel`, { reason: 'Vendor penuh' });
+    const b = await book(U.EMPA.token, v.resourceId, wib(30, 9), wib(30, 10));
+    check('MT-09', noReason.status === 400 && ok2(c) && c.data.status === 'CANCELLED' && b.status === 201,
+      `Batal tanpa alasan ${noReason.status}; dibatalkan → ${c.data?.status}; tanggal kembali bisa dibooking (${b.status})`);
+    const draft = await mApi('POST', '', { vehicleId: v.id, category: 'OTHER', description: 'Draf' });
+    const pdfDraft = await apiRaw('GET', `/maintenance/${draft.data.id}/pdf/request`, { token: A() });
+    const delDraft = await mApi('DELETE', `/${draft.data.id}`);
+    check('MT-10', delSubmitted.status === 409 && ok2(delDraft) && pdfDraft.status === 409,
+      `Hapus pengajuan resmi → ${delSubmitted.status}; PDF draf → ${pdfDraft.status}; hapus draf → ${delDraft.status}`);
   });
   await scenario('MT-11/FL-05', async () => {
     const d = await newDriver('DRVMT11'); const v = await newVehicle({ odometer: 10000 });
@@ -92,6 +110,21 @@ export async function runBatch4() {
       `Isi BBM +20.100 km → tidak ada maintenance otomatis (${n}), kendaraan ${resourceStatus(v.resourceId)}`);
     record('FL-05', n === 0 ? 'PASS' : 'FAIL', 'Sama dengan MT-11');
   });
+  await scenario('MT-13', async () => {
+    const owner = await api('POST', '/vendors', { token: A(), body: { name: `Rental Uji ${Date.now()}`, type: 'OWNER' } });
+    const v = await newVehicle();
+    const w = await workshop();
+    const setOwn = await api('PUT', `/vehicles/${v.id}`, { token: A(), body: { ...vehicleBody(v, 10000), ownership: 'VENDOR', ownerVendorId: owner.data.id, rentalContractNo: 'K-01' } });
+    const m = await maintPlan(v.id, wib(40, 8), 1, { vendorId: w.id });
+    check('MT-13', ok2(setOwn) && setOwn.data.ownership === 'VENDOR' && m.data?.vendor?.id === owner.data.id,
+      `Kendaraan sewa → tujuan surat otomatis vendor pemilik (${m.data?.vendor?.name}), bukan bengkel yang dipilih`);
+  });
+  await scenario('MT-15', async () => {
+    const a = await maintPlan((await newVehicle()).id, wib(41, 8));
+    const b = await maintPlan((await newVehicle()).id, wib(41, 8));
+    const n = (x) => Number((x.data?.requestNo ?? '').split('/')[0]);
+    check('MT-15', n(b) === n(a) + 1, `Nomor surat berurutan: ${a.data?.requestNo} → ${b.data?.requestNo}`);
+  });
   await scenario('MT-17', async () => {
     const v = await newVehicle();
     const s = await api('GET', `/vehicles/${v.id}/maintenance-status`, { token: A() });
@@ -99,14 +132,12 @@ export async function runBatch4() {
   });
   await scenario('MT-18', async () => {
     const v = await newVehicle();
-    await maint(v.id, wib(7, 8), wib(7, 17));
-    const before = resourceStatus(v.resourceId);
-    // "Waktu berjalan": tanggal mulai maintenance tiba.
-    sql(`update maintenance_records set "startDate"=NOW() - interval '5 minutes', "endDate"=NOW() + interval '5 hours' where id=${maintId(v.id)}`);
+    await maintActive(v.id);
+    // Jaring pengaman: status kendaraan terlanjur AVAILABLE padahal sedang di vendor.
+    sql(`update resources set status='AVAILABLE' where id=${v.resourceId}`);
     const g = await api('GET', `/vehicles/${v.id}`, { token: A() });
-    const after = resourceStatus(v.resourceId);
-    check('MT-18', before === 'AVAILABLE' && ok2(g) && after === 'MAINTENANCE',
-      `Maintenance terjadwal tiba waktunya → ${before} → ${after} saat detail kendaraan dibuka`);
+    check('MT-18', ok2(g) && resourceStatus(v.resourceId) === 'MAINTENANCE',
+      `Kendaraan di vendor tapi tercatat AVAILABLE → ${resourceStatus(v.resourceId)} saat detail dibuka`);
   });
 
   // ── VH ────────────────────────────────────────────────────────────────
@@ -120,12 +151,12 @@ export async function runBatch4() {
   });
   await scenario('VH-11', async () => {
     const v = await newVehicle();
-    await maint(v.id, inMin(-5), inMin(600));
+    await maintActive(v.id);
     const r = await api('PATCH', `/vehicles/${v.id}/status`, { token: A(), body: { status: 'AVAILABLE' } });
     const st = resourceStatus(v.resourceId);
     const r2 = await api('PATCH', `/vehicles/${v.id}/status`, { token: A(), body: { status: 'INACTIVE' } });
     check('VH-11', r.status === 409 && st === 'MAINTENANCE' && ok2(r2),
-      `Maintenance berlangsung: set AVAILABLE → ${r.status} (status ${st}); set INACTIVE → ${r2.status}`);
+      `Kendaraan di vendor: set AVAILABLE → ${r.status} (status ${st}); set INACTIVE → ${r2.status}`);
   });
   await scenario('VH-04/05', async () => {
     const v = await newVehicle({ odometer: 10000 });
