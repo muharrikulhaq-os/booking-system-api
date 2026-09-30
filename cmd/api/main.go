@@ -86,6 +86,7 @@ func main() {
 	bookingSvc := service.NewBookingService(db, notifSvc)
 	fuelSvc := service.NewFuelExpenseService(db)
 	fuelTypeSvc := service.NewFuelTypeService(db)
+	fuelLedgerSvc := service.NewFuelLedgerService(db)
 	maintSvc := service.NewMaintenanceService(db)
 	attachSvc := service.NewAttachmentService(db)
 	guestSvc := service.NewGuestBookingService(db)
@@ -106,8 +107,11 @@ func main() {
 	})
 	bookingSvc.SetPublisher(publishSystemChange)
 	vehicleSvc.SetPublisher(publishSystemChange)
+	fuelLedgerSvc.SetPublisher(publishSystemChange)
 	dashboardSvc.SetBeforeRead(bookingSvc.SweepNow)
 	go bookingSvc.RunSweeper(context.Background(), time.Minute)
+	// Voucher BBM yang lewat masa berlaku → EXPIRED, liter kembali ke saldo.
+	go fuelLedgerSvc.RunVoucherSweeper(context.Background(), time.Minute)
 
 	// register routes
 	v1 := app.Group("/api/v1")
@@ -122,6 +126,7 @@ func main() {
 	httph.NewBookingHandler(bookingSvc, attachSvc).Register(v1)
 	httph.NewFuelExpenseHandler(fuelSvc).Register(v1)
 	httph.NewFuelTypeHandler(fuelTypeSvc).Register(v1)
+	httph.NewFuelLedgerHandler(fuelLedgerSvc).Register(v1)
 	httph.NewMaintenanceHandler(maintSvc).Register(v1)
 	httph.NewAttachmentHandler(attachSvc).Register(v1)
 	httph.NewGuestBookingHandler(guestSvc).Register(v1)

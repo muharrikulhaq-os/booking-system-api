@@ -418,15 +418,33 @@ tidak dipilih otomatis untuk booking lain.
 
 | ID | Skenario | Diharapkan | Menu lain ikut berubah |
 |---|---|---|---|
-| FL-01 | DRV-2 mencatat BBM K2 (odometer sebelum ≥ tercatat, sesudah > sebelum, liter, foto) | Tersimpan; odometer K2 maju; biaya dihitung dari harga master bila harga kosong | BBM, KD, DB (bila terkait booking), LP (biaya) |
-| FL-02 | Odometer sebelum < tercatat | Ditolak, menyebut angka tercatat | — |
-| FL-03 | Odometer sesudah ≤ sebelum | Ditolak | — |
+| FL-01 | DRV-2 mencatat isi langsung K2 (odometer saat isi ≥ tercatat, liter, foto, alasan SPD, SPBU lain) | Tersimpan; odometer K2 maju; "odometer sebelum" = titik hitung saldo; saldo = saldo lama + jarak÷km/L − liter; biaya dari harga master bila kosong | BBM, KD, DB (bila terkait booking), LP (biaya) |
+| FL-02 | Odometer saat isi < tercatat | Ditolak, menyebut angka tercatat | — |
+| FL-03 | Odometer saat isi kosong (termasuk listrik di mobile) | Ditolak "odometer saat pengisian wajib diisi"; mobile mewajibkan odometer | — |
 | FL-04 | Isi "listrik" untuk kendaraan BBM | UI mengunci jenis sesuai energi kendaraan; API menolak 400 (HYBRID boleh keduanya) (✅ diputuskan 2026-09-30) | — |
 | FL-05 | Pengisian dengan odometer jauh melewati 10.000 km | Lihat MT-11: tidak ada maintenance otomatis | MT, KD |
-| FL-06 | ❓ Admin menghapus catatan BBM | Terhapus; odometer kendaraan **tidak** mundur (usulan: tampilkan peringatan) — _dikaji ulang bersama rancangan fitur voucher BBM berbasis odometer (task terpisah)_ | BBM, LP |
+| FL-06 | Admin **membatalkan** catatan BBM (alasan wajib) | Catatan tetap ada berstatus Dibatalkan; liter kembali ke saldo; tidak dihitung di laporan biaya. Opsi "odometer salah ketik" hanya untuk catatan terakhir → hak dibatalkan & odometer kendaraan kembali ke bacaan sah tertinggi (✅ diputuskan 2026-10-01, rancangan voucher BBM) | BBM, KD, LP |
 | FL-07 | 📱 Mencatat BBM hanya lewat kamera | Galeri tidak bisa dipakai sebagai bukti | — |
 | FL-08 | Ubah harga master jenis BBM (web) | Pengisian berikutnya memakai harga baru; yang lama tidak berubah | BBM |
 | FL-09 | Catatan BBM di booking gabungan | Lihat MG-12 | DB |
+| FL-10 | Isi melebihi hak saldo / kapasitas tangki | Tetap tersimpan dengan peringatan; saldo boleh minus → voucher berikutnya berkurang | BBM |
+| FL-11 | Listrik: kWh langsung / angka meter awal-akhir / % baterai (butuh kapasitas baterai) | kWh dihitung sesuai sumber (estimasi ÷ 0,9); hak = jarak ÷ km/kWh | BBM |
+
+### Voucher BBM — VC (docs/RANCANGAN_VOUCHER_BBM.md)
+
+| ID | Skenario | Diharapkan | Menu lain ikut berubah |
+|---|---|---|---|
+| VC-01 | Admin terbitkan voucher (km/L & tangki terisi) | Liter = min(saldo tersedia, tangki); Rp = liter × harga master tanpa pembulatan; berlaku s.d. 23:59 WIB hari ke-N; saldo langsung dipotong | BBM (Saldo, Voucher), KD (odometer) |
+| VC-02 | Terbitkan voucher kedua untuk kendaraan yang sama | Ditolak 409 (1 voucher aktif per kendaraan), termasuk bila dikirim serentak | — |
+| VC-03 | Km/L atau kapasitas tangki kosong / saldo ≤ 0 / kendaraan listrik | Ditolak dengan pesan jelas | — |
+| VC-04 | 📱 Driver tekan "Sudah Diisi" (foto struk wajib, odometer ≥ odometer voucher) | Voucher USED; catatan pengisian sumber Voucher dibuat; saldo tidak dipotong lagi | BBM, KD |
+| VC-05 | Voucher tidak dikonfirmasi sampai lewat masa berlaku | Otomatis EXPIRED (sweeper), liter kembali ke saldo, siaran DATA_CHANGED | BBM |
+| VC-06 | Admin "Tandai Terpakai" voucher EXPIRED (sesuai tagihan) | USED; saldo dipotong lagi | BBM |
+| VC-07 | Admin batalkan voucher ISSUED/USED (alasan wajib) | CANCELLED; liter kembali; catatan pengisian dari voucher ikut dibatalkan | BBM, LP |
+| VC-08 | Rekonsiliasi beberapa voucher dengan no. tagihan | Hanya voucher USED yang belum direkonsiliasi yang ditandai | BBM |
+| VC-09 | Cetak voucher (printer thermal 80/58 mm) | Kode, QR, kendaraan, SPBU, liter, nominal, berlaku s.d. tercetak rapi | — |
+| VC-10 | Ubah odometer awal BBM setelah ada catatan saldo | Ditolak 409 (pakai Penyesuaian Saldo) | — |
+| VC-11 | Penyesuaian saldo manual (alasan wajib) | Tercatat di mutasi saldo & audit | BBM |
 
 ## 20. Sinkronisasi antar menu & perangkat — SY
 

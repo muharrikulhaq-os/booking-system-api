@@ -39,7 +39,7 @@ SELECT d.id AS driver_id, u.name AS driver_name, u."employeeId",
 FROM drivers d
 JOIN users u ON u.id = d."userId"
 LEFT JOIN bookings b ON b."assignedDriverId" = d.id
-LEFT JOIN fuel_expenses fe ON fe."driverId" = d.id
+LEFT JOIN fuel_expenses fe ON fe."driverId" = d.id AND fe."voidedAt" IS NULL
 GROUP BY d.id, u.name, u."employeeId"
 ORDER BY total_bookings DESC;
 

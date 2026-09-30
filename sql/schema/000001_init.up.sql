@@ -624,14 +624,8 @@ INSERT INTO drivers ("userId", "licenseNumber", "phoneNumber", "isActive") VALUE
 -- duplicates every deploy since none of these tables had a natural unique
 -- constraint to make a rerun idempotent).
 
-INSERT INTO master_settings (key, value, unit, description) VALUES
-    ('fuel_price_pertalite',   10000.0000, 'IDR/liter', 'Harga BBM Pertalite'),
-    ('fuel_price_pertamax',    12950.0000, 'IDR/liter', 'Harga BBM Pertamax'),
-    ('fuel_price_pertamax_turbo', 14400.0000, 'IDR/liter', 'Harga BBM Pertamax Turbo'),
-    ('fuel_price_solar',       6800.0000,  'IDR/liter', 'Harga BBM Solar Subsidi'),
-    ('fuel_price_dexlite',     14550.0000, 'IDR/liter', 'Harga BBM Dexlite'),
-    ('fuel_price_pertamina_dex', 15100.0000, 'IDR/liter', 'Harga BBM Pertamina Dex'),
-    ('fuel_price_listrik',     2466.0000,  'IDR/kWh',   'Tarif listrik PLN per kWh');
+-- Harga BBM tidak lagi disimpan di master_settings (fuel_price_*): satu-satunya
+-- master harga adalah fuel_types.default_price (lihat 000016_fuel_ledger.up.sql).
 
 -- ─── MAINTENANCE TYPES (reference data - kept) ────────────────────────────────
 INSERT INTO maintenance_types (name) VALUES ('Servis Berkala'), ('Ganti Ban'), ('Perbaikan AC');
