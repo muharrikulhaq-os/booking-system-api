@@ -15,7 +15,7 @@ import (
 const approveBooking = `-- name: ApproveBooking :one
 UPDATE bookings
 SET status = 'APPROVED', "approvedById" = $2, "approvedAt" = NOW(), "updatedAt" = NOW()
-WHERE id = $1 RETURNING id, "userId", "resourceId", "startDate", "endDate", purpose, "passengerCount", status, "approvedById", "approvedAt", "assignedDriverId", "assignedVehicleId", "assignedAt", "returnedAt", "createdAt", "updatedAt", "originalResourceId", "bookingType", "odometerStart", "startLocation", "startPhotoUrl"
+WHERE id = $1 AND status = 'PENDING' RETURNING id, "userId", "resourceId", "startDate", "endDate", purpose, "passengerCount", status, "approvedById", "approvedAt", "assignedDriverId", "assignedVehicleId", "assignedAt", "returnedAt", "createdAt", "updatedAt", "originalResourceId", "bookingType", "odometerStart", "startLocation", "startPhotoUrl"
 `
 
 type ApproveBookingParams struct {
@@ -1019,7 +1019,7 @@ func (q *Queries) MarkOverdueBookings(ctx context.Context) ([]Booking, error) {
 const rejectBooking = `-- name: RejectBooking :one
 UPDATE bookings
 SET status = 'REJECTED', "approvedById" = $2, "approvedAt" = NOW(), "updatedAt" = NOW()
-WHERE id = $1 RETURNING id, "userId", "resourceId", "startDate", "endDate", purpose, "passengerCount", status, "approvedById", "approvedAt", "assignedDriverId", "assignedVehicleId", "assignedAt", "returnedAt", "createdAt", "updatedAt", "originalResourceId", "bookingType", "odometerStart", "startLocation", "startPhotoUrl"
+WHERE id = $1 AND status = 'PENDING' RETURNING id, "userId", "resourceId", "startDate", "endDate", purpose, "passengerCount", status, "approvedById", "approvedAt", "assignedDriverId", "assignedVehicleId", "assignedAt", "returnedAt", "createdAt", "updatedAt", "originalResourceId", "bookingType", "odometerStart", "startLocation", "startPhotoUrl"
 `
 
 type RejectBookingParams struct {

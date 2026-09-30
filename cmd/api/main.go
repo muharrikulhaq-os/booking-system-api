@@ -93,6 +93,16 @@ func main() {
 	reportSvc := service.NewReportService(db)
 	dashboardSvc := service.NewDashboardService(db)
 
+	// Perubahan yang dibuat sistem (transisi otomatis berbasis waktu) tidak
+	// lewat middleware DataChanged → disiarkan lewat publisher ini (B17).
+	publishSystemChange := func(topics ...string) {
+		wsHub.SendToAll(fiber.Map{"type": "DATA_CHANGED", "topics": topics})
+	}
+	bookingSvc.SetPublisher(publishSystemChange)
+	vehicleSvc.SetPublisher(publishSystemChange)
+	dashboardSvc.SetBeforeRead(bookingSvc.SweepNow)
+	go bookingSvc.RunSweeper(context.Background(), time.Minute)
+
 	// register routes
 	v1 := app.Group("/api/v1")
 	httph.NewWebsocketHandler(wsHub).Register(v1)

@@ -10,7 +10,8 @@ import (
 )
 
 type VehicleService struct {
-	q repository.ExtendedQuerier
+	q       repository.ExtendedQuerier
+	publish Publisher
 }
 
 func NewVehicleService(db *sql.DB) *VehicleService {
@@ -119,7 +120,7 @@ func (s *VehicleService) List(ctx context.Context, page, limit int, search *stri
 	}
 
 	// Maintenance terjadwal yang sudah tiba waktunya → MAINTENANCE (B11).
-	_, _ = s.q.PromoteDueMaintenance(ctx)
+	promoteDueMaintenance(ctx, s.q, s.publish)
 
 	rows, err := s.q.ListVehicles(ctx, params)
 	if err != nil {
@@ -143,7 +144,7 @@ func (s *VehicleService) List(ctx context.Context, page, limit int, search *stri
 }
 
 func (s *VehicleService) GetByID(ctx context.Context, id int32) (map[string]any, error) {
-	_, _ = s.q.PromoteDueMaintenance(ctx)
+	promoteDueMaintenance(ctx, s.q, s.publish)
 	v, err := s.q.GetVehicleByID(ctx, id)
 	if err != nil {
 		return nil, util.ErrNotFound
@@ -252,7 +253,7 @@ func (s *VehicleService) Delete(ctx context.Context, id int32, actor AuditActor)
 		return util.ErrNotFound
 	}
 	if err := s.q.DeleteResource(ctx, v.ResourceId); err != nil {
-		return err
+		return inUseError(err, "kendaraan ini masih punya riwayat (booking, BBM, maintenance, dll) dan tidak bisa dihapus - ubah statusnya jadi INACTIVE saja")
 	}
 	logAudit(ctx, s.q, actor, "DELETE", "Vehicle", id,
 		"Menghapus kendaraan "+v.PlateNumber)
@@ -307,5 +308,6 @@ func (s *VehicleService) DeleteCategory(ctx context.Context, id int32) error {
 	if _, err := s.q.GetVehicleCategoryByID(ctx, id); err != nil {
 		return util.ErrNotFound
 	}
-	return s.q.DeleteVehicleCategory(ctx, id)
+	return inUseError(s.q.DeleteVehicleCategory(ctx, id),
+		"kategori ini masih dipakai kendaraan dan tidak bisa dihapus")
 }

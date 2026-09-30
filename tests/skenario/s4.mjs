@@ -145,7 +145,12 @@ export async function runBatch4() {
     check('VH-07', r7.status >= 400 && r7.status < 500, `Hapus kendaraan berriwayat booking → ${r7.status} "${r7.msg}"`,
       `Hapus kendaraan berriwayat booking → ${r7.status} "${r7.msg}" (error server, bukan pesan jelas)`);
   });
-  record('VH-01', 'FAIL', 'Lihat BC-08: kendaraan INACTIVE masih bisa dibooking');
+  await scenario('VH-01', async () => {
+    const v = await newVehicle();
+    const s = await api('PATCH', `/vehicles/${v.id}/status`, { token: A(), body: { status: 'INACTIVE' } });
+    const b = await book(U.EMPA.token, v.resourceId, wib(3, 9), wib(3, 10));
+    check('VH-01', ok2(s) && b.status === 409, `Kendaraan diubah INACTIVE (${s.status}) → booking baru ditolak (${b.status})`);
+  });
 
   // ── RM ────────────────────────────────────────────────────────────────
   await scenario('RM-01', async () => {

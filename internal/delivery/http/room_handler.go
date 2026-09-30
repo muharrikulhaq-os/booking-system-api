@@ -26,7 +26,8 @@ func (h *RoomHandler) Register(r fiber.Router) {
 	g.Get("/:id", h.GetByID)
 	g.Post("", admin, h.Create)
 	g.Put("/:id", admin, h.Update)
-	g.Patch("/:id/status", admin, h.UpdateStatus)
+	// Penjaga ruangan boleh mengubah status ruangan yang dijaganya (B19).
+	g.Patch("/:id/status", middleware.RequireRole("ADMIN", "ROOM_KEEPER"), h.UpdateStatus)
 	g.Patch("/:id/photo", admin, h.UpdatePhoto)
 	g.Patch("/:id/room-keeper", admin, h.SetRoomKeeper)
 	g.Delete("/:id", admin, h.Delete)
@@ -93,7 +94,7 @@ func (h *RoomHandler) UpdateStatus(c *fiber.Ctx) error {
 	if err := bindAndValidate(c, &req); err != nil {
 		return err
 	}
-	data, err := h.svc.UpdateStatus(c.Context(), id, req.Status, auditActor(c))
+	data, err := h.svc.UpdateStatus(c.Context(), id, req.Status, auditActor(c), middleware.GetUserRole(c))
 	if err != nil {
 		return err
 	}

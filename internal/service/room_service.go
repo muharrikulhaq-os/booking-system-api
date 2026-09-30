@@ -132,10 +132,17 @@ func (s *RoomService) Update(ctx context.Context, id int32, req UpdateRoomReques
 	return s.GetByID(ctx, id)
 }
 
-func (s *RoomService) UpdateStatus(ctx context.Context, id int32, status string, actor AuditActor) (map[string]any, error) {
+func (s *RoomService) UpdateStatus(ctx context.Context, id int32, status string, actor AuditActor, role string) (map[string]any, error) {
 	r, err := s.q.GetRoomByID(ctx, id)
 	if err != nil {
 		return nil, util.ErrNotFound
+	}
+	// Penjaga ruangan hanya boleh mengubah ruangan yang dijaganya (B19).
+	if role == "ROOM_KEEPER" {
+		rk, rkErr := s.q.GetRoomKeeperByUserID(ctx, actor.UserID)
+		if rkErr != nil || !rk.IsActive || !r.RoomKeeperId.Valid || r.RoomKeeperId.Int32 != rk.ID {
+			return nil, util.NewError(403, "Anda bukan penjaga ruangan ini", util.ErrForbidden)
+		}
 	}
 	if err := guardManualStatusChange(ctx, s.q, r.ResourceId, repository.ResourceStatus(status)); err != nil {
 		return nil, err
@@ -156,7 +163,7 @@ func (s *RoomService) Delete(ctx context.Context, id int32, actor AuditActor) er
 		return util.ErrNotFound
 	}
 	if err := s.q.DeleteResource(ctx, r.ResourceId); err != nil {
-		return err
+		return inUseError(err, "ruangan ini masih punya riwayat booking dan tidak bisa dihapus - ubah statusnya jadi INACTIVE saja")
 	}
 	logAudit(ctx, s.q, actor, "DELETE", "Room", id,
 		"Menghapus ruangan "+r.ResourceName)

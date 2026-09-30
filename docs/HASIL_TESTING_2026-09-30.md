@@ -12,11 +12,13 @@ semua migrasi, SMTP & FCM dimatikan). Tidak ada data production yang disentuh.
 | ⏭️ Dilewati (OTP email, laporan periode — dicakup unit test) | 3 |
 | 💥 Error runner | 0 |
 
+> **Setelah semua perbaikan B1–B21 (runner terakhir, 2026-09-30):** ✅ 178 lulus · ❌ 0 gagal · ℹ️ 9 perlu keputusan · ⏭️ 3 dilewati.
+
 Ulangi pengujian (mis. setelah perbaikan): lihat [`tests/skenario/README.md`](../tests/skenario/README.md).
 
 ## Bug terkonfirmasi (urut prioritas)
 
-> ✅ **Sudah diperbaiki (2026-09-30):** B1, B2, B3 (AU-16, AU-18, RL-07 lulus) · B4, B5, B6, B7 (TO-03, TO-03b, AS-01..04, SB-02, SB-03, SP-12 lulus) · B10, B11, B12 (CP-10, MT-04, MT-07, MT-08, MT-09, VH-02, BC-07 lulus; + MT-18, VH-11 baru) — diverifikasi ulang dengan runner.
+> ✅ **Sudah diperbaiki (2026-09-30):** B1, B2, B3 (AU-16, AU-18, RL-07 lulus) · B4, B5, B6, B7 (TO-03, TO-03b, AS-01..04, SB-02, SB-03, SP-12 lulus) · B10, B11, B12 (CP-10, MT-04, MT-07, MT-08, MT-09, VH-02, BC-07 lulus; + MT-18, VH-11 baru) · B8, B9, B13–B21 (BC-11, MG-09, AP-11, AP-12, AP-15, DL-01, BC-04, BC-08, VH-01, TO-05, VH-07, RM-03, RL-08 lulus) — diverifikasi ulang dengan runner.
 
 | # | Bug | Skenario | Letak kode | Dampak nyata |
 |---|---|---|---|---|

@@ -132,9 +132,9 @@ tidak dipilih otomatis untuk booking lain.
 | AU-13 | 🌐 Buka URL halaman admin (mis. `/users`) sebagai EMPLOYEE | Dialihkan ke `/unauthorized` | — |
 | AU-14 | 🌐 Buka URL terproteksi tanpa login | Ke `/login?redirect=...`, setelah login kembali ke halaman tadi | — |
 | AU-15 | Admin mengubah **nama/departemen/role** akun yang sedang login di perangkat lain | Nama/role di header ikut berubah tanpa reload; bila role turun dari ADMIN, menu admin hilang (🌐 sudah; 🔴 📱 profil baru diperbarui saat app dibuka ulang) | HD, PG |
-| AU-16 | 🔴 API: `POST /auth/register` dengan `roleId` admin | **Ditolak** (pendaftaran publik tidak boleh memilih role admin) | PG |
+| AU-16 | API: `POST /auth/register` dengan `roleId` admin | **Ditolak** (pendaftaran publik tidak boleh memilih role admin) (✅ B1) | PG |
 | AU-17 | Login di 2 perangkat bersamaan | Keduanya jalan; logout di satu tidak mengeluarkan yang lain | — |
-| AU-18 | 🔴 Login akun yang sama dua kali di detik yang sama (klik ganda, web + HP) | Keduanya berhasil; saat ini yang kedua error 500 | — |
+| AU-18 | Login akun yang sama dua kali di detik yang sama (klik ganda, web + HP) | Keduanya berhasil (✅ B3) | — |
 
 ## 2. Hak akses per role — RL
 
@@ -146,8 +146,8 @@ tidak dipilih otomatis untuk booking lain.
 | RL-04 | EMPLOYEE melihat daftar booking | Hanya booking miliknya |
 | RL-05 | DRIVER melihat daftar ("Tugas Saya") | Hanya booking yang ditugaskan kepadanya |
 | RL-06 | Kalender ketersediaan resource dibuka EMPLOYEE | Menampilkan jadwal SEMUA pengguna di resource itu (bukan hanya miliknya) |
-| RL-07 | 🔴 API: DRIVER / ROOM_KEEPER membatalkan booking PENDING milik orang lain | **403** — hanya pemilik atau admin |
-| RL-08 | 🔴 API: EMPLOYEE mencatat BBM | 403 (hanya ADMIN & DRIVER) |
+| RL-07 | API: DRIVER / ROOM_KEEPER membatalkan booking PENDING milik orang lain | **403** — hanya pemilik atau admin (✅ B2) |
+| RL-08 | API: EMPLOYEE mencatat BBM | 403 (hanya ADMIN & DRIVER) (✅ B20) |
 | RL-09 | EMPLOYEE / DRIVER membuka menu Laporan, Pengguna, Maintenance | Tidak ada menunya; API 403 |
 | RL-10 | 📱 Mobile: fitur yang sengaja hanya di web (CRUD kendaraan/ruangan/pengguna, master jenis BBM) | Tidak tersedia di mobile (bukan sekadar disembunyikan) |
 
@@ -158,14 +158,14 @@ tidak dipilih otomatis untuk booking lain.
 | BC-01 | EMP-A booking K2 H+1 09:00–12:00, NON_SPD, 3 penumpang | PENDING; admin dapat notifikasi "Booking baru" | LB, AQ, DS (pending +1), KL, NT admin |
 | BC-02 | EMP-A booking R1 H+1 09:00–10:00 | PENDING | LB, AQ, DS, KL |
 | BC-03 | Jam selesai ≤ jam mulai | Ditolak "rentang tanggal tidak valid" | — |
-| BC-04 | 🔴 Tanggal mulai di masa lalu (mis. kemarin) | **Ditolak** (UI & API) | — |
+| BC-04 | Tanggal mulai di masa lalu (mis. kemarin) | **Ditolak** (UI & API; toleransi 30 menit untuk jeda mengisi form) (✅ B15) | — |
 | BC-05 | Booking kendaraan berstatus MAINTENANCE | Ditolak 409 "sedang maintenance" | — |
 | BC-06 | K2 punya jadwal maintenance H+3–H+4; booking K2 H+3 | Ditolak "sedang/akan menjalani maintenance pada tanggal tersebut" | — |
 | BC-07 | K2 maintenance H+3–H+4; booking K2 H+5 | Diterima (tidak bentrok tanggal) | KL |
-| BC-08 | 🔴 Booking K4 (INACTIVE) / ruangan INACTIVE | **Ditolak**; resource INACTIVE tidak muncul di picker | PK |
+| BC-08 | Booking K4 (INACTIVE) / ruangan INACTIVE | **Ditolak** (juga saat approve); resource INACTIVE tidak muncul di picker (✅ B16) | PK |
 | BC-09 | Resource sedang IN_USE sekarang, booking untuk besok | Diterima (IN_USE hanya status saat ini) | — |
 | BC-10 | EMP-A & EMP-B booking K2 di jam yang sama (dua-duanya PENDING) | Keduanya diterima PENDING (bentrok diselesaikan admin saat approve: merge/alihkan) | AQ (tanda kandidat merge) |
-| BC-11 | 🔴 EMP-A & EMP-B booking **R1** di jam yang sama | Yang kedua **ditolak** saat approve (ruangan tidak bisa dipakai dua rapat); saat ini tidak ada pengecekan bentrok ruangan | KL |
+| BC-11 | EMP-A & EMP-B booking **R1** di jam yang sama | Yang kedua **ditolak** saat approve (ruangan tidak bisa dipakai dua rapat) (✅ B8) | KL |
 | BC-12 | Jumlah penumpang > kapasitas kendaraan | Booking masuk; saat approve muncul **peringatan** kapasitas | — |
 | BC-13 | Pilih supir yang nonaktif (API) | Ditolak "supir yang dipilih tidak aktif" | — |
 | BC-14 | Booking SPD K2 H+2 08:00–10:00 lalu booking lain K2 H+2 15:00–17:00 (K2 sudah APPROVED SPD) | Yang kedua ditolak "kendaraan sedang bertugas SPD pada tanggal tersebut" (SPD memblokir **seharian**) | — |
@@ -192,7 +192,7 @@ tidak dipilih otomatis untuk booking lain.
 | SP-09 | Ubah kendaraan tetap DRV-2 ke K3 (dari menu **Driver**) | K1 kehilangan supir tetap, K3 = DRV-2 | KD, DR |
 | SP-10 | Hapus supir tetap K1 | Booking K1 berikutnya memakai supir kosong otomatis | KD, DR |
 | SP-11 | Picker supir di form booking | Menampilkan supir aktif, sisa kursi kendaraan yang dipegang, tujuan trip yang bentrok, badge "Digunakan SPD" | PK |
-| SP-12 | 🔴 Booking K2 tanpa pilih supir → DRV-2 ditempel; sebelum approve DRV-2 di-approve di booking lain yang jamnya bentrok | Saat approve: ditolak & admin menugaskan supir lain; saat ini supir yang sama disetujui untuk dua perjalanan bentrok | AQ |
+| SP-12 | Booking K2 tanpa pilih supir → DRV-2 ditempel; sebelum approve DRV-2 di-approve di booking lain yang jamnya bentrok | Saat approve: ditolak & admin menugaskan supir lain (✅ B7) | AQ |
 | SP-13 | ❓ Ada supir bebas & supir tetap kendaraan lain; booking kendaraan tanpa supir tetap | Usulan: supir bebas diutamakan; saat ini bisa mengambil supir tetap kendaraan lain | PK |
 
 ## 5. Persetujuan & penolakan — AP
@@ -209,19 +209,19 @@ tidak dipilih otomatis untuk booking lain.
 | AP-08 | Reject tanpa catatan | Ditolak validasi (catatan wajib) | — |
 | AP-09 | Reject dengan catatan | REJECTED; pemohon lihat alasan di detail; notifikasi + email | LB, DB, AQ, DS, KL, NT |
 | AP-10 | ADM membuat booking sendiri lalu **menolaknya** sendiri | Ditolak "tidak boleh menyetujui/menolak booking sendiri" | — |
-| AP-11 | 🔴❓ ADM membuat booking sendiri lalu **menyetujuinya** sendiri | Konsisten dengan AP-10 → **ditolak**; saat ini diizinkan | — |
+| AP-11 | ADM membuat booking sendiri lalu **menyetujuinya** sendiri | Konsisten dengan AP-10 → **ditolak** (403); web & mobile menyembunyikan tombolnya dan menampilkan "diputuskan admin lain" (✅ B21) | — |
 | AP-12 | Dua admin approve booking yang sama hampir bersamaan | Yang kedua ditolak "tidak PENDING"; tidak ada data ganda | AQ |
 | AP-13 | Admin approve dari **mobile** saat admin lain membuka AQ di **web** | Baris hilang dari AQ web tanpa reload | AQ, DS |
 | AP-14 | Booking PENDING tanpa supir (SP-04) di-approve | APPROVED tanpa supir; tombol "Mulai" tidak muncul sampai ditugaskan supir+kendaraan | DB |
-| AP-15 | 🔴 Riwayat persetujuan setelah approve | Tercatat (siapa, kapan, catatan); saat ini log APPROVE tidak pernah tersimpan | DB, LP |
+| AP-15 | Riwayat persetujuan setelah approve | Tercatat (siapa, kapan, catatan); riwayat lama diisi ulang migrasi 000015 (✅ B13) | DB, LP |
 
 ## 6. Alihkan resource (substitute) — SB
 
 | ID | Skenario | Diharapkan | Menu lain ikut berubah |
 |---|---|---|---|
 | SB-01 | Alihkan booking PENDING K2 → K3, lalu approve (2 langkah otomatis) | APPROVED di **K3**; detail menampilkan "Dialihkan dari K2"; pemohon dapat notifikasi | LB, DB, KL (K2 kosong, K3 terisi), NT |
-| SB-02 | 🔴 Setelah SB-01, cek kendaraan yang ditugaskan & kendaraan yang dipegang supir | Keduanya **K3**; saat ini kendaraan yang ditugaskan tetap K2 (supir memegang K2, bentrok dicek di K2) | DR, KD |
-| SB-03 | 🔴 Setelah SB-01, tanda "Dialihkan" di daftar & detail | Tampil; saat ini penanda asal hanya diisi oleh "tugaskan kendaraan", bukan substitute | LB, DB |
+| SB-02 | Setelah SB-01, cek kendaraan yang ditugaskan & kendaraan yang dipegang supir | Keduanya **K3** (✅ B6) | DR, KD |
+| SB-03 | Setelah SB-01, tanda "Dialihkan" di daftar & detail | Tampil (✅ B6) | LB, DB |
 | SB-04 | Alihkan ke resource yang sama | Ditolak | — |
 | SB-05 | Alihkan kendaraan → ruangan | Ditolak "tipe resource berbeda" | — |
 | SB-06 | Alihkan ke kendaraan MAINTENANCE | Ditolak | — |
@@ -235,8 +235,8 @@ tidak dipilih otomatis untuk booking lain.
 |---|---|---|---|
 | AS-01 | Booking APPROVED tanpa supir → tugaskan DRV-3 + K2 | Supir & kendaraan tercatat; DRV-3 memegang K2; supir dapat notifikasi | DB, DR, KD, NT |
 | AS-02 | Booking APPROVED K2 (DRV-2) → **pindah kendaraan** ke K3 | Resource jadi K3, tanda "Dialihkan dari K2"; K2 bebas di kalender | LB, DB, KL, KD |
-| AS-03 | 🔴 Booking APPROVED K2 (DRV-2) → **pindah supir** ke DRV-3 | DRV-3 memegang K2 & **DRV-2 kembali kosong**; saat ini DRV-2 tetap tercatat memegang K2 | DR, PK |
-| AS-04 | 🔴 Lanjutan AS-03: booking diselesaikan | DRV-3 dilepas; DRV-2 **tidak** tertahan. Saat ini DRV-2 tetap "sibuk" selamanya → tidak dipilih otomatis & K2 menolak supir lain (AP-04) | DR, PK |
+| AS-03 | Booking APPROVED K2 (DRV-2) → **pindah supir** ke DRV-3 | DRV-3 memegang K2 & **DRV-2 kembali kosong** (✅ B5) | DR, PK |
+| AS-04 | Lanjutan AS-03: booking diselesaikan | DRV-3 dilepas; DRV-2 **tidak** tertahan (✅ B5) | DR, PK |
 | AS-05 | Tugaskan ke booking PENDING / ONGOING | Ditolak "hanya booking APPROVED" | — |
 | AS-06 | Tugaskan pada booking ruangan | Ditolak | — |
 | AS-07 | Tugaskan supir nonaktif | Ditolak "supir aktif tidak ditemukan" | — |
@@ -299,9 +299,9 @@ tidak dipilih otomatis untuk booking lain.
 |---|---|---|---|
 | TO-01 | Booking PENDING dibiarkan sampai jam selesai lewat | IGNORED + tercatat di timeline sebagai aksi sistem | LB, DB, AQ, DS |
 | TO-02 | Booking APPROVED tidak pernah dimulai sampai jam selesai lewat | EXPIRED | LB, DB, DS, KL |
-| TO-03 | 🔴 Lanjutan TO-02: cek supir & kendaraan | Supir **dilepas** (kosong lagi), kendaraan bisa dipegang supir lain. Saat ini supir tetap tercatat memegang kendaraan → tidak dipilih otomatis & AP-04 terus muncul | DR, PK |
+| TO-03 | Lanjutan TO-02: cek supir & kendaraan | Supir **dilepas** (kosong lagi), kendaraan bisa dipegang supir lain (✅ B4) | DR, PK |
 | TO-04 | Booking ONGOING melewati jam selesai | OVERDUE; kendaraan tetap IN_USE; masih bisa diselesaikan & laporan pengembalian | LB, DS (overdue) |
-| TO-05 | 🔴 Tidak ada yang membuka daftar booking (mis. tengah malam), buka **dashboard** / **kalender** / **kendaraan** | Status sudah berubah. Saat ini transisi baru dijalankan saat daftar booking dibuka, dan perubahannya tidak disiarkan ke perangkat lain | DS, KL, KD |
+| TO-05 | Tidak ada yang membuka daftar booking (mis. tengah malam), buka **dashboard** / **kalender** / **kendaraan** | Status sudah berubah: transisi dijalankan server tiap menit & saat detail booking / dashboard dibuka, lalu disiarkan (DATA_CHANGED) ke semua perangkat (✅ B17) | DS, KL, KD |
 | TO-06 | Booking EXPIRED/IGNORED | Tidak bisa di-approve, dimulai, atau dibatalkan | — |
 
 ## 12. Gabung booking (merge) — MG
@@ -316,7 +316,7 @@ tidak dipilih otomatis untuk booking lain.
 | MG-06 | Gabung booking ONGOING/COMPLETED | Ditolak | — |
 | MG-07 | Jendela gabungan bentrok dengan booking lain di kendaraan yang sama | Ditolak 409 | — |
 | MG-08 | Total penumpang > kapasitas setelah gabung | Peringatan kapasitas | — |
-| MG-09 | 🔴 Gabung sambil memilih supir lain | Supir berganti, kendaraan tetap, sekunder mewarisi; saat ini kendaraan booking utama jadi kosong | DB, DR |
+| MG-09 | Gabung sambil memilih supir lain | Supir berganti, kendaraan tetap, sekunder mewarisi; supir baru ditolak bila bentrok jadwal / nonaktif (✅ B9) | DB, DR |
 | MG-10 | Mulai / selesaikan booking utama | Sekunder ikut ONGOING / COMPLETED (lihat ST-13, CP-09) | LB |
 | MG-11 | Rating dari booking sekunder | Ditolak "beri rating dari booking utama #..." | — |
 | MG-12 | BBM dicatat di booking utama | Tampil juga di detail booking sekunder, tanpa dobel | DB |
@@ -375,13 +375,13 @@ tidak dipilih otomatis untuk booking lain.
 
 | ID | Skenario | Diharapkan | Menu lain ikut berubah |
 |---|---|---|---|
-| VH-01 | Admin ubah status K2 AVAILABLE → INACTIVE | Tidak muncul di picker; 🔴 booking baru ditolak (BC-08) | KD, PK, DS |
+| VH-01 | Admin ubah status K2 AVAILABLE → INACTIVE | Tidak muncul di picker; booking baru ditolak (BC-08, ✅ B16) | KD, PK, DS |
 | VH-02 | Admin ubah status manual saat K2 sedang dipakai trip (IN_USE) | Ditolak 409 — selesaikan booking dulu (✅ B10) | KD, DS |
 | VH-03 | 📱 Ubah status dari mobile | Berhasil; web ikut berubah tanpa reload | KD (web), DS |
 | VH-04 | Odometer diturunkan saat edit | Ditolak, menyebut angka tercatat | — |
 | VH-05 | Odometer dinaikkan jauh (edit kendaraan) | **Tidak ada** maintenance otomatis | MT, KD |
 | VH-06 | Plat nomor duplikat | Ditolak | — |
-| VH-07 | 🔴 Hapus kendaraan yang punya riwayat booking | Ditolak dengan pesan jelas (bukan error server) | — |
+| VH-07 | Hapus kendaraan yang punya riwayat booking | Ditolak 409 dengan pesan jelas — sarankan INACTIVE (juga ruangan & kategori) (✅ B18) | — |
 | VH-08 | Ganti foto kendaraan | Foto baru tampil di daftar, detail, picker, dan kartu booking | KD, PK, LB |
 | VH-09 | Ubah nama/kapasitas kendaraan | Nama baru tampil di booking terkait; sisa kursi di picker ikut berubah | LB, DB, PK |
 | VH-10 | _(dihapus 2026-09-30 — tidak ada lagi baseline/interval servis)_ | — | — |
@@ -393,9 +393,9 @@ tidak dipilih otomatis untuk booking lain.
 |---|---|---|---|
 | RM-01 | Tetapkan RK-1 sebagai penjaga R2 | R2 menampilkan RK-1; daftar penjaga menampilkan ruangannya | RG, RK |
 | RM-02 | Nonaktifkan RK-1 | Tidak bisa memulai/menyelesaikan booking ruangan; ❓ R1 tetap menampilkan penjaga nonaktif? | RK, RG |
-| RM-03 | 🔴 📱 Penjaga ruangan ubah status ruangan | Berhasil (izin mobile: ROOM_KEEPER boleh mengelola ruangan); saat ini backend hanya mengizinkan ADMIN → 403 | RG |
+| RM-03 | 📱 Penjaga ruangan ubah status ruangan | Berhasil untuk ruangan yang dijaganya; ruangan lain → 403 "Anda bukan penjaga ruangan ini" (✅ B19) | RG |
 | RM-04 | Booking ruangan disetujui | Penjaga ruangan dapat notifikasi | NT |
-| RM-05 | 🔴 Dua booking ruangan bentrok jam (lihat BC-11) | Yang kedua tidak bisa disetujui | KL |
+| RM-05 | ✅ B8 — Dua booking ruangan bentrok jam (lihat BC-11) | Yang kedua tidak bisa disetujui | KL |
 
 ## 18. Driver & pengguna — DU
 
@@ -490,7 +490,7 @@ tidak dipilih otomatis untuk booking lain.
 
 | ID | Skenario | Diharapkan |
 |---|---|---|
-| DL-01 | 🔴 Angka dashboard admin (kendaraan, ruangan, supir tersedia) | Sama dengan jumlah nyata di menu masing-masing; saat ini "supir tersedia" dihitung beda dari picker |
+| DL-01 | Angka dashboard admin (kendaraan, ruangan, supir tersedia) | Sama dengan jumlah nyata di menu masing-masing; "supir tersedia" = definisi picker (akun aktif & tidak memegang kendaraan) (✅ B14) |
 | DL-02 | Setiap aksi di §3–§15 | Angka dashboard terkait langsung berubah |
 | DL-03 | Dashboard karyawan | Hanya data miliknya |
 | DL-04 | Laporan tab Booking/Resource/Keuangan/Driver/Audit dengan filter periode | Angka konsisten antar tab & dengan data mentah; tidak ada angka > 100% |
@@ -529,21 +529,21 @@ Perilaku berikut ditemukan dari membaca kode backend (commit `aed39c6`, 2026-09-
 
 | # | Temuan | Skenario | Dampak |
 |---|---|---|---|
-| T1 | Transisi EXPIRED/IGNORED **tidak melepas supir** yang memegang kendaraan sejak approve | TO-03, E2E-07 | Supir "sibuk" selamanya: tidak dipilih otomatis; kendaraan menolak supir lain |
-| T2 | "Tugaskan kendaraan" pada booking APPROVED **tidak memperbarui** catatan supir pemegang kendaraan | AS-03, AS-04, E2E-03 | Supir lama tertahan; supir baru tidak tercatat memegang |
-| T3 | Substitute hanya mengganti resource, **bukan** kendaraan yang ditugaskan; penanda "Dialihkan" tidak terisi | SB-02, SB-03 | Supir memegang kendaraan lama; bentrok dicek di kendaraan lama |
-| T4 | Tidak ada pengecekan **bentrok ruangan** saat buat/approve | BC-11, RM-05 | Dua rapat bisa disetujui di ruangan & jam yang sama |
-| T5 | Resource **INACTIVE** bisa dibooking | BC-08, VH-01 | Kendaraan nonaktif tetap dipakai |
-| T6 | Tanggal **masa lalu** diterima saat buat booking | BC-04 | Booking langsung hangus / data kotor |
+| T1 | ✅ _(diperbaiki 2026-09-30)_ Transisi EXPIRED/IGNORED **tidak melepas supir** yang memegang kendaraan sejak approve | TO-03, E2E-07 | Supir "sibuk" selamanya: tidak dipilih otomatis; kendaraan menolak supir lain |
+| T2 | ✅ _(diperbaiki 2026-09-30)_ "Tugaskan kendaraan" pada booking APPROVED **tidak memperbarui** catatan supir pemegang kendaraan | AS-03, AS-04, E2E-03 | Supir lama tertahan; supir baru tidak tercatat memegang |
+| T3 | ✅ _(diperbaiki 2026-09-30)_ Substitute hanya mengganti resource, **bukan** kendaraan yang ditugaskan; penanda "Dialihkan" tidak terisi | SB-02, SB-03 | Supir memegang kendaraan lama; bentrok dicek di kendaraan lama |
+| T4 | ✅ _(diperbaiki 2026-09-30)_ Tidak ada pengecekan **bentrok ruangan** saat buat/approve | BC-11, RM-05 | Dua rapat bisa disetujui di ruangan & jam yang sama |
+| T5 | ✅ _(diperbaiki 2026-09-30)_ Resource **INACTIVE** bisa dibooking | BC-08, VH-01 | Kendaraan nonaktif tetap dipakai |
+| T6 | ✅ _(diperbaiki 2026-09-30)_ Tanggal **masa lalu** diterima saat buat booking | BC-04 | Booking langsung hangus / data kotor |
 | T7 | ✅ _(diperbaiki 2026-09-30)_ Selesaikan booking & hapus maintenance **selalu** mengubah kendaraan jadi AVAILABLE | CP-10, MT-09 | Status kendaraan salah (MAINTENANCE/IN_USE tertimpa) |
 | T8 | ✅ _(diperbaiki 2026-09-30)_ Maintenance terjadwal di masa depan langsung mengunci kendaraan; status "selesai" lewat edit/buat tidak membebaskan | MT-04, MT-07, MT-08 | Kendaraan terkunci tanpa alasan |
-| T9 | DRIVER/ROOM_KEEPER bisa **membatalkan booking PENDING orang lain** (API) | RL-07 | Penyalahgunaan lewat API |
-| T10 | Pencatatan BBM terbuka untuk semua role (API) | RL-08 | Data BBM dari pihak yang tidak berwenang |
-| T11 | Admin boleh **menyetujui** booking sendiri, tapi tidak boleh **menolak** booking sendiri | AP-11 | Aturan tidak konsisten |
-| T12 | Transisi otomatis hanya jalan saat daftar booking dibuka & tidak disiarkan | TO-05 | Dashboard/kalender/perangkat lain bisa menampilkan status lama |
+| T9 | ✅ _(diperbaiki 2026-09-30)_ DRIVER/ROOM_KEEPER bisa **membatalkan booking PENDING orang lain** (API) | RL-07 | Penyalahgunaan lewat API |
+| T10 | ✅ _(diperbaiki 2026-09-30)_ Pencatatan BBM terbuka untuk semua role (API) | RL-08 | Data BBM dari pihak yang tidak berwenang |
+| T11 | ✅ _(diperbaiki 2026-09-30)_ Admin boleh **menyetujui** booking sendiri, tapi tidak boleh **menolak** booking sendiri | AP-11 | Aturan tidak konsisten |
+| T12 | ✅ _(diperbaiki 2026-09-30)_ Transisi otomatis hanya jalan saat daftar booking dibuka & tidak disiarkan | TO-05 | Dashboard/kalender/perangkat lain bisa menampilkan status lama |
 | T13 | ✅ _(diperbaiki 2026-09-30)_ Status manual kendaraan tidak dicek terhadap booking/maintenance aktif | VH-02 | Status kendaraan tidak mencerminkan kenyataan |
-| T15 | `POST /auth/register` publik & menerima `roleId` apa pun | AU-16 | **Keamanan**: siapa pun bisa membuat akun admin |
+| T15 | ✅ _(diperbaiki 2026-09-30)_ `POST /auth/register` publik & menerima `roleId` apa pun | AU-16 | **Keamanan**: siapa pun bisa membuat akun admin |
 | T16 | Booking APPROVED tidak bisa dibatalkan siapa pun | CN-03, CN-04 | ❓ Perlu keputusan alur pembatalan |
-| T17 | Mobile memberi ROOM_KEEPER izin ubah status ruangan, backend hanya ADMIN | RM-03 | Tombol tampil tapi selalu gagal 403 |
-| T18 | Hapus kendaraan/ruangan yang punya booking gagal di foreign key tanpa penanganan | VH-07 | Error server (500) alih-alih pesan jelas |
+| T17 | ✅ _(diperbaiki 2026-09-30)_ Mobile memberi ROOM_KEEPER izin ubah status ruangan, backend hanya ADMIN | RM-03 | Tombol tampil tapi selalu gagal 403 |
+| T18 | ✅ _(diperbaiki 2026-09-30)_ Hapus kendaraan/ruangan yang punya booking gagal di foreign key tanpa penanganan | VH-07 | Error server (500) alih-alih pesan jelas |
 | T19 | Profil di mobile tidak ikut berubah saat data akun diubah dari luar | AU-15 | Nama/role usang sampai app dibuka ulang |

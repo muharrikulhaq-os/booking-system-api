@@ -29,6 +29,7 @@ type ExtendedQuerier interface {
 	SubstituteBookingResource(ctx context.Context, bookingID, resourceID int32, vehicleID sql.NullInt32) error
 	GetResourceStatusFacts(ctx context.Context, resourceID int32) (ResourceStatusFacts, error)
 	PromoteDueMaintenance(ctx context.Context) (int64, error)
+	CountActiveResourceOverlap(ctx context.Context, resourceID int32, start, end time.Time, excludeID int32) (int64, error)
 	CreateReturnReport(ctx context.Context, bookingID, submittedByID int32, note, location string, odometer sql.NullInt32) (BookingReturnReport, error)
 	GetReturnReport(ctx context.Context, bookingID int32) (BookingReturnReportRow, error)
 	SetBookingStartTrip(ctx context.Context, bookingID int32, odometer sql.NullInt32, location, photoURL sql.NullString) error
