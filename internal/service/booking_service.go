@@ -1820,7 +1820,6 @@ func (s *BookingService) SubmitReturnReport(
 		_, _ = s.q.UpdateVehicleOdometer(ctx, repository.UpdateVehicleOdometerParams{
 			ID: b.AssignedVehicleId.Int32, CurrentOdometer: *odometer,
 		})
-		checkAndTriggerAutoMaintenance(ctx, s.q, b.AssignedVehicleId.Int32, int32(userID))
 	}
 
 	returnDesc := "Supir mengirim laporan pengembalian"
