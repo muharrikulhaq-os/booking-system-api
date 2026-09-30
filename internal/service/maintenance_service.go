@@ -222,19 +222,11 @@ func (s *MaintenanceService) Create(ctx context.Context, req CreateMaintenanceRe
 		return MaintenanceCreateResponse{}, err
 	}
 
-	// set resource status to MAINTENANCE
-	_, _ = s.q.UpdateResourceStatus(ctx, repository.UpdateResourceStatusParams{
-		ID:     vehicle.ResourceId,
-		Status: repository.ResourceStatusMAINTENANCE,
-	})
-
-	// if end date is filled and is in the past, immediately unlock (just in case)
-	if req.EndDate != nil && req.EndDate.Before(time.Now()) {
-		_, _ = s.q.UpdateResourceStatus(ctx, repository.UpdateResourceStatusParams{
-			ID:     vehicle.ResourceId,
-			Status: repository.ResourceStatusAVAILABLE,
-		})
-	}
+	// Kendaraan hanya MAINTENANCE bila maintenance sudah berlangsung dan tidak
+	// sedang dipakai trip. Maintenance terjadwal (masa depan) belum mengunci
+	// kendaraan — tanggalnya diblokir lewat CheckMaintenanceConflict (B11);
+	// record yang langsung "completed" tidak mengunci sama sekali (B12).
+	syncResourceStatus(ctx, s.q, vehicle.ResourceId, false)
 
 	logAudit(ctx, s.q, actor, "CREATE", "Maintenance", m.ID,
 		"Membuat maintenance untuk kendaraan "+vehicle.PlateNumber)
@@ -293,17 +285,14 @@ func (s *MaintenanceService) Update(ctx context.Context, id int32, req UpdateMai
 	logAudit(ctx, s.q, actor, "UPDATE", "Maintenance", id,
 		"Mengubah data maintenance kendaraan "+vehicle.PlateNumber)
 
-	// if endDate provided and is <= now, mark resource AVAILABLE again
-	if req.EndDate != nil && (req.EndDate.Before(time.Now()) || req.EndDate.Equal(time.Now())) {
-		_, _ = s.q.UpdateResourceStatus(ctx, repository.UpdateResourceStatusParams{
-			ID:     vehicle.ResourceId,
-			Status: repository.ResourceStatusAVAILABLE,
-		})
-	} else if req.EndDate == nil || req.EndDate.After(time.Now()) {
-		_, _ = s.q.UpdateResourceStatus(ctx, repository.UpdateResourceStatusParams{
-			ID:     vehicle.ResourceId,
-			Status: repository.ResourceStatusMAINTENANCE,
-		})
+	// Status dihitung ulang dari data terbaru — mis. diubah jadi "completed"
+	// membebaskan kendaraan (B12). Kendaraan lama ikut dihitung bila record
+	// dipindah ke kendaraan lain.
+	syncResourceStatus(ctx, s.q, vehicle.ResourceId, true)
+	if existing.VehicleId != req.VehicleID {
+		if old, oerr := s.q.GetVehicleByID(ctx, existing.VehicleId); oerr == nil {
+			syncResourceStatus(ctx, s.q, old.ResourceId, true)
+		}
 	}
 
 	return s.GetByID(ctx, id)
@@ -319,11 +308,9 @@ func (s *MaintenanceService) Delete(ctx context.Context, id int32, actor AuditAc
 
 	err = s.q.DeleteMaintenance(ctx, id)
 
+	// Hitung ulang — kendaraan yang sedang dipakai trip tetap IN_USE (B10).
 	if err == nil && vehicle.ID != 0 {
-		_, _ = s.q.UpdateResourceStatus(ctx, repository.UpdateResourceStatusParams{
-			ID:     vehicle.ResourceId,
-			Status: repository.ResourceStatusAVAILABLE,
-		})
+		syncResourceStatus(ctx, s.q, vehicle.ResourceId, true)
 	}
 	if err == nil {
 		logAudit(ctx, s.q, actor, "DELETE", "Maintenance", id,
@@ -377,14 +364,9 @@ func (s *MaintenanceService) Complete(ctx context.Context, id int32, photos []*m
 		return nil, err
 	}
 
-	// Update resource status to AVAILABLE
+	// Kendaraan bebas lagi — kecuali sedang dipakai trip (tetap IN_USE).
 	vehicle, _ := s.q.GetVehicleByID(ctx, existing.VehicleId)
-	if vehicle.ResourceId != 0 {
-		_, _ = s.q.UpdateResourceStatus(ctx, repository.UpdateResourceStatusParams{
-			ID:     vehicle.ResourceId,
-			Status: repository.ResourceStatusAVAILABLE,
-		})
-	}
+	syncResourceStatus(ctx, s.q, vehicle.ResourceId, true)
 
 	return s.GetByID(ctx, id)
 }

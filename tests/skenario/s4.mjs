@@ -97,6 +97,17 @@ export async function runBatch4() {
     const s = await api('GET', `/vehicles/${v.id}/maintenance-status`, { token: A() });
     check('MT-17', s.status === 404, `Endpoint pengingat sisa km sudah dihapus (${s.status})`);
   });
+  await scenario('MT-18', async () => {
+    const v = await newVehicle();
+    await maint(v.id, wib(7, 8), wib(7, 17));
+    const before = resourceStatus(v.resourceId);
+    // "Waktu berjalan": tanggal mulai maintenance tiba.
+    sql(`update maintenance_records set "startDate"=NOW() - interval '5 minutes', "endDate"=NOW() + interval '5 hours' where id=${maintId(v.id)}`);
+    const g = await api('GET', `/vehicles/${v.id}`, { token: A() });
+    const after = resourceStatus(v.resourceId);
+    check('MT-18', before === 'AVAILABLE' && ok2(g) && after === 'MAINTENANCE',
+      `Maintenance terjadwal tiba waktunya → ${before} → ${after} saat detail kendaraan dibuka`);
+  });
 
   // ── VH ────────────────────────────────────────────────────────────────
   await scenario('VH-02', async () => {
@@ -106,6 +117,15 @@ export async function runBatch4() {
     const r = await api('PATCH', `/vehicles/${v.id}/status`, { token: A(), body: { status: 'AVAILABLE' } });
     check('VH-02', r.status >= 400, `Ubah manual ke AVAILABLE saat IN_USE ditolak (${r.status})`,
       `Kendaraan sedang dipakai trip, admin ubah manual ke AVAILABLE → ${r.status}, status kini ${resourceStatus(v.resourceId)}`);
+  });
+  await scenario('VH-11', async () => {
+    const v = await newVehicle();
+    await maint(v.id, inMin(-5), inMin(600));
+    const r = await api('PATCH', `/vehicles/${v.id}/status`, { token: A(), body: { status: 'AVAILABLE' } });
+    const st = resourceStatus(v.resourceId);
+    const r2 = await api('PATCH', `/vehicles/${v.id}/status`, { token: A(), body: { status: 'INACTIVE' } });
+    check('VH-11', r.status === 409 && st === 'MAINTENANCE' && ok2(r2),
+      `Maintenance berlangsung: set AVAILABLE → ${r.status} (status ${st}); set INACTIVE → ${r2.status}`);
   });
   await scenario('VH-04/05', async () => {
     const v = await newVehicle({ odometer: 10000 });

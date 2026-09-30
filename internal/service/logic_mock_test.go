@@ -28,6 +28,11 @@ func (m *MockQuerier) UpdateResourceStatus(ctx context.Context, arg repository.U
 	return repository.Resource{ID: arg.ID, Status: arg.Status}, nil
 }
 
+// Complete() menghitung ulang status resource: trip selesai, tanpa maintenance.
+func (m *MockQuerier) GetResourceStatusFacts(ctx context.Context, resourceID int32) (repository.ResourceStatusFacts, error) {
+	return repository.ResourceStatusFacts{Status: repository.ResourceStatusINUSE}, nil
+}
+
 func (m *MockQuerier) GetBookingByID(ctx context.Context, id int32) (repository.GetBookingByIDRow, error) {
 	return m.booking, nil
 }

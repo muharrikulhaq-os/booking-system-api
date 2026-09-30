@@ -236,6 +236,10 @@ func (s *BookingService) sweepStaleBookings(ctx context.Context) int {
 	}
 	syncDriverHolds(ctx, s.q, drivers...)
 
+	// Maintenance terjadwal yang sudah tiba waktunya → kendaraan MAINTENANCE
+	// (B11: tidak lagi dikunci sejak maintenance dibuat).
+	_, _ = s.q.PromoteDueMaintenance(ctx)
+
 	total := 0
 	for _, sw := range []sweep{
 		{overdue, "OVERDUE", "Booking belum diselesaikan setelah waktu selesai terlewati"},
@@ -1071,9 +1075,7 @@ func (s *BookingService) syncMergedBookingStatus(ctx context.Context, bookingID 
 			if _, err := s.q.CompleteBooking(ctx, partnerID); err != nil {
 				continue
 			}
-			_, _ = s.q.UpdateResourceStatus(ctx, repository.UpdateResourceStatusParams{
-				ID: partner.ResourceId, Status: repository.ResourceStatusAVAILABLE,
-			})
+			syncResourceStatus(ctx, s.q, partner.ResourceId, false)
 		default:
 			continue
 		}
@@ -1136,10 +1138,9 @@ func (s *BookingService) Complete(ctx context.Context, id int32, actor AuditActo
 	if _, err = s.q.CompleteBooking(ctx, id); err != nil {
 		return nil, err
 	}
-	// Resource kembali AVAILABLE setelah booking selesai.
-	_, _ = s.q.UpdateResourceStatus(ctx, repository.UpdateResourceStatusParams{
-		ID: b.ResourceId, Status: repository.ResourceStatusAVAILABLE,
-	})
+	// Status resource dihitung ulang: AVAILABLE, atau tetap MAINTENANCE bila
+	// maintenance diajukan selama trip berlangsung (B10).
+	syncResourceStatus(ctx, s.q, b.ResourceId, false)
 
 	// Overtime (Non-SPD only): jam kerja normal mengikuti jadwal booking
 	// (endDate). Kendaraan yang baru selesai dipakai setelah endDate dicatat

@@ -291,7 +291,7 @@ tidak dipilih otomatis untuk booking lain.
 | CP-07 | EMP-A menyelesaikan booking ruangan miliknya | COMPLETED; R1 AVAILABLE; langsung muncul form rating ruangan | RG, DS |
 | CP-08 | Supir DRV-2 punya 2 booking APPROVED/ONGOING, satu diselesaikan | DRV-2 **tetap** memegang kendaraan (masih ada booking aktif) | DR |
 | CP-09 | Selesaikan booking utama hasil merge | Booking gabungan ikut COMPLETED; supir baru dilepas setelah semuanya selesai | LB, DB, DR |
-| CP-10 | 🔴 Admin membuat maintenance K2 saat trip K2 sedang berjalan, lalu booking diselesaikan | K2 **tetap MAINTENANCE**; saat ini tertimpa AVAILABLE | KD, DS, MT |
+| CP-10 | Admin membuat maintenance K2 saat trip K2 sedang berjalan, lalu booking diselesaikan | K2 tetap IN_USE selama trip, lalu **MAINTENANCE** setelah selesai (✅ B10) | KD, DS, MT |
 
 ## 11. Transisi otomatis berbasis waktu — TO
 
@@ -355,12 +355,12 @@ tidak dipilih otomatis untuk booking lain.
 | MT-01 | Admin membuat maintenance K2 mulai hari ini | K2 → MAINTENANCE; tidak bisa dibooking | MT, KD, DS, PK |
 | MT-02 | K2 sudah punya maintenance terbuka, buat lagi | Ditolak "masih dalam maintenance yang belum selesai" | — |
 | MT-03 | Buat maintenance K2 yang bentrok dengan booking APPROVED | Berhasil + **peringatan** ada booking bentrok; booking itu tidak bisa dimulai (ST-12) → admin pindah kendaraan | MT, DB |
-| MT-04 | 🔴❓ Buat maintenance K2 untuk **minggu depan** | K2 tetap AVAILABLE sampai tanggal mulai; hanya tanggal maintenance yang terblokir. Saat ini K2 langsung MAINTENANCE → tidak bisa dibooking tanggal apa pun | KD, PK |
-| MT-05 | Selesaikan maintenance (foto bukti) | Status selesai; K2 → AVAILABLE; baseline odometer servis direset | MT, KD, DS, PK |
+| MT-04 | Buat maintenance K2 untuk **minggu depan** | K2 tetap AVAILABLE sampai tanggal mulai; hanya tanggal maintenance yang terblokir (✅ B11) | KD, PK |
+| MT-05 | Selesaikan maintenance (foto bukti) | Status selesai; K2 → AVAILABLE | MT, KD, DS, PK |
 | MT-06 | Selesaikan maintenance yang sudah selesai | Ditolak | — |
-| MT-07 | 🔴 Edit maintenance, ubah status jadi "selesai" tanpa tanggal selesai | K2 → AVAILABLE; saat ini justru di-set MAINTENANCE | KD |
-| MT-08 | 🔴 Buat maintenance langsung berstatus "selesai" | K2 tidak terkunci; saat ini K2 terkunci MAINTENANCE & tidak bisa "diselesaikan" lagi | KD |
-| MT-09 | 🔴 Hapus maintenance saat K2 sedang IN_USE (trip berjalan) | K2 tetap IN_USE; saat ini jadi AVAILABLE | KD, DS |
+| MT-07 | Edit maintenance, ubah status jadi "selesai" tanpa tanggal selesai | K2 → AVAILABLE (✅ B12) | KD |
+| MT-08 | Buat maintenance langsung berstatus "selesai" | K2 tidak terkunci (✅ B12) | KD |
+| MT-09 | Hapus maintenance saat K2 sedang IN_USE (trip berjalan) | K2 tetap IN_USE (✅ B10) | KD, DS |
 | MT-10 | Hapus maintenance terbuka (K2 tidak dipakai) | K2 → AVAILABLE, bisa dibooking | MT, KD, PK |
 | MT-11 | Isi BBM dengan odometer jauh melewati 10.000 km sejak servis terakhir | **Tidak ada** maintenance otomatis; K2 tetap AVAILABLE | MT, KD, BBM |
 | MT-12 | _(dihapus 2026-09-30 — maintenance otomatis ditiadakan)_ | — | — |
@@ -369,13 +369,14 @@ tidak dipilih otomatis untuk booking lain.
 | MT-15 | 📱 Record maintenance lama hasil sistem (status `ongoing`) tampil di mobile | Tampil "Berlangsung", bisa diselesaikan admin, tidak error | MT |
 | MT-16 | Karyawan/supir membuka menu maintenance | Tidak ada menu; API 403 | — |
 | MT-17 | _(dihapus 2026-09-30 — pengingat sisa km servis ditiadakan)_ | — | — |
+| MT-18 | Maintenance K2 terjadwal (K2 masih AVAILABLE), lalu tanggal mulainya tiba | K2 otomatis MAINTENANCE saat daftar/detail kendaraan atau daftar booking dibuka (tanpa penjadwal); bila K2 sedang dipakai trip, tetap IN_USE dan jadi MAINTENANCE setelah trip selesai | KD, DS, PK |
 
 ## 16. Kendaraan — VH
 
 | ID | Skenario | Diharapkan | Menu lain ikut berubah |
 |---|---|---|---|
 | VH-01 | Admin ubah status K2 AVAILABLE → INACTIVE | Tidak muncul di picker; 🔴 booking baru ditolak (BC-08) | KD, PK, DS |
-| VH-02 | 🔴 Admin ubah status manual jadi AVAILABLE saat K2 sedang IN_USE / MAINTENANCE | Ditolak atau minta konfirmasi; saat ini diterima tanpa pengecekan | KD, DS |
+| VH-02 | Admin ubah status manual saat K2 sedang dipakai trip (IN_USE) | Ditolak 409 — selesaikan booking dulu (✅ B10) | KD, DS |
 | VH-03 | 📱 Ubah status dari mobile | Berhasil; web ikut berubah tanpa reload | KD (web), DS |
 | VH-04 | Odometer diturunkan saat edit | Ditolak, menyebut angka tercatat | — |
 | VH-05 | Odometer dinaikkan jauh (edit kendaraan) | **Tidak ada** maintenance otomatis | MT, KD |
@@ -384,6 +385,7 @@ tidak dipilih otomatis untuk booking lain.
 | VH-08 | Ganti foto kendaraan | Foto baru tampil di daftar, detail, picker, dan kartu booking | KD, PK, LB |
 | VH-09 | Ubah nama/kapasitas kendaraan | Nama baru tampil di booking terkait; sisa kursi di picker ikut berubah | LB, DB, PK |
 | VH-10 | _(dihapus 2026-09-30 — tidak ada lagi baseline/interval servis)_ | — | — |
+| VH-11 | Admin ubah status manual jadi AVAILABLE saat maintenance K2 masih berlangsung | Ditolak 409 — selesaikan maintenance dulu; ubah ke INACTIVE tetap boleh | KD, MT |
 
 ## 17. Ruangan & penjaga ruangan — RM
 
@@ -533,13 +535,13 @@ Perilaku berikut ditemukan dari membaca kode backend (commit `aed39c6`, 2026-09-
 | T4 | Tidak ada pengecekan **bentrok ruangan** saat buat/approve | BC-11, RM-05 | Dua rapat bisa disetujui di ruangan & jam yang sama |
 | T5 | Resource **INACTIVE** bisa dibooking | BC-08, VH-01 | Kendaraan nonaktif tetap dipakai |
 | T6 | Tanggal **masa lalu** diterima saat buat booking | BC-04 | Booking langsung hangus / data kotor |
-| T7 | Selesaikan booking & hapus maintenance **selalu** mengubah kendaraan jadi AVAILABLE | CP-10, MT-09 | Status kendaraan salah (MAINTENANCE/IN_USE tertimpa) |
-| T8 | Maintenance terjadwal di masa depan langsung mengunci kendaraan; status "selesai" lewat edit/buat tidak membebaskan | MT-04, MT-07, MT-08 | Kendaraan terkunci tanpa alasan |
+| T7 | ✅ _(diperbaiki 2026-09-30)_ Selesaikan booking & hapus maintenance **selalu** mengubah kendaraan jadi AVAILABLE | CP-10, MT-09 | Status kendaraan salah (MAINTENANCE/IN_USE tertimpa) |
+| T8 | ✅ _(diperbaiki 2026-09-30)_ Maintenance terjadwal di masa depan langsung mengunci kendaraan; status "selesai" lewat edit/buat tidak membebaskan | MT-04, MT-07, MT-08 | Kendaraan terkunci tanpa alasan |
 | T9 | DRIVER/ROOM_KEEPER bisa **membatalkan booking PENDING orang lain** (API) | RL-07 | Penyalahgunaan lewat API |
 | T10 | Pencatatan BBM terbuka untuk semua role (API) | RL-08 | Data BBM dari pihak yang tidak berwenang |
 | T11 | Admin boleh **menyetujui** booking sendiri, tapi tidak boleh **menolak** booking sendiri | AP-11 | Aturan tidak konsisten |
 | T12 | Transisi otomatis hanya jalan saat daftar booking dibuka & tidak disiarkan | TO-05 | Dashboard/kalender/perangkat lain bisa menampilkan status lama |
-| T13 | Status manual kendaraan tidak dicek terhadap booking/maintenance aktif | VH-02 | Status kendaraan tidak mencerminkan kenyataan |
+| T13 | ✅ _(diperbaiki 2026-09-30)_ Status manual kendaraan tidak dicek terhadap booking/maintenance aktif | VH-02 | Status kendaraan tidak mencerminkan kenyataan |
 | T15 | `POST /auth/register` publik & menerima `roleId` apa pun | AU-16 | **Keamanan**: siapa pun bisa membuat akun admin |
 | T16 | Booking APPROVED tidak bisa dibatalkan siapa pun | CN-03, CN-04 | ❓ Perlu keputusan alur pembatalan |
 | T17 | Mobile memberi ROOM_KEEPER izin ubah status ruangan, backend hanya ADMIN | RM-03 | Tombol tampil tapi selalu gagal 403 |

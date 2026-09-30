@@ -118,6 +118,9 @@ func (s *VehicleService) List(ctx context.Context, page, limit int, search *stri
 		}
 	}
 
+	// Maintenance terjadwal yang sudah tiba waktunya → MAINTENANCE (B11).
+	_, _ = s.q.PromoteDueMaintenance(ctx)
+
 	rows, err := s.q.ListVehicles(ctx, params)
 	if err != nil {
 		return nil, 0, err
@@ -140,6 +143,7 @@ func (s *VehicleService) List(ctx context.Context, page, limit int, search *stri
 }
 
 func (s *VehicleService) GetByID(ctx context.Context, id int32) (map[string]any, error) {
+	_, _ = s.q.PromoteDueMaintenance(ctx)
 	v, err := s.q.GetVehicleByID(ctx, id)
 	if err != nil {
 		return nil, util.ErrNotFound
@@ -227,6 +231,9 @@ func (s *VehicleService) UpdateStatus(ctx context.Context, id int32, status stri
 	v, err := s.q.GetVehicleByID(ctx, id)
 	if err != nil {
 		return nil, util.ErrNotFound
+	}
+	if err := guardManualStatusChange(ctx, s.q, v.ResourceId, repository.ResourceStatus(status)); err != nil {
+		return nil, err
 	}
 	_, err = s.q.UpdateResourceStatus(ctx, repository.UpdateResourceStatusParams{
 		ID: v.ResourceId, Status: repository.ResourceStatus(status),
