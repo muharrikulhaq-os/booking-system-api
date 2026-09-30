@@ -5,6 +5,8 @@
 > bila hasil membaca kode backend (2026-09-30) menunjukkan perilaku saat ini **berbeda**,
 > skenario ditandai 🔴 dan dijelaskan di [§ Temuan](#temuan-dari-membaca-kode).
 >
+> Guest booking **tidak diuji** — fitur sudah tidak dipakai (2026-09-30).
+>
 > Menambah skenario: lanjutkan nomor terakhir di bagiannya (mis. `BC-25`), jangan
 > mengubah nomor yang sudah ada — nomor dipakai sebagai rujukan laporan bug.
 
@@ -36,7 +38,6 @@
 21. [Waktu & zona WIB — TZ](#21-waktu--zona-wib--tz)
 22. [Notifikasi — NT](#22-notifikasi--nt)
 23. [Dashboard & laporan — DL](#23-dashboard--laporan--dl)
-24. [Guest booking — GB](#24-guest-booking--gb)
 25. [Alur ujung-ke-ujung (E2E) — E2E](#25-alur-ujung-ke-ujung-e2e--e2e)
 - [Temuan dari membaca kode](#temuan-dari-membaca-kode)
 
@@ -490,16 +491,6 @@ tidak dipilih otomatis untuk booking lain.
 | DL-07 | 📱 Ekspor CSV laporan | File bisa dibagikan & dibuka |
 | DL-08 | Laporan biaya setelah BBM & maintenance baru | Total & tren ikut naik |
 
-## 24. Guest booking — GB
-
-| ID | Skenario | Diharapkan |
-|---|---|---|
-| GB-01 | Tamu mengajukan booking (tanpa login) | Masuk PENDING; tamu dapat link token |
-| GB-02 | 🔴 Tamu booking resource & jam yang sudah dipakai booking karyawan | Ditolak / ditandai bentrok; saat ini tidak ada pengecekan bentrok sama sekali |
-| GB-03 | Admin approve / reject / mulai guest booking | Sesuai status (hanya PENDING yang bisa approve/reject) |
-| GB-04 | 🔴 Tamu membatalkan / menyelesaikan lewat token saat status sudah COMPLETED/REJECTED | Ditolak; saat ini status apa pun bisa diubah lewat token |
-| GB-05 | Guest booking disetujui | ❓ Ikut tampil di kalender resource & dashboard? (saat ini tabel terpisah) |
-
 ## 25. Alur ujung-ke-ujung (E2E) — E2E
 
 Rangkaian yang menggabungkan banyak skenario di atas — jalankan berurutan, cek setiap menu.
@@ -539,7 +530,6 @@ Perilaku berikut ditemukan dari membaca kode backend (commit `aed39c6`, 2026-09-
 | T11 | Admin boleh **menyetujui** booking sendiri, tapi tidak boleh **menolak** booking sendiri | AP-11 | Aturan tidak konsisten |
 | T12 | Transisi otomatis hanya jalan saat daftar booking dibuka & tidak disiarkan | TO-05 | Dashboard/kalender/perangkat lain bisa menampilkan status lama |
 | T13 | Status manual kendaraan tidak dicek terhadap booking/maintenance aktif | VH-02 | Status kendaraan tidak mencerminkan kenyataan |
-| T14 | Guest booking tanpa cek bentrok; token bisa mengubah status apa pun | GB-02, GB-04 | Bentrok jadwal & status tidak valid |
 | T15 | `POST /auth/register` publik & menerima `roleId` apa pun | AU-16 | **Keamanan**: siapa pun bisa membuat akun admin |
 | T16 | Booking APPROVED tidak bisa dibatalkan siapa pun | CN-03, CN-04 | ❓ Perlu keputusan alur pembatalan |
 | T17 | Mobile memberi ROOM_KEEPER izin ubah status ruangan, backend hanya ADMIN | RM-03 | Tombol tampil tapi selalu gagal 403 |
