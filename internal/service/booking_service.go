@@ -238,8 +238,8 @@ func (s *BookingService) sweepStaleBookings(ctx context.Context) int {
 	}
 	syncDriverHolds(ctx, s.q, drivers...)
 
-	// Maintenance terjadwal yang sudah tiba waktunya → kendaraan MAINTENANCE
-	// (B11: tidak lagi dikunci sejak maintenance dibuat).
+	// Jaring pengaman: kendaraan yang sedang di vendor (maintenance IN_PROGRESS)
+	// tapi masih tercatat AVAILABLE → MAINTENANCE.
 	promoteDueMaintenance(ctx, s.q, s.publish)
 
 	total := 0

@@ -68,3 +68,10 @@ export const check = (id, cond, passNote, failNote) =>
 export async function scenario(id, fn) {
   try { await fn(); } catch (e) { record(id, 'ERROR', String(e?.stack ?? e).split('\n').slice(0, 3).join(' | ')); }
 }
+
+/** Request mentah (mis. unduh PDF): status, content-type, isi biner. */
+export async function apiRaw(method, path, { token } = {}) {
+  const res = await fetch(BASE + path, { method, headers: token ? { Authorization: `Bearer ${token}` } : {} });
+  const bytes = Buffer.from(await res.arrayBuffer());
+  return { status: res.status, contentType: res.headers.get('content-type') ?? '', disposition: res.headers.get('content-disposition') ?? '', bytes };
+}

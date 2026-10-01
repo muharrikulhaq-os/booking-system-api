@@ -25,7 +25,7 @@ func (s *VehicleService) SetPublisher(p Publisher) { s.publish = p }
 func (s *DashboardService) SetBeforeRead(f func(ctx context.Context)) { s.beforeRead = f }
 
 // SweepNow menjalankan transisi otomatis (IGNORED/EXPIRED/OVERDUE + maintenance
-// yang tiba waktunya) sekarang juga.
+// yang sedang di vendor) sekarang juga.
 func (s *BookingService) SweepNow(ctx context.Context) { s.sweepStaleBookings(ctx) }
 
 // RunSweeper menjalankan transisi otomatis berkala sampai ctx selesai, supaya

@@ -15,6 +15,10 @@ semua migrasi, SMTP & FCM dimatikan). Tidak ada data production yang disentuh.
 > **Setelah semua perbaikan B1–B21 (runner terakhir, 2026-09-30):** ✅ 178 lulus · ❌ 0 gagal · ℹ️ 9 perlu keputusan · ⏭️ 3 dilewati.
 >
 > **Setelah keputusan bisnis diterapkan:** ✅ 186 lulus · ❌ 0 gagal · ℹ️ 1 (FL-06, ditunda) · ⏭️ 3 dilewati.
+>
+> **Setelah maintenance vendor (2026-10-01, branch `feat/maintenance-vendor`):** ✅ 203 lulus · ❌ 0 gagal ·
+> ℹ️ 1 (FL-06) · ⏭️ 3 dilewati. Bagian MT ditulis ulang untuk alur baru + skenario baru VD/KP/IS/KS
+> (lihat SKENARIO_TESTING §15). Tabel rinci di bawah masih hasil 2026-09-30 (alur maintenance lama).
 
 Ulangi pengujian (mis. setelah perbaikan): lihat [`tests/skenario/README.md`](../tests/skenario/README.md).
 

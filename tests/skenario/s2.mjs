@@ -2,14 +2,13 @@
 import { api, ok2, sql, record, check, scenario, wib, inMin } from './lib.mjs';
 import {
   U, newVehicle, newRoom, newDriver, book, getBooking, approve, startB, completeB, cancelB,
-  hasNotif, onlyDrivers, bookApproved, heldVehicle, resourceStatus,
+  hasNotif, onlyDrivers, bookApproved, heldVehicle, resourceStatus, maintPlan,
 } from './fixtures.mjs';
 
 const activity = async (id) => (await api('GET', `/bookings/${id}/activity`, { token: U.ADM.token })).data ?? [];
 const assign = (id, driverId, vehicleId) => api('POST', `/bookings/${id}/assign-vehicle`, { token: U.ADM.token, body: { driverId, vehicleId } });
 const substitute = (id, resourceId) => api('PATCH', `/bookings/${id}/substitute-resource`, { token: U.ADM.token, body: { resourceId, note: 'Uji alihkan' } });
-const maint = (vehicleId, start, end) => api('POST', '/maintenance', { token: U.ADM.token,
-  body: { vehicleId, type: 'REPAIR', status: 'pending', description: 'Uji', location: 'Bengkel', startDate: start, endDate: end } });
+const maint = (vehicleId, start) => maintPlan(vehicleId, start, 1); // pengajuan yang memblokir tanggal
 
 export async function runBatch2() {
   // ── AP ────────────────────────────────────────────────────────────────

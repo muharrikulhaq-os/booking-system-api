@@ -65,6 +65,6 @@ DELETE FROM maintenance_records WHERE id = $1;
 -- memblokir semua tanggal setelah startDate.
 SELECT COUNT(*) FROM maintenance_records
 WHERE "vehicleId" = sqlc.arg(vehicle_id)
-  AND status != 'completed'
+  AND status IN ('SUBMITTED', 'SCHEDULED', 'IN_PROGRESS')
   AND "startDate" < sqlc.arg(check_end)
   AND ("endDate" IS NULL OR "endDate" > sqlc.arg(check_start));
