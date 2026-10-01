@@ -203,6 +203,7 @@ type FuelLedgerService struct {
 	db      *sql.DB
 	q       *repository.Queries
 	publish Publisher
+	notif   *NotificationService
 }
 
 func NewFuelLedgerService(db *sql.DB) *FuelLedgerService {
@@ -210,6 +211,9 @@ func NewFuelLedgerService(db *sql.DB) *FuelLedgerService {
 }
 
 func (s *FuelLedgerService) SetPublisher(p Publisher) { s.publish = p }
+
+// SetNotifier: notifikasi ke driver saat voucher BBM diterbitkan untuknya.
+func (s *FuelLedgerService) SetNotifier(n *NotificationService) { s.notif = n }
 
 func serializeFuelProfile(p repository.VehicleFuelProfile) map[string]any {
 	return map[string]any{

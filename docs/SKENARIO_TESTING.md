@@ -486,6 +486,7 @@ tidak dipilih otomatis untuk booking lain.
 | VC-09 | Cetak voucher (printer thermal 80/58 mm) | Kode, QR, kendaraan, SPBU, liter, nominal, berlaku s.d. tercetak rapi | — |
 | VC-10 | Ubah odometer awal BBM setelah ada catatan saldo | Ditolak 409 (pakai Penyesuaian Saldo) | — |
 | VC-11 | Penyesuaian saldo manual (alasan wajib) | Tercatat di mutasi saldo & audit | BBM |
+| VC-12 | Voucher terbit untuk driver tertentu | Driver menerima notifikasi "Voucher BBM diterbitkan" (FUEL_VOUCHER_ISSUED); tap → menu Voucher BBM (mobile) / Bahan Bakar (web) | NT, BBM |
 
 ## 20. Sinkronisasi antar menu & perangkat — SY
 

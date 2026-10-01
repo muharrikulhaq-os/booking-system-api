@@ -262,6 +262,13 @@ func (s *FuelLedgerService) IssueVoucher(ctx context.Context, req FuelVoucherReq
 	logAudit(ctx, s.q, actor, "CREATE", "FuelVoucher", voucherID,
 		fmt.Sprintf("Menerbitkan voucher BBM %s %.2f L (Rp %.2f) untuk %s di %s",
 			calc.FuelType.Name, calc.Liter, calc.Amount, calc.Profile.PlateNumber, calc.Station.Name))
+	if v, err := s.q.GetFuelVoucher(ctx, voucherID); err == nil && v.DriverUserID.Valid && s.notif != nil {
+		s.notif.Notify(v.DriverUserID.Int32, "FUEL_VOUCHER_ISSUED", "Voucher BBM diterbitkan",
+			fmt.Sprintf("Voucher %s: %.2f L %s untuk %s di %s, berlaku s.d. %s WIB",
+				v.Code, v.Liter, v.FuelTypeName, v.PlateNumber, v.StationName,
+				v.ValidUntil.In(util.WIB).Format("02/01 15:04")),
+			map[string]any{"voucherId": v.ID})
+	}
 	return s.GetVoucher(ctx, voucherID, actor.UserID, "ADMIN")
 }
 

@@ -111,6 +111,7 @@ func main() {
 	bookingSvc.SetPublisher(publishSystemChange)
 	vehicleSvc.SetPublisher(publishSystemChange)
 	fuelLedgerSvc.SetPublisher(publishSystemChange)
+	fuelLedgerSvc.SetNotifier(notifSvc)
 	dashboardSvc.SetBeforeRead(bookingSvc.SweepNow)
 	go bookingSvc.RunSweeper(context.Background(), time.Minute)
 	// Voucher BBM yang lewat masa berlaku → EXPIRED, liter kembali ke saldo.
