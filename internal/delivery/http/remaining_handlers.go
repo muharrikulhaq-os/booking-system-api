@@ -29,6 +29,7 @@ func (h *FuelExpenseHandler) Register(r fiber.Router) {
 	g.Get("/:id", h.GetByID)
 	// Pencatatan BBM hanya ADMIN & DRIVER (B20; mobile: izin fuelInput).
 	g.Post("", middleware.RequireRole("ADMIN", "DRIVER"), h.Create)
+	g.Patch("/:id/void", admin, h.Void)
 	g.Delete("/:id", admin, h.Delete)
 }
 
@@ -77,6 +78,14 @@ func (h *FuelExpenseHandler) Create(c *fiber.Ctx) error {
 	req.PricePerKwh = util.ParseStringToFloat64(c.FormValue("pricePerKwh"))
 	req.OdometerBefore = int32(util.ParseStringToInt(c.FormValue("odometerBefore")))
 	req.OdometerAfter = int32(util.ParseStringToInt(c.FormValue("odometerAfter")))
+	req.Odometer = int32(util.ParseStringToInt(c.FormValue("odometer")))
+	req.MeterStartKwh = util.ParseStringToFloat64(c.FormValue("meterStartKwh"))
+	req.MeterEndKwh = util.ParseStringToFloat64(c.FormValue("meterEndKwh"))
+	req.BatteryBefore = util.ParseStringToFloat64(c.FormValue("batteryBefore"))
+	req.BatteryAfter = util.ParseStringToFloat64(c.FormValue("batteryAfter"))
+	req.StationID = int32(util.ParseStringToInt(c.FormValue("stationId")))
+	req.StationName = c.FormValue("stationName")
+	req.Reason = c.FormValue("reason")
 	req.Note = c.FormValue("note")
 
 	// Handle proofPhoto
@@ -105,6 +114,24 @@ func (h *FuelExpenseHandler) Create(c *fiber.Ctx) error {
 		return err
 	}
 	return util.Created(c, "Fuel expense recorded", data)
+}
+
+func (h *FuelExpenseHandler) Void(c *fiber.Ctx) error {
+	id, err := parseID(c, "id")
+	if err != nil {
+		return err
+	}
+	var body struct {
+		Reason       string `json:"reason"`
+		OdometerTypo bool   `json:"odometerTypo"`
+	}
+	if err := c.BodyParser(&body); err != nil {
+		return fiber.NewError(fiber.StatusBadRequest, "invalid request body")
+	}
+	if err := h.svc.Void(c.Context(), id, body.Reason, body.OdometerTypo, auditActor(c)); err != nil {
+		return err
+	}
+	return util.OK(c, "Fuel expense voided", nil)
 }
 
 func (h *FuelExpenseHandler) Delete(c *fiber.Ctx) error {

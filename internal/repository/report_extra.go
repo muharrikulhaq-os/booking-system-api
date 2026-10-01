@@ -35,7 +35,7 @@ func (q *Queries) ReportOverview(ctx context.Context, start, end time.Time) (Ove
 		    COUNT(b.id)                                                   AS total_bookings,
 		    COALESCE((SELECT SUM(fe."totalCost")::float8 FROM fuel_expenses fe
 		              JOIN bookings fb ON fb.id = fe."bookingId"
-		              WHERE fb."startDate" >= $1 AND fb."endDate" <= $2), 0) +
+		              WHERE fb."startDate" >= $1 AND fb."endDate" <= $2 AND fe."voidedAt" IS NULL), 0) +
 		    COALESCE((SELECT SUM(mr."totalCost")::float8 FROM maintenance_records mr
 		              WHERE mr."startDate" >= $1 AND mr."startDate" <= $2), 0) AS total_cost,
 		    COALESCE(
@@ -231,7 +231,7 @@ func (q *Queries) ReportCostSummary(ctx context.Context, start, end sql.NullTime
 	query := `
 		SELECT
 		    COALESCE((SELECT SUM(fe."totalCost")::float8 FROM fuel_expenses fe
-		              WHERE ($1::timestamptz IS NULL OR fe."createdAt" >= $1::timestamptz)
+		              WHERE fe."voidedAt" IS NULL AND ($1::timestamptz IS NULL OR fe."createdAt" >= $1::timestamptz)
 		                AND ($2::timestamptz IS NULL OR fe."createdAt" <= $2::timestamptz)), 0) AS fuel_cost,
 		    COALESCE((SELECT SUM(mr."totalCost")::float8 FROM maintenance_records mr
 		              WHERE ($1::timestamptz IS NULL OR mr."startDate" >= $1::timestamptz)
@@ -275,7 +275,7 @@ func (q *Queries) ReportCostByVehicle(ctx context.Context, start, end sql.NullTi
 		                  THEN (fe."odometerAfter" - fe."odometerBefore")::float8 ELSE 0 END), 0) AS total_km
 		FROM vehicles v
 		JOIN resources r ON r.id = v."resourceId"
-		LEFT JOIN fuel_expenses fe ON fe."vehicleId" = v.id
+		LEFT JOIN fuel_expenses fe ON fe."vehicleId" = v.id AND fe."voidedAt" IS NULL
 		    AND ($1::timestamptz IS NULL OR fe."createdAt" >= $1::timestamptz)
 		    AND ($2::timestamptz IS NULL OR fe."createdAt" <= $2::timestamptz)
 		GROUP BY v.id, r.name, v."plateNumber", v."resourceId"
@@ -324,7 +324,7 @@ func (q *Queries) ReportCostByDepartment(ctx context.Context, start, end sql.Nul
 		LEFT JOIN bookings b ON b."userId" = u.id
 		    AND ($1::timestamptz IS NULL OR b."startDate" >= $1::timestamptz)
 		    AND ($2::timestamptz IS NULL OR b."endDate"   <= $2::timestamptz)
-		LEFT JOIN fuel_expenses fe ON fe."bookingId" = b.id
+		LEFT JOIN fuel_expenses fe ON fe."bookingId" = b.id AND fe."voidedAt" IS NULL
 		GROUP BY d.id, d.name
 		ORDER BY fuel_cost DESC`
 	rows, err := q.db.QueryContext(ctx, query, start, end)
@@ -368,7 +368,7 @@ func (q *Queries) ReportCostTrend(ctx context.Context, groupBy string, start, en
 		SELECT
 		    TO_CHAR(bucket_start, $2) AS period,
 		    COALESCE((SELECT SUM(fe."totalCost")::float8 FROM fuel_expenses fe
-		              WHERE DATE_TRUNC($1, fe."createdAt") = bucket_start), 0) AS fuel_cost,
+		              WHERE DATE_TRUNC($1, fe."createdAt") = bucket_start AND fe."voidedAt" IS NULL), 0) AS fuel_cost,
 		    COALESCE((SELECT SUM(mr."totalCost")::float8 FROM maintenance_records mr
 		              WHERE DATE_TRUNC($1, mr."startDate") = bucket_start), 0) AS maint_cost
 		FROM periods
@@ -422,7 +422,7 @@ func (q *Queries) ReportDriverPerformance(ctx context.Context, start, end sql.Nu
 		LEFT JOIN bookings b ON b."assignedDriverId" = d.id
 		    AND ($1::timestamptz IS NULL OR b."startDate" >= $1::timestamptz)
 		    AND ($2::timestamptz IS NULL OR b."endDate"   <= $2::timestamptz)
-		LEFT JOIN fuel_expenses fe ON fe."driverId" = d.id
+		LEFT JOIN fuel_expenses fe ON fe."driverId" = d.id AND fe."voidedAt" IS NULL
 		    AND ($1::timestamptz IS NULL OR fe."createdAt" >= $1::timestamptz)
 		    AND ($2::timestamptz IS NULL OR fe."createdAt" <= $2::timestamptz)
 		LEFT JOIN driver_ratings dr ON dr."driverId" = d.id
@@ -480,7 +480,7 @@ func (q *Queries) ReportDepartmentSummary(ctx context.Context, start, end sql.Nu
 		    LEFT JOIN bookings b ON b."userId" = u.id
 		        AND ($1::timestamptz IS NULL OR b."startDate" >= $1::timestamptz)
 		        AND ($2::timestamptz IS NULL OR b."endDate"   <= $2::timestamptz)
-		    LEFT JOIN fuel_expenses fe ON fe."bookingId" = b.id
+		    LEFT JOIN fuel_expenses fe ON fe."bookingId" = b.id AND fe."voidedAt" IS NULL
 		    GROUP BY d.id, d.name
 		),
 		top_resource AS (
@@ -564,7 +564,7 @@ func (q *Queries) ReportResourceUsageRanged(ctx context.Context, start, end sql.
 		LEFT JOIN bookings b ON b."resourceId" = r.id
 		    AND ($1::timestamptz IS NULL OR b."startDate" >= $1::timestamptz)
 		    AND ($2::timestamptz IS NULL OR b."endDate"   <= $2::timestamptz)
-		LEFT JOIN fuel_expenses fe ON fe."vehicleId" = v.id
+		LEFT JOIN fuel_expenses fe ON fe."vehicleId" = v.id AND fe."voidedAt" IS NULL
 		    AND ($1::timestamptz IS NULL OR fe."createdAt" >= $1::timestamptz)
 		    AND ($2::timestamptz IS NULL OR fe."createdAt" <= $2::timestamptz)
 		LEFT JOIN fuel_types ft ON ft.id = fe."fuelTypeId"
@@ -665,7 +665,7 @@ func (q *Queries) ReportDriverActivityRanged(ctx context.Context, start, end sql
 		LEFT JOIN bookings b ON b."assignedDriverId" = d.id
 		    AND ($1::timestamptz IS NULL OR b."startDate" >= $1::timestamptz)
 		    AND ($2::timestamptz IS NULL OR b."endDate"   <= $2::timestamptz)
-		LEFT JOIN fuel_expenses fe ON fe."driverId" = d.id
+		LEFT JOIN fuel_expenses fe ON fe."driverId" = d.id AND fe."voidedAt" IS NULL
 		    AND ($1::timestamptz IS NULL OR fe."createdAt" >= $1::timestamptz)
 		    AND ($2::timestamptz IS NULL OR fe."createdAt" <= $2::timestamptz)
 		GROUP BY d.id, u.name, u."employeeId"

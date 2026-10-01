@@ -131,7 +131,13 @@ func TopicsForPath(path string) []string {
 		return []string{TopicRoom}
 	case "room-keepers":
 		return []string{TopicRoomKeeper}
-	case "fuel-expenses", "fuel-types", "master-settings", "settings":
+	case "fuel-expenses", "fuel-vouchers", "fuel-balances":
+		if last == "preview" {
+			return nil // hanya menghitung, tidak menyimpan
+		}
+		// Pengisian/voucher/saldo memajukan odometer & mengubah saldo kendaraan.
+		return []string{TopicFuel, TopicVehicle}
+	case "fuel-types", "fuel-stations", "master-settings", "settings":
 		return []string{TopicFuel}
 	// Serah terima / kembali dari vendor mengubah status & odometer kendaraan.
 	case "maintenance":
