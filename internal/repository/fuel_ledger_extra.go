@@ -110,7 +110,8 @@ func (q *Queries) MaxVehicleOdometerReading(ctx context.Context, vehicleID, excl
 		            WHERE b."assignedVehicleId" = $1), 0),
 		  COALESCE((SELECT MAX(rr.odometer) FROM booking_return_reports rr
 		            JOIN bookings b ON b.id = rr."bookingId" WHERE b."assignedVehicleId" = $1), 0),
-		  COALESCE((SELECT MAX(mr.odometer) FROM maintenance_records mr WHERE mr."vehicleId" = $1), 0)
+		  COALESCE((SELECT MAX(GREATEST(COALESCE(mr.odometer, 0), COALESCE(mr."handoverOdometer", 0), COALESCE(mr."returnOdometer", 0)))
+		            FROM maintenance_records mr WHERE mr."vehicleId" = $1), 0)
 		)`, vehicleID, excludeExpenseID, includeBaseline).Scan(&odo)
 	return odo, err
 }

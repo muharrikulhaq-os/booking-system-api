@@ -350,26 +350,67 @@ tidak dipilih otomatis untuk booking lain.
 
 ## 15. Maintenance — MT
 
+> **Alur baru 2026-10-01** (docs/RANCANGAN_MAINTENANCE_VENDOR.md): maintenance dikerjakan vendor/bengkel luar.
+> `DRAFT → SUBMITTED (surat terbit) → SCHEDULED → IN_PROGRESS (diserahkan) → COMPLETED` (+ `CANCELLED`).
+> Kendaraan berstatus MAINTENANCE **hanya** saat IN_PROGRESS; SUBMITTED/SCHEDULED hanya memblokir tanggal rencana/jadwal.
+> Skenario lama (buat langsung = MAINTENANCE, selesaikan dengan foto bukti) sudah tidak berlaku.
+
 | ID | Skenario | Diharapkan | Menu lain ikut berubah |
 |---|---|---|---|
-| MT-01 | Admin membuat maintenance K2 mulai hari ini | K2 → MAINTENANCE; tidak bisa dibooking | MT, KD, DS, PK |
-| MT-02 | K2 sudah punya maintenance terbuka, buat lagi | Ditolak "masih dalam maintenance yang belum selesai" | — |
-| MT-03 | Buat maintenance K2 yang bentrok dengan booking APPROVED | Berhasil + **peringatan** ada booking bentrok; booking itu tidak bisa dimulai (ST-12) → admin pindah kendaraan | MT, DB |
-| MT-04 | Buat maintenance K2 untuk **minggu depan** | K2 tetap AVAILABLE sampai tanggal mulai; hanya tanggal maintenance yang terblokir (✅ B11) | KD, PK |
-| MT-05 | Selesaikan maintenance (foto bukti) | Status selesai; K2 → AVAILABLE | MT, KD, DS, PK |
-| MT-06 | Selesaikan maintenance yang sudah selesai | Ditolak | — |
-| MT-07 | Edit maintenance, ubah status jadi "selesai" tanpa tanggal selesai | K2 → AVAILABLE (✅ B12) | KD |
-| MT-08 | Buat maintenance langsung berstatus "selesai" | K2 tidak terkunci (✅ B12) | KD |
-| MT-09 | Hapus maintenance saat K2 sedang IN_USE (trip berjalan) | K2 tetap IN_USE (✅ B10) | KD, DS |
-| MT-10 | Hapus maintenance terbuka (K2 tidak dipakai) | K2 → AVAILABLE, bisa dibooking | MT, KD, PK |
+| MT-01 | Admin menyimpan pengajuan K2 sebagai draf | DRAFT, belum ada nomor surat; K2 tetap AVAILABLE & bisa dibooking | MT, KD |
+| MT-02 | Ajukan tanpa vendor; lalu ajukan lengkap | Tanpa vendor 400; diajukan → SUBMITTED + nomor surat `NNN/KODE/bulan-romawi/tahun`; booking K2 di jendela rencana 409 | MT, KD, PK |
+| MT-03 | K2 masih punya pengajuan yang belum selesai, ajukan lagi | 409 "kendaraan ini masih punya maintenance yang belum selesai" | — |
+| MT-04 | Ajukan K2 bentrok dengan booking APPROVED | Tetap dibuat + **peringatan** booking bentrok → admin alihkan kendaraan | MT, DB |
+| MT-05 | Catat jadwal dari vendor | SCHEDULED; tanggal rencana lama bisa dibooking lagi, tanggal jadwal diblokir; K2 tetap AVAILABLE | MT, KD, PK |
+| MT-06 | Serah terima ke vendor (odometer mundur; lalu benar) | Odometer mundur 400; → IN_PROGRESS, K2 MAINTENANCE, odometer diperbarui, K2 tidak bisa dibooking | MT, KD, DS, PK |
+| MT-07 | Serah terima saat K2 masih dipakai trip | 409 — selesaikan booking-nya dulu | — |
+| MT-08 | Terima kembali dari vendor (batal saat dikerjakan; kembali sebelum serah terima; tanpa uraian pekerjaan; lengkap) | 409 / 400 / 422; lengkap → COMPLETED, K2 AVAILABLE, odometer & biaya aktual tersimpan, bisa dibooking | MT, KD, DS, PK |
+| MT-09 | Batalkan pengajuan (tanpa alasan; dengan alasan) | 400; → CANCELLED, tanggal yang diblokir bebas lagi | MT, PK |
+| MT-10 | Hapus pengajuan yang sudah bernomor; PDF draf; hapus draf | 409; 409; 200 (hanya draf yang bisa dihapus) | MT |
 | MT-11 | Isi BBM dengan odometer jauh melewati 10.000 km sejak servis terakhir | **Tidak ada** maintenance otomatis; K2 tetap AVAILABLE | MT, KD, BBM |
-| MT-12 | _(dihapus 2026-09-30 — maintenance otomatis ditiadakan)_ | — | — |
-| MT-13 | Maintenance tanpa tanggal selesai | Memblokir semua tanggal setelah tanggal mulai sampai diselesaikan | KL |
-| MT-14 | Setelah maintenance selesai, booking K2 untuk tanggal yang tadinya diblokir | Diterima | PK |
-| MT-15 | 📱 Record maintenance lama hasil sistem (status `ongoing`) tampil di mobile | Tampil "Berlangsung", bisa diselesaikan admin, tidak error | MT |
+| MT-12 | Cetak PDF surat pengajuan, BA serah terima, BA pengembalian | Ketiganya PDF valid (kop & penandatangan dari Pengaturan) | — |
+| MT-13 | Kendaraan **sewa** diajukan ke bengkel lain | Tujuan surat otomatis vendor pemilik kendaraan | MT |
+| MT-14 | Ubah biaya setelah selesai; unggah & hapus invoice | 200; 201; 200 | MT, LP |
+| MT-15 | Dua pengajuan berturut-turut | Nomor surat berurutan (penghitung per tahun) | — |
 | MT-16 | Karyawan/supir membuka menu maintenance | Tidak ada menu; API 403 | — |
-| MT-17 | _(dihapus 2026-09-30 — pengingat sisa km servis ditiadakan)_ | — | — |
-| MT-18 | Maintenance K2 terjadwal (K2 masih AVAILABLE), lalu tanggal mulainya tiba | K2 otomatis MAINTENANCE saat daftar/detail kendaraan atau daftar booking dibuka (tanpa penjadwal); bila K2 sedang dipakai trip, tetap IN_USE dan jadi MAINTENANCE setelah trip selesai | KD, DS, PK |
+| MT-17 | Endpoint pengingat sisa km servis | Sudah dihapus (404) | — |
+| MT-18 | K2 IN_PROGRESS tapi tercatat AVAILABLE (data lama) | Menjadi MAINTENANCE saat daftar/detail dibuka | KD |
+| MT-19 | 📱 Alur lengkap dari HP: buat → ajukan → bagikan PDF → jadwal → serah terima (checklist, BBM) → terima kembali → unggah invoice | Sama dengan web; web yang sedang terbuka ikut berubah tanpa reload | MT, KD |
+
+### 15a. Vendor — VD
+
+| ID | Skenario | Diharapkan | Menu lain ikut berubah |
+|---|---|---|---|
+| VD-01 | Tambah vendor; nama kembar (beda huruf besar/kecil); jenis tak dikenal | 201; 409; 400 | MT, KD |
+| VD-02 | Karyawan membuka master vendor | 403 | — |
+| VD-03 | Hapus vendor yang terpakai; nonaktifkan; pakai vendor nonaktif | 409; 200; 400 | MT |
+| VD-04 | Hapus vendor yang belum dipakai | 200 | — |
+
+### 15b. Kepemilikan kendaraan — KP
+
+| ID | Skenario | Diharapkan | Menu lain ikut berubah |
+|---|---|---|---|
+| KP-01 | Kendaraan sewa tanpa vendor pemilik; pemilik = vendor bengkel-saja | 400; 400 | — |
+| KP-02 | Simpan kendaraan sewa | Detail & daftar menampilkan VENDOR + nama vendor pemilik | KD |
+| KP-03 | Edit kendaraan tanpa field kepemilikan; lalu ubah ke milik perusahaan | Kepemilikan tidak berubah; lalu COMPANY | KD |
+
+### 15c. Laporan kendala supir — IS
+
+| ID | Skenario | Diharapkan | Menu lain ikut berubah |
+|---|---|---|---|
+| IS-01 | Supir melapor kendala kendaraan tripnya (foto, lokasi, tidak bisa lanjut) | 201, tertaut ke booking; admin dapat notifikasi | MT, NT |
+| IS-02 | Supir melapor kendaraan lain; karyawan melapor | 403; 403 | — |
+| IS-03 | Supir membuka daftar laporan | Hanya laporannya sendiri | — |
+| IS-04 | Admin menindaklanjuti laporan | CONVERTED + draf maintenance; supir dapat notifikasi | MT, NT |
+| IS-05 | Tindak lanjut ulang; laporan kedua untuk kendaraan yang sama | 409; ditautkan ke maintenance yang masih terbuka (tidak dobel) | MT |
+| IS-06 | Admin menutup laporan tanpa catatan; dengan catatan | 400; DISMISSED | MT |
+
+### 15d. Kop surat / pengaturan dokumen — KS
+
+| ID | Skenario | Diharapkan | Menu lain ikut berubah |
+|---|---|---|---|
+| KS-01 | Simpan kop & penandatangan; kode surat mengandung `/`; karyawan | 200; 400; 403 | — |
+| KS-02 | Unggah logo PNG/JPG; hapus logo | 200; 200 (PDF berikutnya tanpa logo) | — |
 
 ## 16. Kendaraan — VH
 
@@ -524,13 +565,13 @@ Rangkaian yang menggabungkan banyak skenario di atas — jalankan berurutan, cek
 | ID | Cerita | Rangkaian |
 |---|---|---|
 | E2E-01 | **Perjalanan dinas normal** | EMP-A booking K2 NON_SPD besok (BC-01) → supir kosong otomatis (SP-03) → ADM approve (AP-01) → DRV-2 mulai (ST-01) → isi BBM di jalan (FL-01) → laporan pengembalian (RR-01) → ADM selesaikan (CP-01) → EMP-A rating (RT-01) → cek laporan biaya & trip supir (DL-08) |
-| E2E-02 | **Kendaraan rusak sebelum berangkat** | Booking K2 APPROVED → ADM buat maintenance K2 hari itu (MT-03, ada peringatan) → supir gagal mulai (ST-12) → ADM pindah ke K3 (AS-02) → supir mulai dengan K3 (AS-11) → K2 tetap MAINTENANCE, K3 IN_USE |
+| E2E-02 | **Kendaraan rusak sebelum berangkat** | Booking K2 APPROVED → supir melapor kendala K2 (IS-01) → ADM tindak lanjuti jadi pengajuan (IS-04) lalu ajukan ke bengkel hari itu (MT-04, ada peringatan bentrok) → ADM pindah booking ke K3 (AS-02) → supir mulai dengan K3 (AS-11) → K2 diserahkan ke bengkel (MT-06) → K2 MAINTENANCE, K3 IN_USE |
 | E2E-03 | **Pindah supir mendadak** | Booking K2 APPROVED dengan DRV-2 → DRV-2 sakit → ADM pindah ke DRV-3 (AS-03) → DRV-3 mulai & selesai → cek DRV-2 kembali kosong & bisa dipilih otomatis (AS-04) |
 | E2E-04 | **Pilih kendaraan & supir lalu batal** | EMP-A booking K1 (DRV-1) → cancel saat PENDING (CN-01) → K1 & DRV-1 langsung dipakai EMP-B (CN-02) · ulangi setelah APPROVED (CN-03 ❓) |
 | E2E-05 | **Dua karyawan searah** | EMP-A & EMP-B booking kendaraan berbeda di jam berdekatan → ADM gabung (MG-01) → satu supir, satu kendaraan → mulai & selesai sekali untuk keduanya (MG-10) → rating hanya dari booking utama (MG-11) |
 | E2E-06 | **Dinas SPD 2 hari** | Booking SPD K1 H+2 06:00 – H+3 18:00 → booking lain K1 / DRV-1 di H+2 atau H+3 ditolak (BC-14, SP-07) → selesai terlambat tanpa overtime (CP-03) |
 | E2E-07 | **Booking terlupakan** | Booking PENDING tak direspons → IGNORED (TO-01) · booking APPROVED tak dimulai → EXPIRED → supir & kendaraan kembali kosong (TO-02, TO-03) |
-| E2E-08 | **Servis kendaraan (diajukan admin)** | ADM membuat maintenance K2 (MT-01) → K2 tidak bisa dibooking & tidak muncul di picker → ADM selesaikan dengan foto bukti (MT-05) → K2 bisa dibooking lagi (MT-14). Isi BBM sebanyak apa pun tidak pernah membuat maintenance sendiri (MT-11) |
+| E2E-08 | **Servis kendaraan ke bengkel** | ADM buat pengajuan K2 & cetak surat (MT-02, MT-12) → vendor memberi jadwal (MT-05) → serah terima + BA (MT-06) → K2 tidak bisa dibooking & tidak muncul di picker → terima kembali + BA, biaya aktual, unggah invoice (MT-08, MT-14) → K2 bisa dibooking lagi. Isi BBM sebanyak apa pun tidak pernah membuat maintenance sendiri (MT-11) |
 | E2E-09 | **Rapat di ruangan** | EMP-A booking R1 → approve (AP-07, RK-1 dapat notifikasi) → EMP-A mulai & selesai sendiri (ST-08, CP-07) → rating ruangan masuk ringkasan RK-1 (RT-06) |
 | E2E-10 | **Supir keluar perusahaan** | Nonaktifkan akun DRV-2 (DU-04) saat masih punya booking APPROVED → cek picker, pemilihan otomatis, dan nasib booking-nya (DU-03 ❓) |
 

@@ -182,7 +182,7 @@ supaya perhitungannya jelas dan bisa diaudit.
    struk.
 5. **Hybrid**: buku saldo BBM (voucher berlaku) dan buku saldo kWh berjalan terpisah.
 
-## 5. Model data (migrasi `000016_fuel_voucher.up.sql`, idempoten)
+## 5. Model data (migrasi `000017_fuel_ledger.up.sql`, idempoten)
 
 Semua memakai `IF NOT EXISTS` / `ON CONFLICT DO NOTHING` / `DO $$ … EXCEPTION WHEN
 duplicate_object`, karena CI menjalankan ulang semua `*.up.sql` di setiap deploy.
@@ -335,7 +335,7 @@ dengan `GOTOOLCHAIN=go1.26.2`, runner skenario lokal) → update `SKENARIO_TESTI
 
 | Fase | Backend | Web | Mobile | Hasil setelah deploy |
 |---|---|---|---|---|
-| **1. Fondasi saldo** | Migrasi 000016 (kendaraan, SPBU, ledger, kolom fuel_expenses, setting); `FuelLedgerService` (transaksi + row lock); isi langsung menulis ledger; void menggantikan hapus; `/fuel-balances`, `/fuel-ledger`, `/fuel-stations`; topik DATA_CHANGED; unit test rumus & kasus contoh §2 | Field kendaraan; tab Saldo & Mutasi; Pengaturan SPBU Mitra; Batalkan catatan | Odometer wajib; saldo & peringatan di form isi; pilih SPBU & alasan | Saldo mulai terhitung dari odometer saat ini; belum ada voucher |
+| **1. Fondasi saldo** | Migrasi 000017 (kendaraan, SPBU, ledger, kolom fuel_expenses, setting); `FuelLedgerService` (transaksi + row lock); isi langsung menulis ledger; void menggantikan hapus; `/fuel-balances`, `/fuel-ledger`, `/fuel-stations`; topik DATA_CHANGED; unit test rumus & kasus contoh §2 | Field kendaraan; tab Saldo & Mutasi; Pengaturan SPBU Mitra; Batalkan catatan | Odometer wajib; saldo & peringatan di form isi; pilih SPBU & alasan | Saldo mulai terhitung dari odometer saat ini; belum ada voucher |
 | **2. Voucher** | `/fuel-vouchers` (preview, terbit, use, cancel), kedaluwarsa di sweeper + Publisher, audit | Modal terbit + pratinjau, tab Voucher, halaman cetak | Voucher aktif, detail/QR, Sudah Diisi, riwayat | Alur voucher end-to-end |
 | **3. Rekonsiliasi & laporan** | Reconcile bulk, query laporan per mitra & efisiensi, export Excel | Rekonsiliasi, laporan | Ringkasan di tab laporan (bila perlu) | Rekonsiliasi tagihan bulanan |
 | **4. Listrik** | Ledger kWh, kolom meter, toleransi | Form sesi charging, laporan efisiensi kWh | Form charging kantor | Sesuai jawaban §9 no. 5 |

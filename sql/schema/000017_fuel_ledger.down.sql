@@ -30,5 +30,5 @@ ALTER TABLE vehicles
     DROP COLUMN IF EXISTS "batteryCapacityKwh",
     DROP COLUMN IF EXISTS "fuelBaselineOdometer";
 
-DELETE FROM data_fixes WHERE key = '000016_vehicle_fuel_profile';
+DELETE FROM data_fixes WHERE key = '000017_vehicle_fuel_profile';
 -- View v_vehicle_summary / v_fuel_expense_summary dikembalikan oleh 000001.

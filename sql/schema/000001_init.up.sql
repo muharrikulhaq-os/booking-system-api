@@ -625,7 +625,7 @@ INSERT INTO drivers ("userId", "licenseNumber", "phoneNumber", "isActive") VALUE
 -- constraint to make a rerun idempotent).
 
 -- Harga BBM tidak lagi disimpan di master_settings (fuel_price_*): satu-satunya
--- master harga adalah fuel_types.default_price (lihat 000016_fuel_ledger.up.sql).
+-- master harga adalah fuel_types.default_price (lihat 000017_fuel_ledger.up.sql).
 
 -- ─── MAINTENANCE TYPES (reference data - kept) ────────────────────────────────
 INSERT INTO maintenance_types (name) VALUES ('Servis Berkala'), ('Ganti Ban'), ('Perbaikan AC');

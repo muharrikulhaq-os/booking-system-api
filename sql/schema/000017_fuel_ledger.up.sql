@@ -53,7 +53,7 @@ CREATE TABLE IF NOT EXISTS data_fixes (
 
 DO $$
 BEGIN
-    INSERT INTO data_fixes (key) VALUES ('000016_vehicle_fuel_profile')
+    INSERT INTO data_fixes (key) VALUES ('000017_vehicle_fuel_profile')
     ON CONFLICT (key) DO NOTHING;
     IF NOT FOUND THEN
         RETURN;

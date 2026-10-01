@@ -17,6 +17,7 @@ const (
 	TopicRoomKeeper  = "roomKeeper"
 	TopicFuel        = "fuel"
 	TopicMaintenance = "maintenance"
+	TopicVendor      = "vendor"
 )
 
 const (
@@ -138,8 +139,14 @@ func TopicsForPath(path string) []string {
 		return []string{TopicFuel, TopicVehicle}
 	case "fuel-types", "fuel-stations", "master-settings", "settings":
 		return []string{TopicFuel}
+	// Serah terima / kembali dari vendor mengubah status & odometer kendaraan.
 	case "maintenance":
+		return []string{TopicMaintenance, TopicVehicle}
+	case "vehicle-issues":
 		return []string{TopicMaintenance}
+	case "vendors":
+		// Nama vendor tampil di kendaraan (pemilik sewa) & maintenance.
+		return []string{TopicVendor, TopicVehicle, TopicMaintenance}
 	case "attachments":
 		// DELETE /attachments/:id — pemiliknya (booking/kendaraan/ruangan)
 		// tidak terlihat dari path.

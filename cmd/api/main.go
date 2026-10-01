@@ -45,7 +45,7 @@ func main() {
 		AllowHeaders: "Origin, Content-Type, Accept, Authorization, X-Client-Id",
 		AllowMethods: "GET, POST, PUT, PATCH, DELETE, OPTIONS",
 		// Dibaca frontend (lintas origin saat dev) untuk invalidasi lokal.
-		ExposeHeaders: "X-Data-Changed",
+		ExposeHeaders: "X-Data-Changed, Content-Disposition",
 	}))
 
 	// health check
@@ -87,7 +87,10 @@ func main() {
 	fuelSvc := service.NewFuelExpenseService(db)
 	fuelTypeSvc := service.NewFuelTypeService(db)
 	fuelLedgerSvc := service.NewFuelLedgerService(db)
-	maintSvc := service.NewMaintenanceService(db)
+	maintSvc := service.NewMaintenanceService(db, notifSvc)
+	vendorSvc := service.NewVendorService(db)
+	issueSvc := service.NewVehicleIssueService(db, maintSvc, notifSvc)
+	docSettingsSvc := service.NewDocumentSettingsService(db)
 	attachSvc := service.NewAttachmentService(db)
 	guestSvc := service.NewGuestBookingService(db)
 	settingSvc := service.NewMasterSettingService(db)
@@ -128,6 +131,9 @@ func main() {
 	httph.NewFuelTypeHandler(fuelTypeSvc).Register(v1)
 	httph.NewFuelLedgerHandler(fuelLedgerSvc).Register(v1)
 	httph.NewMaintenanceHandler(maintSvc).Register(v1)
+	httph.NewVendorHandler(vendorSvc).Register(v1)
+	httph.NewVehicleIssueHandler(issueSvc).Register(v1)
+	httph.NewDocumentSettingsHandler(docSettingsSvc).Register(v1)
 	httph.NewAttachmentHandler(attachSvc).Register(v1)
 	httph.NewGuestBookingHandler(guestSvc).Register(v1)
 	httph.NewMasterSettingHandler(settingSvc).Register(v1)
