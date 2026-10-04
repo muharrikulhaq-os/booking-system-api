@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"booking-system-api/internal/repository"
 	"booking-system-api/internal/util"
@@ -272,6 +273,11 @@ func resolveQuantity(req CreateFuelExpenseRequest, energy repository.FuelCategor
 	return out, nil
 }
 
+// duplicateFuelWindow: catatan pengisian identik dalam rentang ini dianggap kiriman
+// ganda. Isi ulang sungguhan dengan odometer & jumlah persis sama dalam 10
+// menit praktis tidak terjadi.
+const duplicateFuelWindow = 10 * time.Minute
+
 func (s *FuelExpenseService) Create(ctx context.Context, req CreateFuelExpenseRequest, recordedByID int32, driverID *int32, actor AuditActor) (map[string]any, error) {
 	odometer := req.Odometer
 	if odometer == 0 {
@@ -346,6 +352,17 @@ func (s *FuelExpenseService) Create(ctx context.Context, req CreateFuelExpenseRe
 		}
 		if qty.Price <= 0 {
 			return util.NewError(400, "harga per unit belum diatur", util.ErrBadRequest)
+		}
+		// Catatan identik barusan = tombol simpan tertekan dua kali / request
+		// terkirim ulang; tanpa ini saldo terpotong dua kali. Aman dari request
+		// serentak karena baris kendaraan sudah dikunci di atas.
+		if dup, derr := q.FindRecentDuplicateFuel(ctx, req.VehicleID, req.FuelTypeID, odometer,
+			qty.Quantity, duplicateFuelWindow); derr != nil {
+			return derr
+		} else if dup > 0 {
+			return util.NewError(409,
+				fmt.Sprintf("pengisian yang sama baru saja dicatat (#%d) - tidak dicatat ulang", dup),
+				util.ErrConflict)
 		}
 		st, err := readLedgerState(ctx, q, p, energy)
 		if err != nil {

@@ -258,12 +258,16 @@ export async function runBatch4() {
     const d = await newDriver('DRVFL1'); const v = await newVehicle({ odometer: 10000 });
     const f = await fuel(d.token, v, 10000, 10100);
     const odo = sqlInt(`select "currentOdometer" from vehicles where id=${v.id}`);
-    check('FL-01', f.status === 201 && odo === 10100 && Number(f.data?.totalCost) === 100000 && f.changed === 'fuel',
+    // Saldo BBM: tulis BBM ikut mengubah kendaraan (odometer/saldo) → fuel,vehicle.
+    check('FL-01', f.status === 201 && odo === 10100 && Number(f.data?.totalCost) === 100000
+      && (f.changed ?? '').split(',').includes('fuel'),
       `Tercatat, odometer ${odo}, biaya ${f.data?.totalCost} (10 L × harga master), X-Data-Changed=${f.changed}`);
     const f2 = await fuel(d.token, v, 9000, 9100);
     check('FL-02', f2.status === 400, `Odometer sebelum < tercatat → ${f2.status}`);
-    const f3 = await fuel(d.token, v, 10100, 10100);
-    check('FL-03', f3.status === 400, `Odometer sesudah ≤ sebelum → ${f3.status}`);
+    // FL-03 (SKENARIO_TESTING §19): odometer saat isi kosong → ditolak.
+    const f3 = await api('POST', '/fuel-expenses', { token: d.token,
+      form: { vehicleId: v.id, fuelTypeId: 1, liter: 10, proofPhoto: fakePhoto() } });
+    check('FL-03', f3.status === 400, `Odometer saat isi kosong → ${f3.status} "${f3.msg}"`);
   });
   await scenario('FL-04/06', async () => {
     const d = await newDriver('DRVFL4'); const v = await newVehicle({ odometer: 10000, energy: 'BBM' });
