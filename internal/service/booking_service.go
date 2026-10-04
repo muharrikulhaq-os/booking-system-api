@@ -237,6 +237,7 @@ func (s *BookingService) sweepStaleBookings(ctx context.Context) int {
 		drivers = append(drivers, b.AssignedDriverId)
 	}
 	syncDriverHolds(ctx, s.q, drivers...)
+	s.notifySweptBookings(ctx, expired, ignored)
 
 	// Jaring pengaman: kendaraan yang sedang di vendor (maintenance IN_PROGRESS)
 	// tapi masih tercatat AVAILABLE → MAINTENANCE.
@@ -553,13 +554,17 @@ func (s *BookingService) Create(ctx context.Context, req CreateBookingRequest, a
 
 	logAudit(ctx, s.q, actor, "CREATE", "Booking", b.ID, "Booking dibuat")
 
-	// Notifikasi: booking baru butuh persetujuan → semua admin.
+	full, _ := s.q.GetBookingByID(ctx, b.ID)
+
+	// Notifikasi: booking baru butuh persetujuan → semua admin; supir yang
+	// sudah dipilih/otomatis ditugaskan ikut tahu ada booking masuk.
 	if s.notif != nil {
 		s.notif.NotifyAdmins("BOOKING_CREATED", "Booking baru",
-			"Ada booking baru yang menunggu persetujuan", map[string]any{"bookingId": b.ID})
+			"Ada booking baru yang menunggu persetujuan: "+bookingLabel(full), map[string]any{"bookingId": b.ID})
+		s.notifyDriver(ctx, driverID, "NEW_BOOKING", "Booking masuk",
+			bookingLabel(full)+" — Anda ditugaskan, menunggu persetujuan admin", b.ID)
 	}
 
-	full, _ := s.q.GetBookingByID(ctx, b.ID)
 	return serializeBookingByID(full), nil
 }
 
@@ -614,12 +619,8 @@ func (s *BookingService) Cancel(ctx context.Context, id int32, actor AuditActor,
 			s.notif.Notify(b.UserId, "BOOKING_CANCELLED", "Booking dibatalkan",
 				"Booking Anda dibatalkan oleh admin", map[string]any{"bookingId": id})
 		}
-		if b.AssignedDriverId.Valid {
-			if drv, derr := s.q.GetDriverByID(ctx, b.AssignedDriverId.Int32); derr == nil {
-				s.notif.Notify(drv.UserId, "BOOKING_CANCELLED", "Booking dibatalkan",
-					"Booking yang ditugaskan kepada Anda dibatalkan", map[string]any{"bookingId": id})
-			}
-		}
+		s.notifyDriver(ctx, b.AssignedDriverId, "BOOKING_CANCELLED", "Booking dibatalkan",
+			bookingLabel(b)+" — dibatalkan, Anda tidak jadi bertugas", id)
 	}
 	full, _ := s.q.GetBookingByID(ctx, id)
 	return serializeBookingByID(full), nil
@@ -867,13 +868,9 @@ func (s *BookingService) Approve(ctx context.Context, id int32, req ApproveBooki
 		// Pemohon (karyawan).
 		s.notif.Notify(full.UserId, "BOOKING_APPROVED", "Booking disetujui",
 			"Booking Anda telah disetujui", map[string]any{"bookingId": full.ID})
-		// Supir yang ditugaskan → dapat booking aktif.
-		if full.DriverID.Valid {
-			if driver, derr := s.q.GetDriverByID(ctx, full.DriverID.Int32); derr == nil {
-				s.notif.Notify(driver.UserId, "NEW_BOOKING", "Booking aktif baru",
-					"Anda mendapat booking aktif", map[string]any{"bookingId": full.ID})
-			}
-		}
+		// Supir yang ditugaskan → booking resmi jadi tugasnya.
+		s.notifyDriver(ctx, full.AssignedDriverId, "NEW_BOOKING", "Booking disetujui",
+			bookingLabel(full)+" — disetujui, Anda bertugas", full.ID)
 		// Booking ruangan → beri tahu room keeper.
 		if full.ResourceType == repository.ResourceTypeROOM {
 			s.notif.NotifyRoomKeepers("ROOM_BOOKED", "Ruangan dipesan",
@@ -920,6 +917,8 @@ func (s *BookingService) Reject(ctx context.Context, id int32, req RejectBooking
 	if s.notif != nil {
 		s.notif.Notify(b.UserId, "BOOKING_REJECTED", "Booking ditolak",
 			"Booking Anda ditolak", map[string]any{"bookingId": id, "note": req.Note})
+		s.notifyDriver(ctx, b.AssignedDriverId, "BOOKING_REJECTED", "Booking ditolak",
+			bookingLabel(b)+" — ditolak admin, Anda tidak jadi bertugas", id)
 	}
 	go util.SendBookingStatusEmail(b.UserName, b.UserName, int(id), b.ResourceName, "REJECTED", req.Note)
 	return serializeBookingByID(full), nil
@@ -998,10 +997,15 @@ func (s *BookingService) AssignVehicle(ctx context.Context, id int32, req Assign
 	
 	if s.notif != nil {
 		s.notif.Notify(driver.UserId, "NEW_BOOKING", "Penugasan kendaraan",
-			"Anda ditugaskan kendaraan dan booking", map[string]any{
+			bookingLabel(full)+" — Anda ditugaskan", map[string]any{
 				"bookingId": full.ID,
 				"vehicleId": vehicle.ID,
 			})
+		// Supir lama yang digantikan perlu tahu tugasnya dicabut.
+		if b.AssignedDriverId.Valid && b.AssignedDriverId.Int32 != req.DriverID {
+			s.notifyDriver(ctx, b.AssignedDriverId, "BOOKING_CANCELLED", "Penugasan dipindahkan",
+				bookingLabel(b)+" — dialihkan ke supir lain, Anda tidak jadi bertugas", id)
+		}
 	}
 
 	return serializeBookingByID(full), nil
@@ -1261,6 +1265,9 @@ func (s *BookingService) Complete(ctx context.Context, id int32, actor AuditActo
 	if s.notif != nil {
 		s.notif.Notify(full.UserId, "BOOKING_COMPLETED", "Booking selesai",
 			"Booking Anda telah selesai", map[string]any{"bookingId": id})
+		// Supir tidak bisa menyelesaikan sendiri (admin/pemohon yang menutup).
+		s.notifyDriver(ctx, b.AssignedDriverId, "BOOKING_COMPLETED", "Perjalanan selesai",
+			bookingLabel(full)+" — telah diselesaikan", id)
 		// Booking ruangan langsung memicu prompt rating karena biasanya
 		// pemilik booking sendiri yang menyelesaikannya (self-serve, lihat
 		// Complete() case EMPLOYEE di atas) - begitu selesai mereka masih di
@@ -1615,6 +1622,9 @@ func (s *BookingService) SubstituteResource(ctx context.Context, id int32, req S
 	if s.notif != nil {
 		s.notif.Notify(b.UserId, "BOOKING_SUBSTITUTED", "Resource dialihkan",
 			"Kendaraan/ruangan booking Anda dialihkan admin", map[string]any{"bookingId": id})
+		// Supir tetap, kendaraannya berganti.
+		s.notifyDriver(ctx, full.AssignedDriverId, "BOOKING_SUBSTITUTED", "Kendaraan diganti",
+			bookingLabel(full)+" — kendaraan diganti dari "+b.ResourceName, id)
 	}
 	return serializeBookingByID(full), nil
 }
@@ -1834,11 +1844,20 @@ func (s *BookingService) MergeBookings(ctx context.Context, primaryID int32, req
 	if s.notif != nil {
 		s.notif.Notify(target.UserId, "BOOKING_MERGED", "Booking digabung",
 			"Booking Anda digabung ke trip lain", map[string]any{"bookingId": req.TargetBookingID})
-		if primary.AssignedDriverId.Valid {
-			if drv, derr := s.q.GetDriverByID(ctx, primary.AssignedDriverId.Int32); derr == nil {
-				s.notif.Notify(drv.UserId, "BOOKING_MERGED", "Trip digabung",
-					"Ada booking tambahan digabung ke trip Anda", map[string]any{"bookingId": primaryID})
-			}
+		s.notifyDriver(ctx, primary.AssignedDriverId, "BOOKING_MERGED", "Trip digabung",
+			bookingLabel(primary)+" — ada booking tambahan digabung ke trip Anda", primaryID)
+		// Supir booking yang digabung kehilangan tripnya (ikut trip utama).
+		if target.AssignedDriverId.Valid &&
+			(!primary.AssignedDriverId.Valid || target.AssignedDriverId.Int32 != primary.AssignedDriverId.Int32) {
+			s.notifyDriver(ctx, target.AssignedDriverId, "BOOKING_MERGED", "Trip digabung",
+				bookingLabel(target)+" — digabung ke trip supir lain, Anda tidak jadi bertugas", req.TargetBookingID)
+		}
+		// Supir trip utama diganti saat merge.
+		if origPrimaryDriver.Valid &&
+			(!primary.AssignedDriverId.Valid || origPrimaryDriver.Int32 != primary.AssignedDriverId.Int32) &&
+			(!target.AssignedDriverId.Valid || origPrimaryDriver.Int32 != target.AssignedDriverId.Int32) {
+			s.notifyDriver(ctx, origPrimaryDriver, "BOOKING_CANCELLED", "Penugasan dipindahkan",
+				bookingLabel(primary)+" — dialihkan ke supir lain, Anda tidak jadi bertugas", primaryID)
 		}
 	}
 

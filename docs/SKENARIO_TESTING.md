@@ -530,17 +530,19 @@ tidak dipilih otomatis untuk booking lain.
 
 | ID | Pemicu | Penerima | Diharapkan |
 |---|---|---|---|
-| NT-01 | Booking dibuat | Semua admin | "Booking baru" |
-| NT-02 | Approve | Pemohon + supir | "Booking disetujui" / "Booking aktif baru" |
+| NT-01 | Booking dibuat | Semua admin **+ supir yang sudah ditugaskan** (dipilih / otomatis) | Admin: "Booking baru"; supir: "Booking masuk" (menunggu persetujuan) |
+| NT-02 | Approve | Pemohon + supir | "Booking disetujui" (supir: "Anda bertugas") |
 | NT-03 | Approve ruangan | Penjaga ruangan | "Ruangan dipesan" |
-| NT-04 | Reject | Pemohon (+ email) | "Booking ditolak" + alasan |
-| NT-05 | Cancel | Admin + supir | "Booking dibatalkan" |
-| NT-06 | Tugaskan kendaraan | Supir | "Penugasan kendaraan" |
-| NT-07 | Start / Complete | Pemohon (+ pemilik booking gabungan) | "Perjalanan dimulai" / "Booking selesai" |
+| NT-04 | Reject | Pemohon (+ email) + supir yang ditugaskan | "Booking ditolak" + alasan; supir: tidak jadi bertugas |
+| NT-05 | Cancel | Admin + supir (+ pemohon bila dibatalkan admin) | "Booking dibatalkan" |
+| NT-06 | Tugaskan kendaraan | Supir baru (+ supir lama bila diganti) | "Penugasan kendaraan" / "Penugasan dipindahkan" |
+| NT-07 | Start / Complete | Pemohon (+ pemilik booking gabungan); Complete juga ke supir | "Perjalanan dimulai" / "Booking selesai" / supir: "Perjalanan selesai" |
 | NT-08 | Complete kendaraan | Pemohon | Ajakan rating supir |
 | NT-09 | Overtime | Supir + admin | Menit overtime |
 | NT-10 | Rating supir | Supir | Jumlah bintang |
-| NT-11 | Substitute / merge | Pemohon / supir | Sesuai aksi |
+| NT-11 | Substitute / merge | Pemohon + supir; merge: supir trip utama, supir booking yang digabung, dan supir yang diganti | "Kendaraan diganti" / "Trip digabung" / "Penugasan dipindahkan" |
+| NT-16 | Booking hangus otomatis (EXPIRED / IGNORED) | Pemohon + supir | "Booking hangus" |
+| NT-17 | Isi pesan ke supir | — | Menyebut kendaraan, plat, dan jadwal WIB (mis. "Avanza (B 1234 CD) · Sel, 6 Okt 08:00 WIB") |
 | NT-12 | Laporan pengembalian | Admin | "Laporan pengembalian" |
 | NT-13 | 📱 App ditutup total saat notifikasi datang | Push muncul (FCM); tap → membuka detail booking |
 | NT-14 | 📱 App terbuka | Notifikasi sistem muncul sekali (tidak dobel WebSocket + FCM) |
