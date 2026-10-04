@@ -14,12 +14,13 @@ import (
 
 type BookingService struct {
 	q       repository.ExtendedQuerier
+	db      *sql.DB // untuk transaksi; nil di unit test (mock querier)
 	notif   *NotificationService
 	publish Publisher
 }
 
 func NewBookingService(db *sql.DB, notif *NotificationService) *BookingService {
-	return &BookingService{q: repository.New(db), notif: notif}
+	return &BookingService{q: repository.New(db), db: db, notif: notif}
 }
 
 type CreateBookingRequest struct {
@@ -537,7 +538,7 @@ func (s *BookingService) Create(ctx context.Context, req CreateBookingRequest, a
 		}
 	}
 
-	b, err := s.q.CreateBooking(ctx, repository.CreateBookingParams{
+	b, err := s.insertBookingOnce(ctx, repository.CreateBookingParams{
 		UserId:            int32(userID),
 		ResourceId:        req.ResourceID,
 		StartDate:         req.StartDate,

@@ -176,6 +176,7 @@ tidak dipilih otomatis untuk booking lain.
 | BC-19 | 📱 Buka form booking dari dashboard, simpan | Kembali ke tab Booking (bukan dashboard), booking baru ada di atas | LB, DS |
 | BC-20 | Klik simpan 2x cepat | Hanya 1 booking terbentuk | LB |
 | BC-21 | Karyawan booking atas nama sendiri lalu admin melihat | Admin melihat nama & departemen pemohon benar | LB, AQ |
+| BC-22 | Tombol "Ajukan Booking" ditekan beruntun / request terkirim ulang (serentak & berurutan) | Hanya SATU booking; kiriman identik berikutnya 409 "Booking yang sama sudah Anda ajukan (#id)". Jam berbeda / pengguna lain tetap boleh. Web & mobile juga menahan klik ganda | LB, DS |
 
 ## 4. Pemilihan supir otomatis & supir tetap — SP
 
@@ -470,6 +471,7 @@ tidak dipilih otomatis untuk booking lain.
 | FL-09 | Catatan BBM di booking gabungan | Lihat MG-12 | DB |
 | FL-10 | Isi melebihi hak saldo / kapasitas tangki | Tetap tersimpan dengan peringatan; saldo boleh minus → voucher berikutnya berkurang | BBM |
 | FL-11 | Listrik: kWh langsung / angka meter awal-akhir / % baterai (butuh kapasitas baterai) | kWh dihitung sesuai sumber (estimasi ÷ 0,9); hak = jarak ÷ km/kWh | BBM |
+| FL-12 | Simpan pengisian BBM ditekan beruntun (odometer, jenis, & jumlah sama; < 10 menit) | Hanya SATU catatan; berikutnya 409 "pengisian yang sama baru saja dicatat"; saldo tidak terpotong dua kali | BBM |
 
 ### Voucher BBM — VC (docs/RANCANGAN_VOUCHER_BBM.md)
 

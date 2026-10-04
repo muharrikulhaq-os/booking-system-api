@@ -1,6 +1,6 @@
 // Batch 5: VD (vendor), KP (kepemilikan kendaraan), IS (laporan kendala supir), KS (kop surat / pengaturan dokumen)
-import { api, ok2, sqlInt, check, scenario, inMin, fakePhoto } from './lib.mjs';
-import { U, newVehicle, newDriver, bookApproved, startB, hasNotif, maintPlan } from './fixtures.mjs';
+import { api, ok2, sqlInt, check, scenario, inMin, fakePhoto, wib } from './lib.mjs';
+import { U, newVehicle, newDriver, newRoom, book, bookApproved, startB, hasNotif, maintPlan } from './fixtures.mjs';
 
 const A = () => U.ADM.token;
 const vehicleBody = (v, extra = {}) => ({ name: `Mobil ${v.plate}`, plateNumber: v.plate, brand: 'Toyota', model: 'Uji', year: 2024,
@@ -105,5 +105,35 @@ export async function runBatch5() {
     const rm = await api('DELETE', '/document-settings/logo', { token: A() });
     check('KS-02', ok2(logo) && !!logo.data.logoUrl && ok2(rm) && rm.data.logoUrl === null,
       `Unggah logo ${logo.status} (${logo.data?.logoUrl}); hapus logo ${rm.status}; jpg-bernama-foto ${badLogo.status}`);
+  });
+
+  // ── Kiriman ganda (tombol ditekan beruntun / request terkirim ulang) ──
+  await scenario('BC-22', async () => {
+    const r = await newRoom();
+    const same = () => book(U.EMPA.token, r.resourceId, wib(3, 9), wib(3, 10), { purpose: 'Rapat ganda' });
+    // Serentak: dua request identik di saat yang sama → hanya satu booking.
+    const [a, b] = await Promise.all([same(), same()]);
+    // Berurutan: kiriman ulang setelah berhasil juga ditolak.
+    const c = await same();
+    const rows = sqlInt(`select count(*) from bookings where "resourceId"=${r.resourceId} and status='PENDING'`);
+    // Jam berbeda / orang lain tetap boleh (BC-10).
+    const other = await book(U.EMPA.token, r.resourceId, wib(3, 11), wib(3, 12));
+    const otherUser = await book(U.EMPB.token, r.resourceId, wib(3, 9), wib(3, 10));
+    const st = [a.status, b.status].sort();
+    check('BC-22', st[0] === 201 && st[1] === 409 && c.status === 409 && rows === 1
+      && other.status === 201 && otherUser.status === 201,
+      `Serentak ${a.status}/${b.status}, ulang ${c.status} ("${c.msg}"), tersimpan ${rows}; ` +
+      `jam lain ${other.status}, user lain ${otherUser.status}`);
+  });
+  await scenario('FL-12', async () => {
+    const d = await newDriver('DRVFL12'); const v = await newVehicle({ odometer: 20000 });
+    const fill = () => api('POST', '/fuel-expenses', { token: d.token,
+      form: { vehicleId: v.id, fuelTypeId: 1, liter: 10, odometer: 20050, proofPhoto: fakePhoto() } });
+    const [a, b] = await Promise.all([fill(), fill()]);
+    const rows = sqlInt(`select count(*) from fuel_expenses where "vehicleId"=${v.id} and "voidedAt" is null`);
+    const st = [a.status, b.status].sort();
+    const rejected = a.status === 409 ? a : b;
+    check('FL-12', st[0] === 201 && st[1] === 409 && rows === 1,
+      `Dua pengisian identik serentak → ${a.status}/${b.status}, tersimpan ${rows} ("${rejected.msg}")`);
   });
 }

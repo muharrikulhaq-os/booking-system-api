@@ -99,4 +99,9 @@ type ExtendedQuerier interface {
 	ListVehiclesWithFixedDriver(ctx context.Context) ([]FixedDriverVehicleRow, error)
 	GetDriverIDsWithActiveSpd(ctx context.Context) ([]int32, error)
 	GetPendingDriverRatings(ctx context.Context, userID int32) ([]PendingDriverRatingRow, error)
+
+	// Penjaga data ganda (duplicate_guard.go)
+	LockBookingCreate(ctx context.Context, userID int32) error
+	FindActiveDuplicateBooking(ctx context.Context, userID, resourceID int32, start, end time.Time) (int32, error)
+	FindRecentDuplicateFuel(ctx context.Context, vehicleID, fuelTypeID, odometer int32, quantity float64, within time.Duration) (int32, error)
 }

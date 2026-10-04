@@ -78,3 +78,49 @@ func (s *BookingService) notifySweptBookings(ctx context.Context, expired, ignor
 		"tidak mendapat respons admin sampai waktu selesai",
 		"tidak diproses admin; Anda tidak jadi bertugas")
 }
+
+// ── Penjaga booking ganda ───────────────────────────────────────────────────
+
+// errDuplicateBooking: request yang sama terkirim lagi (tombol ditekan
+// beruntun / dikirim ulang) — booking yang sudah ada tidak dibuat ulang.
+func errDuplicateBooking(id int32) error {
+	return util.NewError(409,
+		fmt.Sprintf("Booking yang sama sudah Anda ajukan (#%d) - tidak dibuat ulang", id),
+		util.ErrConflict)
+}
+
+// insertBookingOnce menolak booking AKTIF yang identik (user, resource, jam
+// mulai & selesai sama), lalu menyimpan. Cek + insert berada dalam satu
+// transaksi dengan advisory lock per user, sehingga dua request serentak
+// tidak sama-sama lolos.
+func (s *BookingService) insertBookingOnce(ctx context.Context, p repository.CreateBookingParams) (repository.Booking, error) {
+	check := func(q repository.ExtendedQuerier) error {
+		id, err := q.FindActiveDuplicateBooking(ctx, p.UserId, p.ResourceId, p.StartDate, p.EndDate)
+		if err != nil {
+			return err
+		}
+		if id > 0 {
+			return errDuplicateBooking(id)
+		}
+		return nil
+	}
+	if s.db == nil { // unit test (mock querier)
+		if err := check(s.q); err != nil {
+			return repository.Booking{}, err
+		}
+		return s.q.CreateBooking(ctx, p)
+	}
+	var b repository.Booking
+	err := withTx(ctx, s.db, func(q *repository.Queries) error {
+		if err := q.LockBookingCreate(ctx, p.UserId); err != nil {
+			return err
+		}
+		if err := check(q); err != nil {
+			return err
+		}
+		var err error
+		b, err = q.CreateBooking(ctx, p)
+		return err
+	})
+	return b, err
+}
