@@ -177,6 +177,7 @@ tidak dipilih otomatis untuk booking lain.
 | BC-20 | Klik simpan 2x cepat | Hanya 1 booking terbentuk | LB |
 | BC-21 | Karyawan booking atas nama sendiri lalu admin melihat | Admin melihat nama & departemen pemohon benar | LB, AQ |
 | BC-22 | Tombol "Ajukan Booking" ditekan beruntun / request terkirim ulang (serentak & berurutan) | Hanya SATU booking; kiriman identik berikutnya 409 "Booking yang sama sudah Anda ajukan (#id)". Jam berbeda / pengguna lain tetap boleh. Web & mobile juga menahan klik ganda | LB, DS |
+| BC-23 | Booking kendaraan dengan **Lokasi Penjemputan** & **Lokasi Tujuan** | Wajib di form web & mobile untuk kendaraan (tidak tampil untuk ruangan); tersimpan & tampil di detail; lokasi penjemputan ikut di notifikasi supir | DB, NT |
 
 ## 4. Pemilihan supir otomatis & supir tetap — SP
 
@@ -278,6 +279,7 @@ tidak dipilih otomatis untuk booking lain.
 | ST-12 | Maintenance K2 dijadwalkan setelah booking di-approve, lalu mulai | Ditolak 409 → admin harus pindah kendaraan (AS-02) | — |
 | ST-13 | Mulai booking utama yang punya booking gabungan | Booking gabungan ikut ONGOING otomatis, pemiliknya dapat notifikasi | LB, DB sekunder |
 | ST-14 | 📱 Mulai perjalanan tanpa izin lokasi / kamera | Pesan jelas; tidak crash | — |
+| ST-15 | Mulai lebih awal sesuai **Pengaturan** (menit sebelum jadwal; SPD / Non-SPD / Ruangan, default 180 / 15 / 30) | Lebih awal dari batas → 400 menyebut jam paling cepat (WIB); di dalam batas → mulai. Nilai setting harus bilangan bulat 0–1440; menyimpan nilai tidak menghapus satuan/keterangan | DB, PG |
 
 ## 10. Selesaikan — CP
 
@@ -337,6 +339,7 @@ tidak dipilih otomatis untuk booking lain.
 | RR-07 | Laporan untuk booking ruangan | Ditolak | — |
 | RR-08 | Pemohon & admin membuka laporan | Foto & alamat lokasi tampil | DB |
 | RR-09 | 📱 Supir mengisi **odometer akhir** di laporan pengembalian | Wajib di aplikasi; tidak boleh < odometer awal trip maupun < odometer kendaraan saat ini (mis. sudah maju lewat isi BBM di tengah trip) → 400; berhasil → odometer kendaraan diperbarui | KD, BBM |
+| RR-10 | Supir mengirim laporan pengembalian | Status **RETURNED (Sudah Kembali)**; kendaraan & supir langsung bebas untuk booking lain; admin & pemohon dapat notifikasi "Kendaraan sudah kembali"; admin lalu menyelesaikan (RETURNED → COMPLETED); lembur dihitung sampai jam laporan; booking gabungan ikut RETURNED | LB, DB, DS, KD, DR, NT |
 
 ## 14. Rating — RT
 

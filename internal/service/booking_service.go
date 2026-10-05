@@ -34,6 +34,11 @@ type CreateBookingRequest struct {
 	// (pemakaian umum, dikenai perhitungan overtime bila melewati endDate).
 	// Opsional — default NON_SPD bila tidak dikirim, supaya backward compatible.
 	BookingType      string     `json:"bookingType" validate:"omitempty,oneof=SPD NON_SPD"`
+	// Lokasi penjemputan & tujuan — khusus booking kendaraan (wajib di form
+	// web/mobile; tetap opsional di API supaya aplikasi versi lama tidak
+	// tertolak). Diabaikan untuk booking ruangan.
+	PickupLocation   string     `json:"pickupLocation" validate:"omitempty,max=255"`
+	Destination      string     `json:"destination"    validate:"omitempty,max=255"`
 }
 
 type ApproveBookingRequest struct {
@@ -78,6 +83,8 @@ func serializeBookingRow(b repository.ListBookingsRow) map[string]any {
 		"status":             string(b.Status),
 		"purpose":            b.Purpose,
 		"bookingType": string(b.BookingType),
+		"pickupLocation": nullStr(b.PickupLocation),
+		"destination":    nullStr(b.Destination),
 		"passengerCount": b.PassengerCount,
 		"user": map[string]any{
 			"id": b.UserId, "name": b.UserName,
@@ -136,6 +143,8 @@ func serializeBookingByID(b repository.GetBookingByIDRow) map[string]any {
 		"status":             string(b.Status),
 		"purpose":            b.Purpose,
 		"bookingType": string(b.BookingType),
+		"pickupLocation": nullStr(b.PickupLocation),
+		"destination":    nullStr(b.Destination),
 		"passengerCount": b.PassengerCount,
 		"user": map[string]any{
 			"id": b.UserId, "name": b.UserName,
@@ -376,6 +385,10 @@ func (s *BookingService) GetByID(ctx context.Context, id int32, currentUserID in
 		}
 	}
 	out := serializeBookingByID(b)
+	// Kapan tombol Mulai boleh dipakai (setting mulai lebih awal).
+	if b.Status == repository.BookingStatusAPPROVED {
+		out["startableFrom"] = s.startableFrom(ctx, b)
+	}
 	s.attachOvertime(ctx, out, id)
 	return out, nil
 }
@@ -548,7 +561,7 @@ func (s *BookingService) Create(ctx context.Context, req CreateBookingRequest, a
 		AssignedDriverId:  driverID,
 		AssignedVehicleId: vehicleID,
 		BookingType:       bookingType,
-	})
+	}, bookingLocations(isVehicle, req.PickupLocation, req.Destination))
 	if err != nil {
 		return nil, err
 	}
@@ -563,7 +576,7 @@ func (s *BookingService) Create(ctx context.Context, req CreateBookingRequest, a
 		s.notif.NotifyAdmins("BOOKING_CREATED", "Booking baru",
 			"Ada booking baru yang menunggu persetujuan: "+bookingLabel(full), map[string]any{"bookingId": b.ID})
 		s.notifyDriver(ctx, driverID, "NEW_BOOKING", "Booking masuk",
-			bookingLabel(full)+" — Anda ditugaskan, menunggu persetujuan admin", b.ID)
+			driverTripLabel(full)+" — Anda ditugaskan, menunggu persetujuan admin", b.ID)
 	}
 
 	return serializeBookingByID(full), nil
@@ -871,7 +884,7 @@ func (s *BookingService) Approve(ctx context.Context, id int32, req ApproveBooki
 			"Booking Anda telah disetujui", map[string]any{"bookingId": full.ID})
 		// Supir yang ditugaskan → booking resmi jadi tugasnya.
 		s.notifyDriver(ctx, full.AssignedDriverId, "NEW_BOOKING", "Booking disetujui",
-			bookingLabel(full)+" — disetujui, Anda bertugas", full.ID)
+			driverTripLabel(full)+" — disetujui, Anda bertugas", full.ID)
 		// Booking ruangan → beri tahu room keeper.
 		if full.ResourceType == repository.ResourceTypeROOM {
 			s.notif.NotifyRoomKeepers("ROOM_BOOKED", "Ruangan dipesan",
@@ -1071,9 +1084,12 @@ func (s *BookingService) Start(ctx context.Context, id int32, odometer *int32, l
 	}
 
 	now := time.Now().UTC()
-	// Beri toleransi mulai hingga 30 menit sebelum jadwal untuk persiapan supir / ruangan.
-	if now.Add(30 * time.Minute).Before(b.StartDate) {
-		return nil, util.NewError(400, "jadwal booking belum dapat dimulai (maksimal 30 menit sebelum jadwal)", util.ErrBadRequest)
+	// Boleh dimulai lebih awal sesuai Pengaturan (SPD / Non-SPD / ruangan).
+	if from := s.startableFrom(ctx, b); now.Before(from) {
+		return nil, util.NewError(400,
+			"booking ini baru bisa dimulai mulai "+formatWIB(from)+
+				" ("+itoa(int32(b.StartDate.Sub(from).Minutes()))+" menit sebelum jadwal)",
+			util.ErrBadRequest)
 	}
 	if now.After(b.EndDate) {
 		return nil, util.NewError(400, "booking period has already ended", util.ErrBadRequest)
@@ -1155,10 +1171,16 @@ func (s *BookingService) syncMergedBookingStatus(ctx context.Context, bookingID 
 				ID: partner.ResourceId, Status: repository.ResourceStatusINUSE,
 			})
 		case repository.BookingStatusCOMPLETED:
-			if partner.Status != repository.BookingStatusONGOING && partner.Status != repository.BookingStatusOVERDUE {
+			if partner.Status != repository.BookingStatusONGOING && partner.Status != repository.BookingStatusOVERDUE &&
+				partner.Status != repository.BookingStatusRETURNED {
 				continue
 			}
 			if _, err := s.q.CompleteBooking(ctx, partnerID); err != nil {
+				continue
+			}
+			syncResourceStatus(ctx, s.q, partner.ResourceId, false)
+		case repository.BookingStatusRETURNED:
+			if ok, err := s.q.MarkBookingReturned(ctx, partnerID); err != nil || !ok {
 				continue
 			}
 			syncResourceStatus(ctx, s.q, partner.ResourceId, false)
@@ -1174,6 +1196,8 @@ func (s *BookingService) syncMergedBookingStatus(ctx context.Context, bookingID 
 		syncAction := "START"
 		if newStatus == repository.BookingStatusCOMPLETED {
 			syncAction = "COMPLETE"
+		} else if newStatus == repository.BookingStatusRETURNED {
+			syncAction = "SUBMIT_RETURN_REPORT"
 		}
 		logAudit(ctx, s.q, actor, syncAction, "Booking", partnerID,
 			"Auto-sinkron dari booking gabungan #"+itoa(bookingID))
@@ -1182,6 +1206,8 @@ func (s *BookingService) syncMergedBookingStatus(ctx context.Context, bookingID 
 			code := "BOOKING_STARTED"
 			if newStatus == repository.BookingStatusCOMPLETED {
 				label, code = "Booking selesai", "BOOKING_COMPLETED"
+			} else if newStatus == repository.BookingStatusRETURNED {
+				label, code = "Kendaraan sudah kembali", "RETURN_REPORT"
 			}
 			s.notif.Notify(partner.UserId, code, label,
 				label+" (booking gabungan)", map[string]any{"bookingId": partnerID})
@@ -1195,8 +1221,9 @@ func (s *BookingService) Complete(ctx context.Context, id int32, actor AuditActo
 	if err != nil {
 		return nil, util.ErrNotFound
 	}
-	if b.Status != repository.BookingStatusONGOING && b.Status != repository.BookingStatusOVERDUE {
-		return nil, util.NewError(409, "booking must be ONGOING or OVERDUE to complete", util.ErrForbidden)
+	if b.Status != repository.BookingStatusONGOING && b.Status != repository.BookingStatusOVERDUE &&
+		b.Status != repository.BookingStatusRETURNED {
+		return nil, util.NewError(409, "booking must be ONGOING, OVERDUE, or RETURNED to complete", util.ErrForbidden)
 	}
 	switch role {
 	case "ROOM_KEEPER":
@@ -1235,7 +1262,12 @@ func (s *BookingService) Complete(ctx context.Context, id int32, actor AuditActo
 	if b.ResourceType == repository.ResourceTypeVEHICLE &&
 		b.BookingType == repository.BookingTypeNONSPD &&
 		b.AssignedDriverId.Valid {
+		// Akhir kerja supir = jam laporan pengembalian (RETURNED), bukan jam admin
+		// menekan Selesaikan; tanpa laporan → sekarang.
 		now := time.Now().UTC()
+		if b.ReturnedAt.Valid {
+			now = b.ReturnedAt.Time.UTC()
+		}
 		if now.After(b.EndDate) {
 			overtimeMinutes := int32(now.Sub(b.EndDate).Minutes())
 			if overtimeMinutes > 0 {
@@ -1978,15 +2010,29 @@ func (s *BookingService) SubmitReturnReport(
 		})
 	}
 
-	returnDesc := "Supir mengirim laporan pengembalian"
+	// Laporan masuk = kendaraan sudah kembali di kantor → RETURNED ("Sudah
+	// Kembali"). Keputusan pemilik (2026-10-05): kendaraan & supir LANGSUNG
+	// bebas untuk booking lain; admin tinggal menyelesaikan secara
+	// administratif. Lembur dihitung sampai jam laporan ini (returnedAt).
+	if _, err := s.q.MarkBookingReturned(ctx, bookingID); err != nil {
+		return err
+	}
+	s.syncMergedBookingStatus(ctx, bookingID, repository.BookingStatusRETURNED, actor)
+	syncResourceStatus(ctx, s.q, b.ResourceId, false)
+	syncDriverHolds(ctx, s.q, b.AssignedDriverId)
+
+	returnDesc := "Supir mengirim laporan pengembalian - kendaraan sudah kembali"
 	if odometer != nil {
 		returnDesc += " (odometer akhir " + itoa(*odometer) + " km)"
 	}
 	logAudit(ctx, s.q, actor, "SUBMIT_RETURN_REPORT", "Booking", bookingID, returnDesc)
-	// Notifikasi: laporan pengembalian masuk → admin.
+	// Notifikasi: admin (perlu menyelesaikan) + pemohon.
 	if s.notif != nil {
-		s.notif.NotifyAdmins("RETURN_REPORT", "Laporan pengembalian",
-			"Driver mengirim laporan pengembalian", map[string]any{"bookingId": bookingID})
+		label := bookingLabel(b)
+		s.notif.NotifyAdmins("RETURN_REPORT", "Kendaraan sudah kembali",
+			label+" — laporan pengembalian masuk, siap diselesaikan", map[string]any{"bookingId": bookingID})
+		s.notif.Notify(b.UserId, "RETURN_REPORT", "Kendaraan sudah kembali",
+			label+" — supir sudah mengembalikan kendaraan", map[string]any{"bookingId": bookingID})
 	}
 	return nil
 }

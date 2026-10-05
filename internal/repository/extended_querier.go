@@ -104,4 +104,8 @@ type ExtendedQuerier interface {
 	LockBookingCreate(ctx context.Context, userID int32) error
 	FindActiveDuplicateBooking(ctx context.Context, userID, resourceID int32, start, end time.Time) (int32, error)
 	FindRecentDuplicateFuel(ctx context.Context, vehicleID, fuelTypeID, odometer int32, quantity float64, within time.Duration) (int32, error)
+
+	// Booking: lokasi penjemputan/tujuan & status RETURNED (booking_returned.go)
+	MarkBookingReturned(ctx context.Context, id int32) (bool, error)
+	SetBookingLocations(ctx context.Context, id int32, pickup, destination sql.NullString) error
 }

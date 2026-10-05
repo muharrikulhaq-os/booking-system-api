@@ -1,6 +1,6 @@
 // Batch 5: VD (vendor), KP (kepemilikan kendaraan), IS (laporan kendala supir), KS (kop surat / pengaturan dokumen)
 import { api, ok2, sqlInt, check, scenario, inMin, fakePhoto, wib } from './lib.mjs';
-import { U, newVehicle, newDriver, newRoom, book, bookApproved, startB, hasNotif, maintPlan } from './fixtures.mjs';
+import { U, newVehicle, newDriver, newRoom, book, bookApproved, startB, completeB, hasNotif, maintPlan, resourceStatus } from './fixtures.mjs';
 
 const A = () => U.ADM.token;
 const vehicleBody = (v, extra = {}) => ({ name: `Mobil ${v.plate}`, plateNumber: v.plate, brand: 'Toyota', model: 'Uji', year: 2024,
@@ -193,5 +193,52 @@ export async function runBatch5() {
     const odo = sqlInt(`select "currentOdometer" from vehicles where id=${v.id}`);
     check('RR-09', low.status === 400 && ok2(okR) && odo === 10300,
       `Odometer akhir < odometer kendaraan → ${low.status} ("${low.msg}"); 10300 → ${okR.status}, kendaraan ${odo} km`);
+  });
+
+  // ── Lokasi penjemputan/tujuan, status RETURNED, mulai lebih awal (000018) ──
+  await scenario('BC-23', async () => {
+    const v = await newVehicle(); const r = await newRoom();
+    const bv = await book(U.EMPA.token, v.resourceId, wib(4, 9), wib(4, 12),
+      { pickupLocation: 'Lobi Gedung A', destination: 'Bandara Soekarno-Hatta' });
+    const br = await book(U.EMPA.token, r.resourceId, wib(4, 9), wib(4, 10),
+      { pickupLocation: 'abaikan', destination: 'abaikan' });
+    const dv = await api('GET', `/bookings/${bv.data?.id}`, { token: U.EMPA.token });
+    check('BC-23', bv.status === 201 && dv.data?.pickupLocation === 'Lobi Gedung A'
+      && dv.data?.destination === 'Bandara Soekarno-Hatta' && br.status === 201 && br.data?.pickupLocation === null,
+      `Kendaraan: jemput "${dv.data?.pickupLocation}", tujuan "${dv.data?.destination}"; ruangan → lokasi ${br.data?.pickupLocation}`);
+  });
+  await scenario('RR-10', async () => {
+    const d = await newDriver('DRVRR10'); const v = await newVehicle({ odometer: 10000 });
+    const b = await bookApproved(U.EMPA.token, v.resourceId, inMin(5), inMin(180), { driverId: d.driverId });
+    await startB(b.id, d.token);
+    const rr = await api('POST', `/bookings/${b.id}/return-report`, { token: d.token,
+      form: { note: 'Kembali', location: '-6.2,106.8', odometer: 10100, 'photos[]': fakePhoto() } });
+    const g = await api('GET', `/bookings/${b.id}`, { token: A() });
+    const vehicleFree = resourceStatus(v.resourceId) === 'AVAILABLE';
+    const driverFree = sqlInt(`select count(*) from driver_assignments where "driverId"=${d.driverId} and "releasedAt" is null`) === 0;
+    const nAdmin = await hasNotif(A(), 'RETURN_REPORT', b.id);
+    const nOwner = await hasNotif(U.EMPA.token, 'RETURN_REPORT', b.id);
+    const c = await completeB(b.id);
+    check('RR-10', ok2(rr) && g.data?.status === 'RETURNED' && !!g.data?.returnedAt && vehicleFree && driverFree
+      && nAdmin && nOwner && ok2(c) && c.data?.status === 'COMPLETED',
+      `Laporan → ${g.data?.status}; kendaraan bebas=${vehicleFree}, supir bebas=${driverFree}; ` +
+      `notif admin=${nAdmin}, pemohon=${nOwner}; admin selesaikan → ${c.data?.status}`);
+  });
+  await scenario('ST-15', async () => {
+    const setEarly = (key, value) => api('PUT', `/master-settings/${key}`, { token: A(), body: { value: String(value) } });
+    const d = await newDriver('DRVST13'); const v = await newVehicle();
+    // Non-SPD 15 menit: mulai 60 menit sebelum jadwal ditolak.
+    await setEarly('booking_start_early_minutes_non_spd', 15);
+    const b = await bookApproved(U.EMPA.token, v.resourceId, inMin(60), inMin(180), { driverId: d.driverId });
+    const early = await startB(b.id, d.token);
+    // Dilonggarkan jadi 90 menit → boleh.
+    await setEarly('booking_start_early_minutes_non_spd', 90);
+    const ok = await startB(b.id, d.token);
+    const bad = await setEarly('booking_start_early_minutes_non_spd', -5);
+    await setEarly('booking_start_early_minutes_non_spd', 15);
+    const unit = (await api('GET', '/master-settings/booking_start_early_minutes_non_spd', { token: A() })).data?.unit;
+    check('ST-15', early.status === 400 && ok2(ok) && bad.status === 400 && unit === 'menit',
+      `Non-SPD 15 mnt, mulai 60 mnt lebih awal → ${early.status} ("${early.msg}"); diubah 90 mnt → ${ok.status}; ` +
+      `nilai -5 → ${bad.status}; satuan tetap "${unit}"`);
   });
 }

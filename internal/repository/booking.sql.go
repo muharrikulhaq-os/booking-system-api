@@ -184,7 +184,7 @@ func (q *Queries) CheckVehicleConflict(ctx context.Context, arg CheckVehicleConf
 
 const completeBooking = `-- name: CompleteBooking :one
 UPDATE bookings
-SET status = 'COMPLETED', "returnedAt" = NOW(), "updatedAt" = NOW()
+SET status = 'COMPLETED', "returnedAt" = COALESCE("returnedAt", NOW()), "updatedAt" = NOW()
 WHERE id = $1 RETURNING id, "userId", "resourceId", "startDate", "endDate", purpose, "passengerCount", status, "approvedById", "approvedAt", "assignedDriverId", "assignedVehicleId", "assignedAt", "returnedAt", "createdAt", "updatedAt", "originalResourceId", "bookingType", "odometerStart", "startLocation", "startPhotoUrl"
 `
 
@@ -453,7 +453,8 @@ SELECT b.id, b."userId", b."resourceId", b."startDate", b."endDate", b.purpose, 
        ) AS has_merge_suggestion,
        orig.name AS original_resource_name,
        orig.type AS original_resource_type,
-       b."odometerStart", b."startLocation", b."startPhotoUrl"
+       b."odometerStart", b."startLocation", b."startPhotoUrl",
+       b."pickupLocation", b."destination"
 FROM bookings b
 JOIN users u ON u.id = b."userId"
 JOIN departments dept ON dept.id = u."departmentId"
@@ -512,6 +513,8 @@ type GetBookingByIDRow struct {
 	OdometerStart_2      sql.NullInt32    `json:"odometerStart_2"`
 	StartLocation_2      sql.NullString   `json:"startLocation_2"`
 	StartPhotoUrl_2      sql.NullString   `json:"startPhotoUrl_2"`
+	PickupLocation       sql.NullString   `json:"pickupLocation"`
+	Destination          sql.NullString   `json:"destination"`
 }
 
 func (q *Queries) GetBookingByID(ctx context.Context, id int32) (GetBookingByIDRow, error) {
@@ -561,6 +564,8 @@ func (q *Queries) GetBookingByID(ctx context.Context, id int32) (GetBookingByIDR
 		&i.OdometerStart_2,
 		&i.StartLocation_2,
 		&i.StartPhotoUrl_2,
+		&i.PickupLocation,
+		&i.Destination,
 	)
 	return i, err
 }
@@ -685,7 +690,8 @@ SELECT b.id, b."userId", b."resourceId", b."startDate", b."endDate", b.purpose, 
        ) AS has_merge_suggestion,
        orig.name AS original_resource_name,
        merged_by."primaryBookingId" AS merged_into_id,
-       (SELECT COUNT(*) FROM booking_merges bm WHERE bm."primaryBookingId" = b.id) AS merge_count
+       (SELECT COUNT(*) FROM booking_merges bm WHERE bm."primaryBookingId" = b.id) AS merge_count,
+       b."pickupLocation", b."destination"
 FROM bookings b
 JOIN users u ON u.id = b."userId"
 JOIN departments dept ON dept.id = u."departmentId"
@@ -781,6 +787,8 @@ type ListBookingsRow struct {
 	OriginalResourceName sql.NullString `json:"original_resource_name"`
 	MergedIntoID         sql.NullInt32  `json:"merged_into_id"`
 	MergeCount           int64          `json:"merge_count"`
+	PickupLocation       sql.NullString `json:"pickupLocation"`
+	Destination          sql.NullString `json:"destination"`
 }
 
 func (q *Queries) ListBookings(ctx context.Context, arg ListBookingsParams) ([]ListBookingsRow, error) {
@@ -846,6 +854,8 @@ func (q *Queries) ListBookings(ctx context.Context, arg ListBookingsParams) ([]L
 			&i.OriginalResourceName,
 			&i.MergedIntoID,
 			&i.MergeCount,
+			&i.PickupLocation,
+			&i.Destination,
 		); err != nil {
 			return nil, err
 		}

@@ -4,6 +4,8 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"strconv"
+	"strings"
 	"time"
 
 	"booking-system-api/internal/repository"
@@ -69,8 +71,30 @@ func (s *MasterSettingService) GetByKey(ctx context.Context, key string) (any, e
 }
 
 func (s *MasterSettingService) Upsert(ctx context.Context, key string, req UpsertSettingRequest) (any, error) {
-	valStr := fmt.Sprintf("%v", req.Value)
-	
+	valStr := strings.TrimSpace(fmt.Sprintf("%v", req.Value))
+
+	// Menit mulai lebih awal (SPD / Non-SPD / ruangan): bilangan bulat 0–1440.
+	if strings.HasPrefix(key, "booking_start_early_minutes_") {
+		v, err := strconv.Atoi(valStr)
+		if err != nil || v < 0 || v > 24*60 {
+			return nil, util.NewError(400, "menit mulai lebih awal harus bilangan bulat 0 - 1440", util.ErrBadRequest)
+		}
+		valStr = strconv.Itoa(v)
+	}
+
+	// Klien biasanya hanya mengirim nilai — satuan & keterangan lama jangan
+	// sampai terhapus (dulu ikut menjadi NULL setiap kali disimpan).
+	if req.Unit == "" || req.Description == "" {
+		if cur, err := s.q.GetMasterSettingByKey(ctx, key); err == nil {
+			if req.Unit == "" && cur.Unit.Valid {
+				req.Unit = cur.Unit.String
+			}
+			if req.Description == "" && cur.Description.Valid {
+				req.Description = cur.Description.String
+			}
+		}
+	}
+
 	return s.q.UpsertMasterSetting(ctx, repository.UpsertMasterSettingParams{
 		Key:         key,
 		Value:       valStr,

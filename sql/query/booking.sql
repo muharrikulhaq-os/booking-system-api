@@ -24,7 +24,8 @@ SELECT b.*,
        ) AS has_merge_suggestion,
        orig.name AS original_resource_name,
        merged_by."primaryBookingId" AS merged_into_id,
-       (SELECT COUNT(*) FROM booking_merges bm WHERE bm."primaryBookingId" = b.id) AS merge_count
+       (SELECT COUNT(*) FROM booking_merges bm WHERE bm."primaryBookingId" = b.id) AS merge_count,
+       b."pickupLocation", b."destination"
 FROM bookings b
 JOIN users u ON u.id = b."userId"
 JOIN departments dept ON dept.id = u."departmentId"
@@ -83,7 +84,8 @@ SELECT b.*,
        ) AS has_merge_suggestion,
        orig.name AS original_resource_name,
        orig.type AS original_resource_type,
-       b."odometerStart", b."startLocation", b."startPhotoUrl"
+       b."odometerStart", b."startLocation", b."startPhotoUrl",
+       b."pickupLocation", b."destination"
 FROM bookings b
 JOIN users u ON u.id = b."userId"
 JOIN departments dept ON dept.id = u."departmentId"
@@ -127,7 +129,7 @@ UPDATE bookings SET status = 'ONGOING', "updatedAt" = NOW() WHERE id = $1 RETURN
 
 -- name: CompleteBooking :one
 UPDATE bookings
-SET status = 'COMPLETED', "returnedAt" = NOW(), "updatedAt" = NOW()
+SET status = 'COMPLETED', "returnedAt" = COALESCE("returnedAt", NOW()), "updatedAt" = NOW()
 WHERE id = $1 RETURNING *;
 
 -- name: CancelBooking :one

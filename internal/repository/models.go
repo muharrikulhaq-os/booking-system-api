@@ -67,6 +67,9 @@ const (
 	BookingStatusOVERDUE   BookingStatus = "OVERDUE"
 	BookingStatusEXPIRED   BookingStatus = "EXPIRED"
 	BookingStatusIGNORED   BookingStatus = "IGNORED"
+	// RETURNED: supir sudah mengirim laporan pengembalian (kendaraan kembali di
+	// kantor); menunggu admin menyelesaikan. Migrasi 000018.
+	BookingStatusRETURNED  BookingStatus = "RETURNED"
 )
 
 func (e *BookingStatus) Scan(src interface{}) error {

@@ -39,7 +39,7 @@ func (q *Queries) ReportOverview(ctx context.Context, start, end time.Time) (Ove
 		    COALESCE((SELECT SUM(mr."totalCost")::float8 FROM maintenance_records mr
 		              WHERE mr."startDate" >= $1 AND mr."startDate" <= $2), 0) AS total_cost,
 		    COALESCE(
-		        (COUNT(CASE WHEN b.status IN ('ONGOING','COMPLETED') THEN 1 END)::float8 /
+		        (COUNT(CASE WHEN b.status IN ('ONGOING','RETURNED','COMPLETED') THEN 1 END)::float8 /
 		         NULLIF(COUNT(b.id),0)) * 100, 0)                        AS avg_utilization,
 		    COUNT(CASE WHEN b.status = 'OVERDUE' THEN 1 END)             AS overdue_count
 		FROM bookings b
@@ -209,7 +209,7 @@ func (q *Queries) ReportApprovalPerformance(ctx context.Context, start, end sql.
 		    COUNT(b.id)                                                                  AS total_processed
 		FROM bookings b
 		WHERE b."approvedAt" IS NOT NULL
-		  AND b.status IN ('APPROVED','COMPLETED','ONGOING','OVERDUE')
+		  AND b.status IN ('APPROVED','COMPLETED','ONGOING','OVERDUE','RETURNED')
 		  AND ($1::timestamptz IS NULL OR b."createdAt" >= $1::timestamptz)
 		  AND ($2::timestamptz IS NULL OR b."createdAt" <= $2::timestamptz)`
 	var r ApprovalPerformanceRow

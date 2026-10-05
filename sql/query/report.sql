@@ -4,7 +4,7 @@ SELECT
     COALESCE(SUM(CASE WHEN status = 'COMPLETED' THEN 1 ELSE 0 END), 0)::bigint AS completed,
     COALESCE(SUM(CASE WHEN status = 'PENDING'   THEN 1 ELSE 0 END), 0)::bigint AS pending,
     COALESCE(SUM(CASE WHEN status = 'APPROVED'  THEN 1 ELSE 0 END), 0)::bigint AS approved,
-    COALESCE(SUM(CASE WHEN status = 'ONGOING'   THEN 1 ELSE 0 END), 0)::bigint AS ongoing,
+    COALESCE(SUM(CASE WHEN status IN ('ONGOING', 'RETURNED') THEN 1 ELSE 0 END), 0)::bigint AS ongoing,
     COALESCE(SUM(CASE WHEN status = 'CANCELLED' THEN 1 ELSE 0 END), 0)::bigint AS cancelled,
     COALESCE(SUM(CASE WHEN status = 'REJECTED'  THEN 1 ELSE 0 END), 0)::bigint AS rejected,
     COALESCE(SUM(CASE WHEN status = 'OVERDUE'   THEN 1 ELSE 0 END), 0)::bigint AS overdue
