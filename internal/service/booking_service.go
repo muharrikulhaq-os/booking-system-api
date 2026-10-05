@@ -1951,6 +1951,15 @@ func (s *BookingService) SubmitReturnReport(
 			"odometer tidak boleh kurang dari odometer awal trip ini ("+itoa(b.OdometerStart.Int32)+" km)",
 			util.ErrBadRequest)
 	}
+	// ...dan tidak kurang dari odometer kendaraan saat ini (bisa sudah maju di
+	// tengah trip lewat pengisian BBM / voucher).
+	if odometer != nil && b.AssignedVehicleId.Valid {
+		if v, verr := s.q.GetVehicleByID(ctx, b.AssignedVehicleId.Int32); verr == nil && *odometer < v.CurrentOdometer {
+			return util.NewError(400,
+				"odometer akhir tidak boleh kurang dari odometer kendaraan saat ini ("+itoa(v.CurrentOdometer)+" km)",
+				util.ErrBadRequest)
+		}
+	}
 
 	var odo sql.NullInt32
 	if odometer != nil {

@@ -365,3 +365,14 @@ FL-06 diganti menjadi "Batalkan catatan BBM".
 4. Cetak voucher: **printer thermal** (80 mm default, 58 mm opsional).
 5. Listrik: pencatatan kWh **bebas** (meter awal/akhir, kWh langsung, atau estimasi % baterai).
 6. Harga BBM: **satu master** — `fuel_types.default_price`.
+
+## 10. Keputusan tambahan (2026-10-05, hasil uji coba)
+
+1. **Voucher yang sudah diisi (USED) tidak bisa dibatalkan** — BBM sudah keluar di SPBU mitra
+   dan masuk tagihan. API menolak 409 dan tombol Batalkan tidak tampil. Koreksi saldo lewat
+   **Penyesuaian Saldo** (§3.6). Ini menggantikan "Batalkan USED" di diagram status §3.
+2. **Voucher tertaut ke trip berjalan**: bila booking tidak dipilih saat terbit, voucher
+   otomatis ditautkan ke booking ONGOING/OVERDUE kendaraan itu; bila belum ada saat terbit,
+   ditautkan saat "Sudah Diisi". Pengisiannya tampil di Catatan Perjalanan booking.
+3. **Odometer akhir wajib di laporan pengembalian (aplikasi)**, minimal odometer kendaraan
+   saat ini; laporan memajukan `currentOdometer` kendaraan (titik hitung saldo berikutnya).
