@@ -1254,32 +1254,28 @@ func (s *BookingService) Complete(ctx context.Context, id int32, actor AuditActo
 	// maintenance diajukan selama trip berlangsung (B10).
 	syncResourceStatus(ctx, s.q, b.ResourceId, false)
 
-	// Overtime (Non-SPD only): jam kerja normal mengikuti jadwal booking
-	// (endDate). Kendaraan yang baru selesai dipakai setelah endDate dicatat
-	// sebagai overtime supir, mis. jadwal berakhir 16:30 tapi baru selesai
-	// 18:00 -> overtime 1 jam 30 menit. SPD (surat perintah dinas) dikecualikan.
+	// Overtime: jam akhir kerja mengikuti jadwal booking (endDate). Kendaraan
+	// yang baru kembali setelah endDate dicatat sebagai overtime supir bila
+	// kelebihannya melebihi ambang di pengaturan (default 0 jam), mis. jadwal
+	// berakhir 16:30, kembali 18:00 -> overtime 1 jam 30 menit. SPD hanya
+	// dihitung bila diaktifkan di pengaturan (lihat booking_overtime.go).
 	var overtimeMins int32
-	if b.ResourceType == repository.ResourceTypeVEHICLE &&
-		b.BookingType == repository.BookingTypeNONSPD &&
-		b.AssignedDriverId.Valid {
+	if apply, threshold := s.overtimeRule(ctx, b); apply {
 		// Akhir kerja supir = jam laporan pengembalian (RETURNED), bukan jam admin
 		// menekan Selesaikan; tanpa laporan → sekarang.
 		now := time.Now().UTC()
 		if b.ReturnedAt.Valid {
 			now = b.ReturnedAt.Time.UTC()
 		}
-		if now.After(b.EndDate) {
-			overtimeMinutes := int32(now.Sub(b.EndDate).Minutes())
-			if overtimeMinutes > 0 {
-				overtimeMins = overtimeMinutes
-				_, _ = s.q.CreateDriverOvertime(ctx, repository.CreateDriverOvertimeParams{
-					BookingId:       b.ID,
-					DriverId:        b.AssignedDriverId.Int32,
-					ScheduledEndAt:  b.EndDate,
-					ActualEndAt:     now,
-					OvertimeMinutes: overtimeMinutes,
-				})
-			}
+		if mins := overtimeMinutes(b.EndDate, now, threshold); mins > 0 {
+			overtimeMins = mins
+			_, _ = s.q.CreateDriverOvertime(ctx, repository.CreateDriverOvertimeParams{
+				BookingId:       b.ID,
+				DriverId:        b.AssignedDriverId.Int32,
+				ScheduledEndAt:  b.EndDate,
+				ActualEndAt:     now,
+				OvertimeMinutes: mins,
+			})
 		}
 	}
 

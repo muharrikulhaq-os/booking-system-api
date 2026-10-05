@@ -33,6 +33,12 @@ func (m *MockQuerier) GetResourceStatusFacts(ctx context.Context, resourceID int
 	return repository.ResourceStatusFacts{Status: repository.ResourceStatusINUSE}, nil
 }
 
+// Pengaturan belum diatur → kode memakai nilai bawaan (lihat settingsQuerier
+// untuk tes yang butuh nilai tertentu).
+func (m *MockQuerier) GetMasterSettingByKey(ctx context.Context, key string) (repository.MasterSetting, error) {
+	return repository.MasterSetting{}, sql.ErrNoRows
+}
+
 func (m *MockQuerier) GetBookingByID(ctx context.Context, id int32) (repository.GetBookingByIDRow, error) {
 	return m.booking, nil
 }

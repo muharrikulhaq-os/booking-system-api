@@ -287,7 +287,7 @@ tidak dipilih otomatis untuk booking lain.
 |---|---|---|---|
 | CP-01 | Admin menyelesaikan booking ONGOING K2 (NON_SPD) tepat waktu | COMPLETED; K2 → AVAILABLE; DRV-2 dilepas (kosong lagi); pemohon dapat notifikasi + ajakan rating | LB, DB, DS, KD, DR, PK, NT, LP |
 | CP-02 | Selesaikan NON_SPD 1 jam 30 menit setelah jadwal selesai | Overtime supir 90 menit tercatat; supir & admin dapat notifikasi | DB (overtime), LP (trip driver) |
-| CP-03 | Selesaikan SPD terlambat | Tidak ada overtime | LP |
+| CP-03 | Selesaikan SPD terlambat | Tidak ada overtime (bawaan: pengaturan "Lembur SPD" nonaktif) | LP |
 | CP-04 | Selesaikan booking OVERDUE | COMPLETED + overtime (bila NON_SPD) | DS (overdue −1) |
 | CP-05 | Selesaikan booking PENDING / APPROVED | Ditolak | — |
 | CP-06 | DRIVER mencoba menyelesaikan (UI & API) | Tidak ada tombol; API 403 (supir mengirim laporan pengembalian, admin yang menutup) | — |
@@ -295,6 +295,10 @@ tidak dipilih otomatis untuk booking lain.
 | CP-08 | Supir DRV-2 punya 2 booking APPROVED/ONGOING, satu diselesaikan | DRV-2 **tetap** memegang kendaraan (masih ada booking aktif) | DR |
 | CP-09 | Selesaikan booking utama hasil merge | Booking gabungan ikut COMPLETED; supir baru dilepas setelah semuanya selesai | LB, DB, DR |
 | CP-10 | Admin membuat maintenance K2 saat trip K2 sedang berjalan, lalu booking diselesaikan | K2 tetap IN_USE selama trip, lalu **MAINTENANCE** setelah selesai (✅ B10) | KD, DS, MT |
+| CP-11 | Pengaturan ambang lembur Non-SPD = 2 jam; kembali 1 jam 30 menit setelah jadwal, lalu kasus lain 2 jam 30 menit | Kasus 1: tidak ada lembur. Kasus 2: lembur **150 menit** (dihitung penuh sejak jadwal selesai begitu ambang terlewati) | LP, NT |
+| CP-12 | Aktifkan "Lembur SPD" (aturan sama dengan Non-SPD), selesaikan SPD terlambat 3 jam | Lembur SPD 180 menit tercatat (ambang Non-SPD berlaku) | LP, NT |
+| CP-13 | "Lembur SPD" aktif dengan aturan terpisah (ambang SPD 4 jam, Non-SPD 0) — SPD terlambat 3 jam | Tidak ada lembur; terlambat 5 jam → 300 menit | LP |
+| CP-14 | Simpan ambang lembur 25 jam / sakelar SPD bernilai 2 | Ditolak 400 | — |
 
 ## 11. Transisi otomatis berbasis waktu — TO
 

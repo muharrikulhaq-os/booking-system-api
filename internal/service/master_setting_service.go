@@ -82,6 +82,25 @@ func (s *MasterSettingService) Upsert(ctx context.Context, key string, req Upser
 		valStr = strconv.Itoa(v)
 	}
 
+	// Pengaturan lembur: ambang jam 0–24 (boleh desimal, mis. 0.5), sakelar 0/1.
+	switch key {
+	case settingOvertimeThresholdNonSPD, settingOvertimeThresholdSPD:
+		v, err := strconv.ParseFloat(valStr, 64)
+		if err != nil || v < 0 || v > maxOvertimeThresholdHours {
+			return nil, util.NewError(400, "ambang lembur harus angka 0 - 24 jam", util.ErrBadRequest)
+		}
+		valStr = strconv.FormatFloat(v, 'f', -1, 64)
+	case settingOvertimeSPDEnabled, settingOvertimeSPDSameAsNonSPD:
+		switch strings.ToLower(valStr) {
+		case "1", "true":
+			valStr = "1"
+		case "0", "false":
+			valStr = "0"
+		default:
+			return nil, util.NewError(400, "nilai pengaturan harus 0 atau 1", util.ErrBadRequest)
+		}
+	}
+
 	// Klien biasanya hanya mengirim nilai — satuan & keterangan lama jangan
 	// sampai terhapus (dulu ikut menjadi NULL setiap kali disimpan).
 	if req.Unit == "" || req.Description == "" {
