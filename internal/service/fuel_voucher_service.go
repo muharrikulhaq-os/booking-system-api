@@ -223,6 +223,12 @@ func (s *FuelLedgerService) IssueVoucher(ctx context.Context, req FuelVoucherReq
 		var bookingID sql.NullInt32
 		if req.BookingID != nil && *req.BookingID > 0 {
 			bookingID = sql.NullInt32{Int32: *req.BookingID, Valid: true}
+		} else if bid, err := q.FindActiveTripBooking(ctx, p.VehicleID); err != nil {
+			return err
+		} else if bid > 0 {
+			// Booking tidak dipilih → trip kendaraan yang sedang berjalan, supaya
+			// pengisiannya masuk catatan perjalanan.
+			bookingID = sql.NullInt32{Int32: bid, Valid: true}
 		}
 		// Kode 5 karakter acak per hari (32^5 kombinasi) - bentrok praktis mustahil;
 		// bila terjadi, UNIQUE(code) menolak dan admin cukup menerbitkan ulang.
@@ -429,10 +435,26 @@ func (s *FuelLedgerService) UseVoucher(ctx context.Context, id int32, req UseVou
 		if strings.TrimSpace(req.Note) != "" {
 			note += " - " + strings.TrimSpace(req.Note)
 		}
+		// Voucher boleh diterbitkan tanpa booking; tanpa tautan ini pengisiannya
+		// tidak muncul di catatan perjalanan. Pakai trip yang sedang berjalan
+		// dengan kendaraan ini (dan tautkan juga ke vouchernya).
+		bookingID := v.BookingID
+		if !bookingID.Valid {
+			bid, err := q.FindActiveTripBooking(ctx, v.VehicleID)
+			if err != nil {
+				return err
+			}
+			if bid > 0 {
+				bookingID = sql.NullInt32{Int32: bid, Valid: true}
+				if err := q.SetFuelVoucherBooking(ctx, id, bid); err != nil {
+					return err
+				}
+			}
+		}
 		fe, err := q.CreateFuelExpense(ctx, repository.CreateFuelExpenseParams{
 			VehicleId:      v.VehicleID,
 			FuelTypeId:     v.FuelTypeID,
-			BookingId:      v.BookingID,
+			BookingId:      bookingID,
 			DriverId:       v.DriverID,
 			RecordedById:   actor.UserID,
 			ProofPhotoUrl:  sql.NullString{String: req.ReceiptPhotoUrl, Valid: req.ReceiptPhotoUrl != ""},
@@ -492,7 +514,7 @@ func (s *FuelLedgerService) CancelVoucher(ctx context.Context, id int32, reason 
 			return err
 		}
 		switch status {
-		case voucherIssued, voucherUsed:
+		case voucherIssued:
 			if _, err := appendLedger(ctx, q, p, repository.FuelCategoryBBM, ledgerEvent{
 				EntryType: ledgerVoucherReturn, Debit: -v.Liter,
 				VoucherID: sql.NullInt32{Int32: id, Valid: true}, CreatedByID: actor.UserID,
@@ -500,11 +522,13 @@ func (s *FuelLedgerService) CancelVoucher(ctx context.Context, id int32, reason 
 			}); err != nil {
 				return err
 			}
-			if status == voucherUsed && v.FuelExpenseID.Valid {
-				if err := q.VoidFuelExpense(ctx, v.FuelExpenseID.Int32, actor.UserID, "Voucher "+v.Code+" dibatalkan: "+reason); err != nil {
-					return err
-				}
-			}
+		case voucherUsed:
+			// Keputusan pemilik (2026-10-05): voucher yang sudah diisi = BBM sudah
+			// keluar di SPBU mitra & masuk tagihan — tidak bisa dibatalkan.
+			// Koreksi saldo lewat Penyesuaian Saldo.
+			return util.NewError(409,
+				"voucher sudah diisi sehingga tidak bisa dibatalkan - koreksi lewat Penyesuaian Saldo bila perlu",
+				util.ErrConflict)
 		case voucherExpired:
 			// liter sudah kembali saat kedaluwarsa
 		default:

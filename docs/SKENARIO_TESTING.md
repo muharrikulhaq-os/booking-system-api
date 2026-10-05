@@ -336,6 +336,7 @@ tidak dipilih otomatis untuk booking lain.
 | RR-06 | Admin / pemohon mengirim laporan | Tidak ada tombol; API 403 (hanya supir) | — |
 | RR-07 | Laporan untuk booking ruangan | Ditolak | — |
 | RR-08 | Pemohon & admin membuka laporan | Foto & alamat lokasi tampil | DB |
+| RR-09 | 📱 Supir mengisi **odometer akhir** di laporan pengembalian | Wajib di aplikasi; tidak boleh < odometer awal trip maupun < odometer kendaraan saat ini (mis. sudah maju lewat isi BBM di tengah trip) → 400; berhasil → odometer kendaraan diperbarui | KD, BBM |
 
 ## 14. Rating — RT
 
@@ -483,12 +484,14 @@ tidak dipilih otomatis untuk booking lain.
 | VC-04 | 📱 Driver tekan "Sudah Diisi" (foto struk wajib, odometer ≥ odometer voucher) | Voucher USED; catatan pengisian sumber Voucher dibuat; saldo tidak dipotong lagi | BBM, KD |
 | VC-05 | Voucher tidak dikonfirmasi sampai lewat masa berlaku | Otomatis EXPIRED (sweeper), liter kembali ke saldo, siaran DATA_CHANGED | BBM |
 | VC-06 | Admin "Tandai Terpakai" voucher EXPIRED (sesuai tagihan) | USED; saldo dipotong lagi | BBM |
-| VC-07 | Admin batalkan voucher ISSUED/USED (alasan wajib) | CANCELLED; liter kembali; catatan pengisian dari voucher ikut dibatalkan | BBM, LP |
+| VC-07 | Admin batalkan voucher (alasan wajib) | ISSUED → CANCELLED, liter kembali. **USED (sudah diisi) → ditolak 409** dan tombol Batalkan tidak tampil (keputusan 2026-10-05; koreksi lewat Penyesuaian Saldo). EXPIRED → hanya ditandai | BBM |
 | VC-08 | Rekonsiliasi beberapa voucher dengan no. tagihan | Hanya voucher USED yang belum direkonsiliasi yang ditandai | BBM |
 | VC-09 | Cetak voucher (printer thermal 80/58 mm) | Kode, QR, kendaraan, SPBU, liter, nominal, berlaku s.d. tercetak rapi | — |
 | VC-10 | Ubah odometer awal BBM setelah ada catatan saldo | Ditolak 409 (pakai Penyesuaian Saldo) | — |
 | VC-11 | Penyesuaian saldo manual (alasan wajib) | Tercatat di mutasi saldo & audit | BBM |
 | VC-12 | Voucher terbit untuk driver tertentu | Driver menerima notifikasi "Voucher BBM diterbitkan" (FUEL_VOUCHER_ISSUED); tap → menu Voucher BBM (mobile) / Bahan Bakar (web) | NT, BBM |
+| VC-13 | Voucher diterbitkan tanpa memilih booking saat kendaraan sedang dalam trip | Voucher otomatis tertaut ke trip itu; pengisian "Sudah Diisi" muncul di **Catatan Perjalanan** | DB, BBM |
+| VC-14 | Voucher terbit SEBELUM trip dimulai, diisi saat trip berjalan | Saat "Sudah Diisi", voucher & catatan pengisiannya ditautkan ke trip yang sedang berjalan | DB, BBM |
 
 ## 20. Sinkronisasi antar menu & perangkat — SY
 

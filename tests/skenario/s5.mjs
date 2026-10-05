@@ -136,4 +136,62 @@ export async function runBatch5() {
     check('FL-12', st[0] === 201 && st[1] === 409 && rows === 1,
       `Dua pengisian identik serentak → ${a.status}/${b.status}, tersimpan ${rows} ("${rejected.msg}")`);
   });
+
+  // ── Voucher ↔ catatan perjalanan, batal voucher terpakai, odometer akhir ──
+  const station = await api('POST', '/fuel-stations', { token: A(), body: { name: `SPBU Uji ${Date.now()}` } });
+  const voucherVehicle = async (code) => {
+    const d = await newDriver(code); const v = await newVehicle({ odometer: 10000 });
+    await api('PUT', `/fuel-balances/${v.id}/profile`, { token: A(), body: { kmPerLiter: 10, tankCapacityLiter: 45 } });
+    return { d, v };
+  };
+  const issue = (v, d, odometer) => api('POST', '/fuel-vouchers', { token: A(),
+    body: { vehicleId: v.id, fuelTypeId: 1, stationId: station.data.id, driverId: d.driverId, odometer } });
+  const useV = (id, token, odometer) => api('PATCH', `/fuel-vouchers/${id}/use`, { token,
+    form: { odometer, receiptPhoto: fakePhoto() } });
+  const tripFuel = async (bookingId) =>
+    (await api('GET', `/fuel-expenses?bookingId=${bookingId}`, { token: A() })).data ?? [];
+
+  await scenario('VC-13', async () => {
+    // Trip berjalan, voucher diterbitkan TANPA memilih booking.
+    const { d, v } = await voucherVehicle('DRVVC13');
+    const b = await bookApproved(U.EMPA.token, v.resourceId, inMin(5), inMin(180), { driverId: d.driverId });
+    await startB(b.id, d.token);
+    const iv = await issue(v, d, 10200);
+    const u = await useV(iv.data?.id, d.token, 10210);
+    const fuel = await tripFuel(b.id);
+    check('VC-13', ok2(iv) && iv.data.bookingId === b.id && ok2(u) && fuel.some((f) => f.source === 'VOUCHER'),
+      `Terbit ${iv.status} (booking #${iv.data?.bookingId} = trip #${b.id}), diisi ${u.status}; ` +
+      `catatan perjalanan memuat pengisian voucher: ${fuel.some((f) => f.source === 'VOUCHER')}`);
+  });
+  await scenario('VC-14', async () => {
+    // Voucher terbit SEBELUM trip dimulai → ditautkan ke trip saat diisi.
+    const { d, v } = await voucherVehicle('DRVVC14');
+    const iv = await issue(v, d, 10200);
+    const b = await bookApproved(U.EMPA.token, v.resourceId, inMin(5), inMin(180), { driverId: d.driverId });
+    await startB(b.id, d.token);
+    const u = await useV(iv.data?.id, d.token, 10210);
+    const fuel = await tripFuel(b.id);
+    check('VC-14', ok2(iv) && iv.data.bookingId === null && ok2(u) && u.data.bookingId === b.id
+      && fuel.some((f) => f.source === 'VOUCHER'),
+      `Terbit tanpa trip (booking ${iv.data?.bookingId}), diisi saat trip #${b.id} → voucher booking #${u.data?.bookingId}, ` +
+      `masuk catatan perjalanan: ${fuel.some((f) => f.source === 'VOUCHER')}`);
+
+    // VC-07: voucher yang sudah diisi tidak bisa dibatalkan; yang belum diisi bisa.
+    const cUsed = await api('PATCH', `/fuel-vouchers/${iv.data.id}/cancel`, { token: A(), body: { reason: 'uji' } });
+    const other = await voucherVehicle('DRVVC07');
+    const iv2 = await issue(other.v, other.d, 10200);
+    const cIssued = await api('PATCH', `/fuel-vouchers/${iv2.data?.id}/cancel`, { token: A(), body: { reason: 'uji' } });
+    check('VC-07', cUsed.status === 409 && ok2(cIssued) && cIssued.data.status === 'CANCELLED',
+      `Batal voucher TERPAKAI → ${cUsed.status} ("${cUsed.msg}"); batal voucher belum diisi → ${cIssued.status}`);
+
+    // RR-09: odometer akhir laporan pengembalian ≥ odometer kendaraan saat ini
+    // (sudah maju ke 10210 lewat voucher di tengah trip) & memperbarui kendaraan.
+    const rr = (odometer) => api('POST', `/bookings/${b.id}/return-report`, { token: d.token,
+      form: { note: 'Kembali', location: '-6.2,106.8', odometer, 'photos[]': fakePhoto() } });
+    const low = await rr(10205);
+    const okR = await rr(10300);
+    const odo = sqlInt(`select "currentOdometer" from vehicles where id=${v.id}`);
+    check('RR-09', low.status === 400 && ok2(okR) && odo === 10300,
+      `Odometer akhir < odometer kendaraan → ${low.status} ("${low.msg}"); 10300 → ${okR.status}, kendaraan ${odo} km`);
+  });
 }

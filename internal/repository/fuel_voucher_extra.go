@@ -302,3 +302,26 @@ func (q *Queries) MaxFuelVoucherOdometer(ctx context.Context, vehicleID int32) (
 		FROM fuel_vouchers WHERE "vehicleId" = $1 AND status <> 'CANCELLED'`, vehicleID).Scan(&odo)
 	return odo, err
 }
+
+// FindActiveTripBooking: booking kendaraan yang sedang berjalan (ONGOING /
+// OVERDUE) memakai kendaraan ini — dipakai menautkan pengisian voucher ke
+// catatan perjalanan bila voucher diterbitkan tanpa booking. 0 bila tidak ada.
+func (q *Queries) FindActiveTripBooking(ctx context.Context, vehicleID int32) (int32, error) {
+	var id int32
+	err := q.db.QueryRowContext(ctx, `
+		SELECT id FROM bookings
+		WHERE "assignedVehicleId" = $1 AND status IN ('ONGOING', 'OVERDUE')
+		ORDER BY "startDate" DESC, id DESC
+		LIMIT 1`, vehicleID).Scan(&id)
+	if err == sql.ErrNoRows {
+		return 0, nil
+	}
+	return id, err
+}
+
+// SetFuelVoucherBooking menautkan voucher ke booking (hanya bila belum ada).
+func (q *Queries) SetFuelVoucherBooking(ctx context.Context, id, bookingID int32) error {
+	_, err := q.db.ExecContext(ctx,
+		`UPDATE fuel_vouchers SET "bookingId" = $2 WHERE id = $1 AND "bookingId" IS NULL`, id, bookingID)
+	return err
+}
