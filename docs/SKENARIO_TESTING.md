@@ -246,6 +246,9 @@ tidak dipilih otomatis untuk booking lain.
 | AS-09 | Tugaskan kendaraan / supir yang SPD di hari itu | Ditolak 409 | — |
 | AS-10 | Tugaskan kendaraan yang dijadwalkan maintenance di rentang booking | Ditolak 409 | — |
 | AS-11 | Setelah pindah kendaraan, supir memulai perjalanan | Status IN_USE di kendaraan **baru**; kendaraan lama tetap AVAILABLE | KD, DS |
+| AS-12 | Admin membuka dropdown Pilih Driver / Pilih Kendaraan di panel Tugaskan atau dialog Alihkan, lalu mengetik sebagian nama / NIP / plat | Daftar langsung tersaring tanpa tombol cari; driver menampilkan kendaraan tetapnya, kendaraan menampilkan supir tetapnya; yang bentrok / SPD / maintenance / nonaktif tampil abu-abu dengan alasannya dan tidak bisa dipilih (alasan sama dengan penolakan AS-08 s.d. AS-10) | — |
+| AS-13 | Pilih driver yang punya kendaraan tetap (dan sebaliknya) | Kendaraan tetapnya (supir tetapnya) otomatis ikut terpilih bila tersedia; tetap bisa diganti manual | — |
+| AS-14 | Tugaskan kendaraan INACTIVE lewat API | Ditolak 409 "kendaraan ini nonaktif" | — |
 
 ## 8. Pembatalan — CN
 

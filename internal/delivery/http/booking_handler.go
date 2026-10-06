@@ -60,6 +60,9 @@ func (h *BookingHandler) Register(r fiber.Router) {
 	g.Post("/:id/reject", admin, h.Reject)
 	g.Patch("/:id/substitute-resource", admin, h.SubstituteResource)
 	g.Post("/:id/assign-vehicle", admin, h.AssignVehicle)
+	// Pilihan dropdown Tugaskan / Alihkan: supir & kendaraan + pasangan tetap +
+	// ketersediaan untuk jadwal booking ini.
+	g.Get("/:id/assign-options", admin, h.AssignOptions)
 	g.Patch("/:id/start", adminOrDriver, h.Start)
 	g.Patch("/:id/complete", adminOrRoomKeeper, h.Complete)
 	g.Post("/:id/merge", admin, h.MergeBooking)
@@ -210,6 +213,18 @@ func (h *BookingHandler) AssignVehicle(c *fiber.Ctx) error {
 		return err
 	}
 	return util.OK(c, "Vehicle assigned", data)
+}
+
+func (h *BookingHandler) AssignOptions(c *fiber.Ctx) error {
+	id, err := parseID(c, "id")
+	if err != nil {
+		return err
+	}
+	data, err := h.svc.AssignOptions(c.Context(), id)
+	if err != nil {
+		return err
+	}
+	return util.OK(c, "Assign options retrieved", data)
 }
 
 func (h *BookingHandler) Start(c *fiber.Ctx) error {

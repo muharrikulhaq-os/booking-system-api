@@ -962,6 +962,11 @@ func (s *BookingService) AssignVehicle(ctx context.Context, id int32, req Assign
 	if err != nil {
 		return nil, util.NewError(404, "vehicle not found", util.ErrNotFound)
 	}
+	// Dulu hanya dicegah UI (dropdown cuma berisi AVAILABLE); kini dropdown
+	// menampilkan semua kendaraan, jadi backend yang menolak (lihat AssignOptions).
+	if vehicle.ResourceStatus == repository.ResourceStatusINACTIVE {
+		return nil, util.NewError(409, "kendaraan ini nonaktif", util.ErrConflict)
+	}
 
 	count, _ := s.q.CheckVehicleConflict(ctx, repository.CheckVehicleConflictParams{
 		AssignedVehicleId: sql.NullInt32{Int32: req.VehicleID, Valid: true},
