@@ -1013,19 +1013,10 @@ func (s *BookingService) AssignVehicle(ctx context.Context, id int32, req Assign
 	logAudit(ctx, s.q, actor, "ASSIGN", "Booking", id, desc)
 
 	full, _ := s.q.GetBookingByID(ctx, id)
-	
-	if s.notif != nil {
-		s.notif.Notify(driver.UserId, "NEW_BOOKING", "Penugasan kendaraan",
-			bookingLabel(full)+" — Anda ditugaskan", map[string]any{
-				"bookingId": full.ID,
-				"vehicleId": vehicle.ID,
-			})
-		// Supir lama yang digantikan perlu tahu tugasnya dicabut.
-		if b.AssignedDriverId.Valid && b.AssignedDriverId.Int32 != req.DriverID {
-			s.notifyDriver(ctx, b.AssignedDriverId, "BOOKING_CANCELLED", "Penugasan dipindahkan",
-				bookingLabel(b)+" — dialihkan ke supir lain, Anda tidak jadi bertugas", id)
-		}
-	}
+
+	// Pemohon, supir baru, supir yang diganti, dan pemilik mobil masing-masing
+	// mendapat pesan sesuai posisinya - lihat booking_assign_notify.go.
+	s.notifyAssignment(ctx, b, full, driver, vehicle.ID)
 
 	return serializeBookingByID(full), nil
 }
