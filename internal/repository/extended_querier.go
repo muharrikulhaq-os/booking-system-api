@@ -22,6 +22,8 @@ type ExtendedQuerier interface {
 	CheckBookingAlreadyMerged(ctx context.Context, bookingA, bookingB int32) (bool, error)
 	CountActiveBookingsByDriver(ctx context.Context, driverID, excludeBookingID int32) (int64, error)
 	GetVehicleIDByResourceID(ctx context.Context, resourceID int32) (int32, error)
+	VehicleOdometerFloor(ctx context.Context, vehicleID int32) (int32, error)
+	SetVehicleOdometerExact(ctx context.Context, vehicleID, odometer int32) error
 	GetFreeDriver(ctx context.Context) (int32, error)
 	GetDriverActiveVehicleID(ctx context.Context, driverID int32) (int32, error)
 	GetDriverHoldVehicleID(ctx context.Context, driverID int32) (int32, error)

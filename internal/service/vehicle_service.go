@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"strings"
 
 	"booking-system-api/internal/repository"
 	"booking-system-api/internal/util"
@@ -42,6 +43,14 @@ type UpdateVehicleRequest struct {
 	Capacity        int16  `json:"capacity"    validate:"required,min=1"`
 	EnergyType      string `json:"energyType"  validate:"omitempty,oneof=BBM LISTRIK HYBRID"`
 	VehicleOwnershipInput
+}
+
+// CorrectOdometerRequest: koreksi manual odometer kendaraan oleh admin
+// (salah input / odometer diganti / data awal keliru). Alasan wajib karena
+// odometer menentukan hak saldo BBM.
+type CorrectOdometerRequest struct {
+	Odometer int32  `json:"odometer" validate:"min=0"`
+	Reason   string `json:"reason"   validate:"max=500"`
 }
 
 type UpdateStatusRequest struct {
@@ -248,6 +257,54 @@ func (s *VehicleService) Update(ctx context.Context, id int32, req UpdateVehicle
 	logAudit(ctx, s.q, actor, "UPDATE", "Vehicle", id,
 		"Mengubah data kendaraan "+req.Name+" ("+req.PlateNumber+")")
 
+	return s.GetByID(ctx, id)
+}
+
+// OdometerFloor: angka terendah yang boleh dipakai koreksi odometer [id].
+func (s *VehicleService) OdometerFloor(ctx context.Context, id int32) (map[string]any, error) {
+	v, err := s.q.GetVehicleByID(ctx, id)
+	if err != nil {
+		return nil, util.ErrNotFound
+	}
+	floor, err := s.q.VehicleOdometerFloor(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	return map[string]any{"currentOdometer": v.CurrentOdometer, "minOdometer": floor}, nil
+}
+
+// CorrectOdometer mengoreksi odometer kendaraan — boleh naik atau turun,
+// tetapi tidak di bawah bacaan sah yang sudah tercatat (BBM, voucher, trip,
+// maintenance, buku saldo): turun lebih jauh membuat jarak tempuh untuk hak
+// BBM berikutnya negatif. Salah ketik pada catatan BBM itu sendiri dikoreksi
+// lewat Batalkan catatan BBM ("odometer salah ketik"), bukan di sini.
+func (s *VehicleService) CorrectOdometer(ctx context.Context, id int32, req CorrectOdometerRequest, actor AuditActor) (map[string]any, error) {
+	v, err := s.q.GetVehicleByID(ctx, id)
+	if err != nil {
+		return nil, util.ErrNotFound
+	}
+	reason := strings.TrimSpace(req.Reason)
+	if len([]rune(reason)) < 3 {
+		return nil, util.NewError(400, "alasan koreksi wajib diisi", util.ErrBadRequest)
+	}
+	if req.Odometer == v.CurrentOdometer {
+		return nil, util.NewError(400, "odometer sama dengan catatan saat ini", util.ErrBadRequest)
+	}
+	floor, err := s.q.VehicleOdometerFloor(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if req.Odometer < floor {
+		return nil, util.NewError(400,
+			fmt.Sprintf("odometer tidak boleh kurang dari %d km - bacaan sah terakhir yang tercatat (BBM, perjalanan, atau maintenance)", floor),
+			util.ErrBadRequest)
+	}
+	if err := s.q.SetVehicleOdometerExact(ctx, id, req.Odometer); err != nil {
+		return nil, err
+	}
+	logAudit(ctx, s.q, actor, "UPDATE", "Vehicle", id,
+		fmt.Sprintf("Koreksi odometer %s (%s): %d → %d km. Alasan: %s",
+			v.ResourceName, v.PlateNumber, v.CurrentOdometer, req.Odometer, reason))
 	return s.GetByID(ctx, id)
 }
 

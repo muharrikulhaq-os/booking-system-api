@@ -29,6 +29,8 @@ func (h *VehicleHandler) Register(r fiber.Router) {
 	g.Post("/categories", admin, h.CreateCategory)
 	g.Put("/:id", admin, h.Update)
 	g.Patch("/:id/status", admin, h.UpdateStatus)
+	g.Get("/:id/odometer-floor", admin, h.OdometerFloor)
+	g.Patch("/:id/odometer", admin, h.CorrectOdometer)
 	g.Patch("/:id/photo", admin, h.UpdatePhoto)
 	g.Patch("/:id/fixed-driver", admin, h.SetFixedDriver)
 	g.Delete("/:id", admin, h.Delete)
@@ -101,6 +103,36 @@ func (h *VehicleHandler) UpdateStatus(c *fiber.Ctx) error {
 		return err
 	}
 	return util.OK(c, "Vehicle status updated", data)
+}
+
+// OdometerFloor: odometer terendah yang boleh dipakai koreksi (form web).
+func (h *VehicleHandler) OdometerFloor(c *fiber.Ctx) error {
+	id, err := parseID(c, "id")
+	if err != nil {
+		return err
+	}
+	data, err := h.svc.OdometerFloor(c.Context(), id)
+	if err != nil {
+		return err
+	}
+	return util.OK(c, "Odometer floor", data)
+}
+
+// CorrectOdometer: koreksi manual odometer kendaraan (admin, alasan wajib).
+func (h *VehicleHandler) CorrectOdometer(c *fiber.Ctx) error {
+	id, err := parseID(c, "id")
+	if err != nil {
+		return err
+	}
+	var req service.CorrectOdometerRequest
+	if err := bindAndValidate(c, &req); err != nil {
+		return err
+	}
+	data, err := h.svc.CorrectOdometer(c.Context(), id, req, auditActor(c))
+	if err != nil {
+		return err
+	}
+	return util.OK(c, "Odometer dikoreksi", data)
 }
 
 func (h *VehicleHandler) UpdatePhoto(c *fiber.Ctx) error {

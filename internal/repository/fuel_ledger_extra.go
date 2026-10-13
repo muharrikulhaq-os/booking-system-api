@@ -449,3 +449,25 @@ func (q *Queries) VoidFuelExpense(ctx context.Context, id, voidedByID int32, rea
 		WHERE id = $1 AND "voidedAt" IS NULL`, id, voidedByID, reason)
 	return err
 }
+
+// VehicleOdometerFloor: batas bawah koreksi odometer manual — bacaan sah
+// tertinggi dari semua sumber faktual (BBM, trip, maintenance, odometer
+// awal BBM), voucher yang tidak dibatalkan, dan titik hitung buku saldo.
+// Di bawah angka ini, hak BBM berikutnya akan dihitung dari jarak negatif.
+func (q *Queries) VehicleOdometerFloor(ctx context.Context, vehicleID int32) (int32, error) {
+	reading, err := q.MaxVehicleOdometerReading(ctx, vehicleID, 0, true)
+	if err != nil {
+		return 0, err
+	}
+	voucher, err := q.MaxFuelVoucherOdometer(ctx, vehicleID)
+	if err != nil {
+		return 0, err
+	}
+	var ledger int32
+	if err := q.db.QueryRowContext(ctx,
+		`SELECT COALESCE(MAX(odometer), 0) FROM fuel_ledger WHERE "vehicleId" = $1`,
+		vehicleID).Scan(&ledger); err != nil {
+		return 0, err
+	}
+	return max(reading, voucher, ledger), nil
+}
