@@ -1,7 +1,11 @@
 package http
 
 import (
+	"fmt"
+	"log"
+	"mime/multipart"
 	"strconv"
+	"strings"
 	"time"
 
 	"booking-system-api/internal/middleware"
@@ -10,6 +14,19 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 )
+
+// uploadErrorID: alasan penolakan file (util.CheckUpload) dalam bahasa Indonesia.
+func uploadErrorID(err error) string {
+	msg := err.Error()
+	switch {
+	case strings.Contains(msg, "size exceeds"):
+		return "ukuran file melebihi batas (" + strings.TrimPrefix(msg, "file size exceeds ") + ")"
+	case strings.Contains(msg, "type not allowed"):
+		return "format harus JPG, PNG, WEBP, atau GIF"
+	default:
+		return msg
+	}
+}
 
 // formInt32Ptr parses an optional int32 form value (nil jika kosong/invalid).
 func formInt32Ptr(c *fiber.Ctx, key string) *int32 {
@@ -458,27 +475,35 @@ func (h *BookingHandler) SubmitReturnReport(c *fiber.Ctx) error {
 
 	odometer := formInt32Ptr(c, "odometer")
 	uploaderID := int32(middleware.GetUserID(c))
+
+	// Foto diperiksa SEBELUM laporan disimpan: dulu foto yang terlalu besar /
+	// formatnya tidak didukung dibuang diam-diam setelah laporan masuk, jadi
+	// perjalanan tercatat "tanpa foto" padahal pengirim sudah melampirkannya.
+	var photos []*multipart.FileHeader
+	if form, ferr := c.MultipartForm(); ferr == nil {
+		photos = append(photos, form.File["photos[]"]...)
+		photos = append(photos, form.File["photo"]...) // nama field lama (satu foto)
+	}
+	for i, fh := range photos {
+		if cerr := util.CheckUpload(fh); cerr != nil {
+			return fiber.NewError(fiber.StatusBadRequest,
+				fmt.Sprintf("foto ke-%d (%s) tidak bisa diunggah: %s", i+1, fh.Filename, uploadErrorID(cerr)))
+		}
+	}
+
 	if err = h.svc.SubmitReturnReport(c.Context(), id, note, location, odometer, auditActor(c)); err != nil {
 		return err
 	}
 
-	// upload photos (field name "photos[]" or "photo", multiple allowed)
-	form, formErr := c.MultipartForm()
-	uploadedPhotos := make([]map[string]any, 0)
-	if formErr == nil {
-		for _, fh := range form.File["photos[]"] {
-			p, pErr := h.attachSvc.UploadReturnPhoto(c.Context(), id, uploaderID, fh)
-			if pErr == nil {
-				uploadedPhotos = append(uploadedPhotos, p)
-			}
+	uploadedPhotos := make([]map[string]any, 0, len(photos))
+	for _, fh := range photos {
+		p, pErr := h.attachSvc.UploadReturnPhoto(c.Context(), id, uploaderID, fh)
+		if pErr != nil {
+			// Sudah lolos CheckUpload - sisa kemungkinan: gagal tulis disk/DB.
+			log.Printf("return report #%d: foto %q gagal disimpan: %v", id, fh.Filename, pErr)
+			continue
 		}
-		// also accept field name "photo" (single)
-		for _, fh := range form.File["photo"] {
-			p, pErr := h.attachSvc.UploadReturnPhoto(c.Context(), id, uploaderID, fh)
-			if pErr == nil {
-				uploadedPhotos = append(uploadedPhotos, p)
-			}
-		}
+		uploadedPhotos = append(uploadedPhotos, p)
 	}
 
 	return util.Created(c, "Return report submitted", map[string]any{

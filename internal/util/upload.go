@@ -20,21 +20,30 @@ var allowedTypes = map[string]bool{
 	"application/pdf": true,
 }
 
-// SaveUploadedFile saves a file to uploads/{category}/YYYY/MM/.
-// category should be one of: "vehicle", "room", "booking", "profile".
-func SaveUploadedFile(fh *multipart.FileHeader, category string) (filePath string, err error) {
+// CheckUpload memeriksa ukuran & tipe file tanpa menyimpannya - dipakai
+// untuk menolak request SEBELUM data lain tersimpan (mis. laporan
+// pengembalian: dulu laporan masuk lalu fotonya gagal tanpa kabar).
+func CheckUpload(fh *multipart.FileHeader) error {
 	if fh.Size > config.C.MaxFileSizeMB*1024*1024 {
-		return "", fmt.Errorf("file size exceeds %dMB limit", config.C.MaxFileSizeMB)
+		return fmt.Errorf("file size exceeds %dMB limit", config.C.MaxFileSizeMB)
 	}
-
 	contentType := fh.Header.Get("Content-Type")
 	if !allowedTypes[contentType] {
 		// fallback: check extension
 		ext := strings.ToLower(filepath.Ext(fh.Filename))
 		allowed := map[string]bool{".jpg": true, ".jpeg": true, ".png": true, ".gif": true, ".webp": true, ".pdf": true}
 		if !allowed[ext] {
-			return "", fmt.Errorf("file type not allowed")
+			return fmt.Errorf("file type not allowed")
 		}
+	}
+	return nil
+}
+
+// SaveUploadedFile saves a file to uploads/{category}/YYYY/MM/.
+// category should be one of: "vehicle", "room", "booking", "profile".
+func SaveUploadedFile(fh *multipart.FileHeader, category string) (filePath string, err error) {
+	if err := CheckUpload(fh); err != nil {
+		return "", err
 	}
 
 	if category == "" {
