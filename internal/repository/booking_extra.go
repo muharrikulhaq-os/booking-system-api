@@ -627,3 +627,31 @@ func (q *Queries) CheckDriverSpdConflict(ctx context.Context, arg CheckDriverSpd
 	).Scan(&count)
 	return count, err
 }
+
+// BookingStartActor: siapa & kapan perjalanan dimulai (dari audit log START).
+type BookingStartActor struct {
+	UserID    sql.NullInt32
+	Name      sql.NullString
+	StartedAt time.Time
+}
+
+// GetBookingStartActor mengambil pelaku START booking dari audit_logs - tanpa
+// kolom baru, jadi booking lama ikut terisi. bookingIDs berisi booking ini
+// diikuti partner merge-nya: partner hasil merge ikut dimulai tanpa log
+// sendiri, jadi pelaku diambil dari booking pasangannya (yang ini didahulukan).
+func (q *Queries) GetBookingStartActor(ctx context.Context, bookingIDs []int32) (BookingStartActor, error) {
+	var a BookingStartActor
+	if len(bookingIDs) == 0 {
+		return a, sql.ErrNoRows
+	}
+	err := q.db.QueryRowContext(ctx, `
+		SELECT a."userId", u.name, a."createdAt"
+		FROM audit_logs a
+		LEFT JOIN users u ON u.id = a."userId"
+		WHERE a.action = 'START' AND a."entityType" = 'Booking'
+		  AND a."entityId" = ANY($1::int[])
+		ORDER BY (a."entityId" = $2) DESC, a."createdAt" DESC
+		LIMIT 1`, intArrayLiteral(bookingIDs), bookingIDs[0]).
+		Scan(&a.UserID, &a.Name, &a.StartedAt)
+	return a, err
+}

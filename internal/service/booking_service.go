@@ -390,7 +390,31 @@ func (s *BookingService) GetByID(ctx context.Context, id int32, currentUserID in
 		out["startableFrom"] = s.startableFrom(ctx, b)
 	}
 	s.attachOvertime(ctx, out, id)
+	s.attachStartActor(ctx, out, id)
 	return out, nil
+}
+
+// attachStartActor menambahkan "startedBy" {id,name} & "startedAt" - siapa
+// yang menekan Mulai (supir/admin/penjaga ruangan) - untuk tab Keberangkatan,
+// selaras dengan "Dikirim oleh" di laporan pengembalian. Null bila belum
+// pernah dimulai / log-nya tidak ada.
+func (s *BookingService) attachStartActor(ctx context.Context, out map[string]any, bookingID int32) {
+	out["startedBy"] = nil
+	out["startedAt"] = nil
+	ids := []int32{bookingID}
+	if merges, err := s.q.GetBookingMerges(ctx, bookingID); err == nil {
+		for _, m := range merges {
+			ids = append(ids, m.OtherBookingID)
+		}
+	}
+	a, err := s.q.GetBookingStartActor(ctx, ids)
+	if err != nil {
+		return
+	}
+	out["startedAt"] = a.StartedAt
+	if a.UserID.Valid {
+		out["startedBy"] = map[string]any{"id": a.UserID.Int32, "name": a.Name.String}
+	}
 }
 
 // attachOvertime merges the driver_overtimes record (if any) into a booking

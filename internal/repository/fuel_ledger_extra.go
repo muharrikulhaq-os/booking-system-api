@@ -374,6 +374,8 @@ type FuelExpenseExtra struct {
 	VoidedAt     sql.NullTime
 	VoidedByName sql.NullString
 	VoidReason   sql.NullString
+	// Nama user yang menginput catatan (supir sendiri / admin).
+	RecordedByName sql.NullString
 	// Dari entri ledger DIRECT_FILL (NULL untuk catatan sebelum fitur saldo).
 	LedgerAccrued  sql.NullFloat64
 	LedgerDebit    sql.NullFloat64
@@ -395,8 +397,10 @@ func (q *Queries) GetFuelExpenseExtras(ctx context.Context, ids []int32) (map[in
 		SELECT fe.id, fe.source, fe."stationId", COALESCE(fs.name, fe."stationName"), fs.id IS NOT NULL,
 		       fe.reason, fe."voidedAt", vu.name, fe."voidReason",
 		       l.accrued::float8, l.debit::float8, l."balanceAfter"::float8, l."kmPerUnit"::float8,
-		       fe."voucherId", fv.code, fe."meterStartKwh"::float8, fe."meterEndKwh"::float8, fe."quantitySource"
+		       fe."voucherId", fv.code, fe."meterStartKwh"::float8, fe."meterEndKwh"::float8, fe."quantitySource",
+		       ru.name
 		FROM fuel_expenses fe
+		LEFT JOIN users ru ON ru.id = fe."recordedById"
 		LEFT JOIN fuel_vouchers fv ON fv.id = fe."voucherId"
 		LEFT JOIN fuel_stations fs ON fs.id = fe."stationId"
 		LEFT JOIN users vu ON vu.id = fe."voidedById"
@@ -413,7 +417,8 @@ func (q *Queries) GetFuelExpenseExtras(ctx context.Context, ids []int32) (map[in
 		if err := rows.Scan(&e.ID, &e.Source, &e.StationID, &e.StationName, &e.IsPartner,
 			&e.Reason, &e.VoidedAt, &e.VoidedByName, &e.VoidReason,
 			&e.LedgerAccrued, &e.LedgerDebit, &e.LedgerBalance, &e.KmPerUnit,
-			&e.VoucherID, &e.VoucherCode, &e.MeterStartKwh, &e.MeterEndKwh, &e.QuantitySource); err != nil {
+			&e.VoucherID, &e.VoucherCode, &e.MeterStartKwh, &e.MeterEndKwh, &e.QuantitySource,
+			&e.RecordedByName); err != nil {
 			return nil, err
 		}
 		out[e.ID] = e

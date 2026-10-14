@@ -120,6 +120,7 @@ func serializeFuelExpenseRow(fe repository.ListFuelExpensesRow, ex repository.Fu
 		"driverId":         fe.DriverId.Int32,
 		"driverName":       fe.DriverName.String,
 		"recordedById":     fe.RecordedById,
+		"recordedByName":   nullStr(ex.RecordedByName),
 		"odometerBefore":   fe.OdometerBefore.Int32,
 		"odometerAfter":    fe.OdometerAfter.Int32,
 		"distanceKm":       fe.DistanceKm.Int32,
