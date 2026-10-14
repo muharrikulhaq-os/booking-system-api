@@ -23,6 +23,17 @@ type ExtendedQuerier interface {
 	CountActiveBookingsByDriver(ctx context.Context, driverID, excludeBookingID int32) (int64, error)
 	GetVehicleIDByResourceID(ctx context.Context, resourceID int32) (int32, error)
 	VehicleOdometerFloor(ctx context.Context, vehicleID int32) (int32, error)
+	// Biaya perjalanan (trip_expense.go)
+	CreateTripExpense(ctx context.Context, p CreateTripExpenseParams) (int32, error)
+	GetTripExpense(ctx context.Context, id int32) (TripExpense, error)
+	ListTripExpensesByBooking(ctx context.Context, bookingID int32) ([]TripExpense, error)
+	VoidTripExpense(ctx context.Context, id, byID int32, reason string) (bool, error)
+	ListTripGateSuggestions(ctx context.Context, search string, limit int32) ([]string, error)
+	GetBookingTollBudget(ctx context.Context, bookingID int32) (sql.NullFloat64, error)
+	SetBookingTollBudget(ctx context.Context, bookingID int32, amount sql.NullFloat64) error
+	ListPendingTripReimbursements(ctx context.Context) ([]TripExpense, error)
+	MarkTripReimbursed(ctx context.Context, driverID int32, ids []int32, paidAt time.Time, note sql.NullString, byID int32) (int32, int64, float64, error)
+	ListTripReimbursements(ctx context.Context, limit int32) ([]TripReimbursement, error)
 	SetVehicleOdometerExact(ctx context.Context, vehicleID, odometer int32) error
 	GetFreeDriver(ctx context.Context) (int32, error)
 	GetDriverActiveVehicleID(ctx context.Context, driverID int32) (int32, error)

@@ -217,15 +217,18 @@ func (s *ReportService) CostSummary(ctx context.Context, start, end *time.Time) 
 	return map[string]any{
 		"totalFuelCost":        cur.TotalFuelCost,
 		"totalMaintenanceCost": cur.TotalMaintenanceCost,
+		"totalTripCost":        cur.TotalTripCost,
 		"totalCost":            cur.TotalCost,
 		"previousPeriod": map[string]any{
 			"totalFuelCost":        prev.TotalFuelCost,
 			"totalMaintenanceCost": prev.TotalMaintenanceCost,
+			"totalTripCost":        prev.TotalTripCost,
 			"totalCost":            prev.TotalCost,
 		},
 		"changePercent": map[string]any{
 			"fuel":        pct(cur.TotalFuelCost, prev.TotalFuelCost),
 			"maintenance": pct(cur.TotalMaintenanceCost, prev.TotalMaintenanceCost),
+			"trip":        pct(cur.TotalTripCost, prev.TotalTripCost),
 			"total":       pct(cur.TotalCost, prev.TotalCost),
 		},
 	}, nil

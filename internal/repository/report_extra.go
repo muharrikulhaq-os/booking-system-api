@@ -37,7 +37,10 @@ func (q *Queries) ReportOverview(ctx context.Context, start, end time.Time) (Ove
 		              JOIN bookings fb ON fb.id = fe."bookingId"
 		              WHERE fb."startDate" >= $1 AND fb."endDate" <= $2 AND fe."voidedAt" IS NULL), 0) +
 		    COALESCE((SELECT SUM(mr."totalCost")::float8 FROM maintenance_records mr
-		              WHERE mr."startDate" >= $1 AND mr."startDate" <= $2), 0) AS total_cost,
+		              WHERE mr."startDate" >= $1 AND mr."startDate" <= $2), 0) +
+		    COALESCE((SELECT SUM(te.amount)::float8 FROM trip_expenses te
+		              JOIN bookings tb ON tb.id = te."bookingId"
+		              WHERE tb."startDate" >= $1 AND tb."endDate" <= $2 AND te."voidedAt" IS NULL), 0) AS total_cost,
 		    ROUND(COALESCE(
 		        (COUNT(CASE WHEN b.status IN ('ONGOING','RETURNED','COMPLETED') THEN 1 END)::float8 /
 		         NULLIF(COUNT(b.id),0)) * 100, 0)::numeric, 2)::float8   AS avg_utilization,
@@ -224,7 +227,9 @@ func (q *Queries) ReportApprovalPerformance(ctx context.Context, start, end sql.
 type CostSummaryRow struct {
 	TotalFuelCost        float64 `json:"totalFuelCost"`
 	TotalMaintenanceCost float64 `json:"totalMaintenanceCost"`
-	TotalCost            float64 `json:"totalCost"`
+	// Biaya perjalanan: tol, parkir, lainnya (trip_expenses).
+	TotalTripCost float64 `json:"totalTripCost"`
+	TotalCost     float64 `json:"totalCost"`
 }
 
 func (q *Queries) ReportCostSummary(ctx context.Context, start, end sql.NullTime) (CostSummaryRow, error) {
@@ -235,15 +240,19 @@ func (q *Queries) ReportCostSummary(ctx context.Context, start, end sql.NullTime
 		                AND ($2::timestamptz IS NULL OR fe."createdAt" <= $2::timestamptz)), 0) AS fuel_cost,
 		    COALESCE((SELECT SUM(mr."totalCost")::float8 FROM maintenance_records mr
 		              WHERE ($1::timestamptz IS NULL OR mr."startDate" >= $1::timestamptz)
-		                AND ($2::timestamptz IS NULL OR mr."startDate" <= $2::timestamptz)), 0) AS maint_cost`
-	var fuelCost, maintCost float64
-	if err := q.db.QueryRowContext(ctx, query, start, end).Scan(&fuelCost, &maintCost); err != nil {
+		                AND ($2::timestamptz IS NULL OR mr."startDate" <= $2::timestamptz)), 0) AS maint_cost,
+		    COALESCE((SELECT SUM(te.amount)::float8 FROM trip_expenses te
+		              WHERE te."voidedAt" IS NULL AND ($1::timestamptz IS NULL OR te."occurredAt" >= $1::timestamptz)
+		                AND ($2::timestamptz IS NULL OR te."occurredAt" <= $2::timestamptz)), 0) AS trip_cost`
+	var fuelCost, maintCost, tripCost float64
+	if err := q.db.QueryRowContext(ctx, query, start, end).Scan(&fuelCost, &maintCost, &tripCost); err != nil {
 		return CostSummaryRow{}, err
 	}
 	return CostSummaryRow{
 		TotalFuelCost:        fuelCost,
 		TotalMaintenanceCost: maintCost,
-		TotalCost:            fuelCost + maintCost,
+		TotalTripCost:        tripCost,
+		TotalCost:            fuelCost + maintCost + tripCost,
 	}, nil
 }
 
@@ -255,6 +264,7 @@ type CostByVehicleRow struct {
 	PlateNumber     string  `json:"plateNumber"`
 	FuelCost        float64 `json:"fuelCost"`
 	MaintenanceCost float64 `json:"maintenanceCost"`
+	TripCost        float64 `json:"tripCost"`
 	TotalCost       float64 `json:"totalCost"`
 	TotalKm         float64 `json:"totalKm"`
 	AvgCostPerKm    float64 `json:"avgCostPerKm"`
@@ -271,6 +281,10 @@ func (q *Queries) ReportCostByVehicle(ctx context.Context, start, end sql.NullTi
 		              WHERE mr."vehicleId" = v.id
 		                AND ($1::timestamptz IS NULL OR mr."startDate" >= $1::timestamptz)
 		                AND ($2::timestamptz IS NULL OR mr."startDate" <= $2::timestamptz)), 0) AS maint_cost,
+		    COALESCE((SELECT SUM(te.amount)::float8 FROM trip_expenses te
+		              WHERE te."vehicleId" = v.id AND te."voidedAt" IS NULL
+		                AND ($1::timestamptz IS NULL OR te."occurredAt" >= $1::timestamptz)
+		                AND ($2::timestamptz IS NULL OR te."occurredAt" <= $2::timestamptz)), 0) AS trip_cost,
 		    COALESCE(SUM(CASE WHEN fe."odometerAfter" IS NOT NULL AND fe."odometerBefore" IS NOT NULL
 		                  THEN (fe."odometerAfter" - fe."odometerBefore")::float8 ELSE 0 END), 0) AS total_km
 		FROM vehicles v
@@ -288,10 +302,10 @@ func (q *Queries) ReportCostByVehicle(ctx context.Context, start, end sql.NullTi
 	var items []CostByVehicleRow
 	for rows.Next() {
 		var r CostByVehicleRow
-		if err := rows.Scan(&r.VehicleID, &r.Name, &r.PlateNumber, &r.FuelCost, &r.MaintenanceCost, &r.TotalKm); err != nil {
+		if err := rows.Scan(&r.VehicleID, &r.Name, &r.PlateNumber, &r.FuelCost, &r.MaintenanceCost, &r.TripCost, &r.TotalKm); err != nil {
 			return nil, err
 		}
-		r.TotalCost = r.FuelCost + r.MaintenanceCost
+		r.TotalCost = r.FuelCost + r.MaintenanceCost + r.TripCost
 		if r.TotalKm > 0 {
 			r.AvgCostPerKm = r.TotalCost / r.TotalKm
 		}
@@ -308,8 +322,18 @@ type CostByDepartmentRow struct {
 	BookingCount    int64   `json:"bookingCount"`
 	FuelCost        float64 `json:"fuelCost"`
 	MaintenanceCost float64 `json:"maintenanceCost"`
+	TripCost        float64 `json:"tripCost"`
 	TotalCost       float64 `json:"totalCost"`
 }
+
+// tripCostByDeptSQL: biaya perjalanan booking departemen d (rentang tanggal
+// booking sama dengan kolom lain di laporan departemen).
+const tripCostByDeptSQL = `COALESCE((SELECT SUM(te.amount)::float8 FROM trip_expenses te
+		              JOIN bookings tb ON tb.id = te."bookingId"
+		              JOIN users tu ON tu.id = tb."userId"
+		              WHERE tu."departmentId" = d.id AND te."voidedAt" IS NULL
+		                AND ($1::timestamptz IS NULL OR tb."startDate" >= $1::timestamptz)
+		                AND ($2::timestamptz IS NULL OR tb."endDate"   <= $2::timestamptz)), 0)`
 
 func (q *Queries) ReportCostByDepartment(ctx context.Context, start, end sql.NullTime) ([]CostByDepartmentRow, error) {
 	query := `
@@ -318,7 +342,8 @@ func (q *Queries) ReportCostByDepartment(ctx context.Context, start, end sql.Nul
 		    d.name,
 		    COUNT(DISTINCT b.id)                                           AS booking_count,
 		    COALESCE(SUM(fe."totalCost")::float8, 0)                    AS fuel_cost,
-		    0::float8                                                      AS maint_cost
+		    0::float8                                                      AS maint_cost,
+		    ` + tripCostByDeptSQL + `                                     AS trip_cost
 		FROM departments d
 		LEFT JOIN users u ON u."departmentId" = d.id
 		LEFT JOIN bookings b ON b."userId" = u.id
@@ -335,10 +360,10 @@ func (q *Queries) ReportCostByDepartment(ctx context.Context, start, end sql.Nul
 	var items []CostByDepartmentRow
 	for rows.Next() {
 		var r CostByDepartmentRow
-		if err := rows.Scan(&r.DepartmentID, &r.DepartmentName, &r.BookingCount, &r.FuelCost, &r.MaintenanceCost); err != nil {
+		if err := rows.Scan(&r.DepartmentID, &r.DepartmentName, &r.BookingCount, &r.FuelCost, &r.MaintenanceCost, &r.TripCost); err != nil {
 			return nil, err
 		}
-		r.TotalCost = r.FuelCost + r.MaintenanceCost
+		r.TotalCost = r.FuelCost + r.MaintenanceCost + r.TripCost
 		items = append(items, r)
 	}
 	return items, rows.Err()
@@ -350,6 +375,7 @@ type CostTrendRow struct {
 	Period          string  `json:"period"`
 	FuelCost        float64 `json:"fuelCost"`
 	MaintenanceCost float64 `json:"maintenanceCost"`
+	TripCost        float64 `json:"tripCost"`
 	TotalCost       float64 `json:"totalCost"`
 }
 
@@ -370,7 +396,9 @@ func (q *Queries) ReportCostTrend(ctx context.Context, groupBy string, start, en
 		    COALESCE((SELECT SUM(fe."totalCost")::float8 FROM fuel_expenses fe
 		              WHERE DATE_TRUNC($1, fe."createdAt") = bucket_start AND fe."voidedAt" IS NULL), 0) AS fuel_cost,
 		    COALESCE((SELECT SUM(mr."totalCost")::float8 FROM maintenance_records mr
-		              WHERE DATE_TRUNC($1, mr."startDate") = bucket_start), 0) AS maint_cost
+		              WHERE DATE_TRUNC($1, mr."startDate") = bucket_start), 0) AS maint_cost,
+		    COALESCE((SELECT SUM(te.amount)::float8 FROM trip_expenses te
+		              WHERE DATE_TRUNC($1, te."occurredAt") = bucket_start AND te."voidedAt" IS NULL), 0) AS trip_cost
 		FROM periods
 		ORDER BY bucket_start ASC`
 	rows, err := q.db.QueryContext(ctx, query, trunc, fmtStr, start, end)
@@ -381,10 +409,10 @@ func (q *Queries) ReportCostTrend(ctx context.Context, groupBy string, start, en
 	var items []CostTrendRow
 	for rows.Next() {
 		var r CostTrendRow
-		if err := rows.Scan(&r.Period, &r.FuelCost, &r.MaintenanceCost); err != nil {
+		if err := rows.Scan(&r.Period, &r.FuelCost, &r.MaintenanceCost, &r.TripCost); err != nil {
 			return nil, err
 		}
-		r.TotalCost = r.FuelCost + r.MaintenanceCost
+		r.TotalCost = r.FuelCost + r.MaintenanceCost + r.TripCost
 		items = append(items, r)
 	}
 	return items, rows.Err()
@@ -463,6 +491,7 @@ type DepartmentSummaryRow struct {
 	BookingCount    int64   `json:"bookingCount"`
 	FuelCost        float64 `json:"fuelCost"`
 	MaintenanceCost float64 `json:"maintenanceCost"`
+	TripCost        float64 `json:"tripCost"`
 	TotalCost       float64 `json:"totalCost"`
 	TopResource     string  `json:"topResource"`
 }
@@ -474,7 +503,8 @@ func (q *Queries) ReportDepartmentSummary(ctx context.Context, start, end sql.Nu
 		        d.id AS dept_id,
 		        d.name AS dept_name,
 		        COUNT(DISTINCT b.id)                                 AS booking_count,
-		        COALESCE(SUM(fe."totalCost")::float8, 0)           AS fuel_cost
+		        COALESCE(SUM(fe."totalCost")::float8, 0)           AS fuel_cost,
+		        ` + tripCostByDeptSQL + `                        AS trip_cost
 		    FROM departments d
 		    LEFT JOIN users u ON u."departmentId" = d.id
 		    LEFT JOIN bookings b ON b."userId" = u.id
@@ -498,7 +528,7 @@ func (q *Queries) ReportDepartmentSummary(ctx context.Context, start, end sql.Nu
 		)
 		SELECT
 		    ds.dept_id, ds.dept_name, ds.booking_count, ds.fuel_cost,
-		    0::float8 AS maint_cost,
+		    0::float8 AS maint_cost, ds.trip_cost,
 		    COALESCE(tr.resource_name, '') AS top_resource
 		FROM dept_stats ds
 		LEFT JOIN top_resource tr ON tr.dept_id = ds.dept_id AND tr.rn = 1
@@ -512,10 +542,10 @@ func (q *Queries) ReportDepartmentSummary(ctx context.Context, start, end sql.Nu
 	for rows.Next() {
 		var r DepartmentSummaryRow
 		if err := rows.Scan(&r.DepartmentID, &r.DepartmentName, &r.BookingCount,
-			&r.FuelCost, &r.MaintenanceCost, &r.TopResource); err != nil {
+			&r.FuelCost, &r.MaintenanceCost, &r.TripCost, &r.TopResource); err != nil {
 			return nil, err
 		}
-		r.TotalCost = r.FuelCost + r.MaintenanceCost
+		r.TotalCost = r.FuelCost + r.MaintenanceCost + r.TripCost
 		items = append(items, r)
 	}
 	return items, rows.Err()

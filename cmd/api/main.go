@@ -96,6 +96,7 @@ func main() {
 	settingSvc := service.NewMasterSettingService(db)
 	reportSvc := service.NewReportService(db)
 	dashboardSvc := service.NewDashboardService(db)
+	tripSvc := service.NewTripExpenseService(db)
 
 	// Perubahan yang dibuat sistem (transisi otomatis berbasis waktu) tidak
 	// lewat middleware DataChanged → disiarkan lewat publisher ini (B17).
@@ -128,6 +129,7 @@ func main() {
 	httph.NewDriverHandler(driverSvc).Register(v1)
 	httph.NewRoomKeeperHandler(roomKeeperSvc).Register(v1)
 	httph.NewBookingHandler(bookingSvc, attachSvc).Register(v1)
+	httph.NewTripExpenseHandler(tripSvc).Register(v1)
 	httph.NewFuelExpenseHandler(fuelSvc).Register(v1)
 	httph.NewFuelTypeHandler(fuelTypeSvc).Register(v1)
 	httph.NewFuelLedgerHandler(fuelLedgerSvc).Register(v1)
