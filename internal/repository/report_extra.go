@@ -38,9 +38,9 @@ func (q *Queries) ReportOverview(ctx context.Context, start, end time.Time) (Ove
 		              WHERE fb."startDate" >= $1 AND fb."endDate" <= $2 AND fe."voidedAt" IS NULL), 0) +
 		    COALESCE((SELECT SUM(mr."totalCost")::float8 FROM maintenance_records mr
 		              WHERE mr."startDate" >= $1 AND mr."startDate" <= $2), 0) AS total_cost,
-		    COALESCE(
+		    ROUND(COALESCE(
 		        (COUNT(CASE WHEN b.status IN ('ONGOING','RETURNED','COMPLETED') THEN 1 END)::float8 /
-		         NULLIF(COUNT(b.id),0)) * 100, 0)                        AS avg_utilization,
+		         NULLIF(COUNT(b.id),0)) * 100, 0)::numeric, 2)::float8   AS avg_utilization,
 		    COUNT(CASE WHEN b.status = 'OVERDUE' THEN 1 END)             AS overdue_count
 		FROM bookings b
 		WHERE b."startDate" >= $1 AND b."endDate" <= $2`
@@ -168,7 +168,7 @@ func (q *Queries) ReportBookingsByResource(ctx context.Context, start, end sql.N
 		    r.name,
 		    r.type,
 		    COUNT(b.id)                                                AS total_bookings,
-		    COALESCE(SUM(EXTRACT(EPOCH FROM (b."endDate" - b."startDate"))/3600), 0) AS total_hours
+		    ROUND(COALESCE(SUM(EXTRACT(EPOCH FROM (b."endDate" - b."startDate"))/3600), 0)::numeric, 2)::float8 AS total_hours
 		FROM resources r
 		LEFT JOIN bookings b ON b."resourceId" = r.id
 		    AND ($1::timestamptz IS NULL OR b."startDate" >= $1::timestamptz)
@@ -202,10 +202,10 @@ type ApprovalPerformanceRow struct {
 func (q *Queries) ReportApprovalPerformance(ctx context.Context, start, end sql.NullTime) (ApprovalPerformanceRow, error) {
 	query := `
 		SELECT
-		    COALESCE(AVG(EXTRACT(EPOCH FROM (b."approvedAt" - b."createdAt"))/3600), 0) AS avg_hours,
-		    COALESCE(
+		    ROUND(COALESCE(AVG(EXTRACT(EPOCH FROM (b."approvedAt" - b."createdAt"))/3600), 0)::numeric, 2)::float8 AS avg_hours,
+		    ROUND(COALESCE(
 		        COUNT(CASE WHEN EXTRACT(EPOCH FROM (b."approvedAt" - b."createdAt"))/3600 <= 24 THEN 1 END)::float8 /
-		        NULLIF(COUNT(b.id)::float8, 0) * 100, 0)                                AS within_24h_pct,
+		        NULLIF(COUNT(b.id)::float8, 0) * 100, 0)::numeric, 2)::float8           AS within_24h_pct,
 		    COUNT(b.id)                                                                  AS total_processed
 		FROM bookings b
 		WHERE b."approvedAt" IS NOT NULL
@@ -414,7 +414,7 @@ func (q *Queries) ReportDriverPerformance(ctx context.Context, start, end sql.Nu
 		    COALESCE(SUM(CASE WHEN fe."odometerAfter" IS NOT NULL AND fe."odometerBefore" IS NOT NULL
 		                  THEN (fe."odometerAfter" - fe."odometerBefore")::float8 ELSE 0 END), 0) AS total_km,
 		    COALESCE(SUM(fe."totalCost")::float8, 0)                         AS total_fuel_cost,
-		    COALESCE(AVG(dr.rating::float8), 0)                                AS avg_rating,
+		    ROUND(COALESCE(AVG(dr.rating::float8), 0)::numeric, 2)::float8     AS avg_rating,
 		    COUNT(DISTINCT dr.id)                                               AS total_reviews,
 		    COUNT(CASE WHEN b.status = 'OVERDUE' THEN 1 END)                   AS late_count
 		FROM drivers d

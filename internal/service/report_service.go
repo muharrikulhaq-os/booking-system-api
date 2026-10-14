@@ -300,11 +300,11 @@ func (s *ReportService) DriverTrips(ctx context.Context, start, end *time.Time) 
 			"totalTrips":           r.SpdTrips + r.NonSpdTrips,
 			"overtimeTrips":        r.OvertimeTrips,
 			"totalOvertimeMinutes": r.TotalOvertimeMinutes,
-			"totalOvertimeHours":   float64(r.TotalOvertimeMinutes) / 60,
+			"totalOvertimeHours":   round2(float64(r.TotalOvertimeMinutes) / 60),
 			"lemburTrips":          r.LemburTrips,
 			"totalLemburMinutes":   r.TotalLemburMinutes,
-			"totalLemburHours":     float64(r.TotalLemburMinutes) / 60,
-			"avgRating":            r.AvgRating,
+			"totalLemburHours":     round2(float64(r.TotalLemburMinutes) / 60),
+			"avgRating":            round2(r.AvgRating),
 			"totalReviews":         r.TotalReviews,
 		}
 	}
