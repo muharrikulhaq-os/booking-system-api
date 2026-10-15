@@ -47,6 +47,29 @@ type UpdateUserRequest struct {
 	PhoneNumber   string `json:"phoneNumber"`
 }
 
+// normalizePhone merapikan & memvalidasi nomor telepon: boleh +, spasi, -,
+// titik, kurung; 8-15 digit. "" tetap "" (kosong).
+func normalizePhone(p string) (string, error) {
+	p = strings.TrimSpace(p)
+	if p == "" {
+		return "", nil
+	}
+	digits := 0
+	for i, r := range p {
+		switch {
+		case r >= '0' && r <= '9':
+			digits++
+		case r == '+' && i == 0, r == ' ', r == '-', r == '.', r == '(', r == ')':
+		default:
+			return "", util.NewError(400, "nomor telepon hanya boleh berisi angka, +, spasi, atau -", util.ErrBadRequest)
+		}
+	}
+	if digits < 8 || digits > 15 || len(p) > 20 {
+		return "", util.NewError(400, "nomor telepon harus 8-15 digit", util.ErrBadRequest)
+	}
+	return p, nil
+}
+
 func serializeUser(u repository.ListUsersRow) map[string]any {
 	return map[string]any{
 		"id":           u.ID,
@@ -92,9 +115,15 @@ func (s *UserService) List(ctx context.Context, page, limit int, search *string,
 		return nil, 0, err
 	}
 
+	ids := make([]int32, len(rows))
+	for i, r := range rows {
+		ids[i] = r.ID
+	}
+	phones, _ := s.q.GetUserPhones(ctx, ids)
 	out := make([]map[string]any, len(rows))
 	for i, r := range rows {
 		out[i] = serializeUser(r)
+		out[i]["phoneNumber"] = phones[r.ID]
 	}
 	return out, total, nil
 }
@@ -117,16 +146,14 @@ func (s *UserService) GetByID(ctx context.Context, id int32) (map[string]any, er
 		"createdAt":    u.CreatedAt,
 	}
 
+	// Semua role (karyawan, admin, supir, penjaga ruangan).
+	if phone, err := s.q.GetUserPhone(ctx, id); err == nil {
+		out["phoneNumber"] = phone
+	}
+
 	if string(u.RoleName) == "DRIVER" {
 		if d, err := s.q.GetDriverByUserID(ctx, id); err == nil {
 			out["licenseNumber"] = d.LicenseNumber
-			out["phoneNumber"] = d.PhoneNumber
-		}
-	}
-
-	if string(u.RoleName) == "ROOM_KEEPER" {
-		if rk, err := s.q.GetRoomKeeperByUserID(ctx, id); err == nil {
-			out["phoneNumber"] = rk.PhoneNumber
 		}
 	}
 
@@ -137,6 +164,11 @@ func (s *UserService) Create(ctx context.Context, req CreateUserRequest, actor A
 	if _, err := s.q.GetUserByEmail(ctx, req.Email); err == nil {
 		return nil, util.ErrDuplicate
 	}
+	phone, err := normalizePhone(req.PhoneNumber)
+	if err != nil {
+		return nil, err
+	}
+	req.PhoneNumber = phone
 	hashed, err := util.HashPassword(req.Password)
 	if err != nil {
 		return nil, err
@@ -164,6 +196,15 @@ func (s *UserService) Create(ctx context.Context, req CreateUserRequest, actor A
 		return nil, err
 	}
 	full, _ := qtx.GetUserByID(ctx, user.ID)
+
+	// Karyawan (pemohon booking) wajib punya nomor supaya supir/admin bisa
+	// menghubungi bila tidak bertemu di titik jemput; admin opsional.
+	if string(full.RoleName) == "EMPLOYEE" && req.PhoneNumber == "" {
+		return nil, util.NewError(400, "nomor telepon wajib diisi untuk karyawan", util.ErrBadRequest)
+	}
+	if err := qtx.SetUserPhone(ctx, full.ID, req.PhoneNumber); err != nil {
+		return nil, err
+	}
 
 	if string(full.RoleName) == "DRIVER" {
 		if req.LicenseNumber == "" || req.PhoneNumber == "" {
@@ -204,12 +245,13 @@ func (s *UserService) Create(ctx context.Context, req CreateUserRequest, actor A
 	}
 
 	return map[string]any{
-		"id":         full.ID,
-		"employeeId": full.EmployeeId,
-		"name":       full.Name,
-		"email":      full.Email,
-		"role":       map[string]any{"id": full.RoleId, "name": string(full.RoleName)},
-		"department": map[string]any{"id": full.DepartmentId, "name": full.DepartmentName},
+		"id":          full.ID,
+		"employeeId":  full.EmployeeId,
+		"name":        full.Name,
+		"email":       full.Email,
+		"phoneNumber": req.PhoneNumber,
+		"role":        map[string]any{"id": full.RoleId, "name": string(full.RoleName)},
+		"department":  map[string]any{"id": full.DepartmentId, "name": full.DepartmentName},
 	}, nil
 }
 
@@ -232,6 +274,11 @@ func (s *UserService) Update(ctx context.Context, id int32, req UpdateUserReques
 	if existing, err := s.q.GetUserByEmployeeID(ctx, req.EmployeeID); err == nil && existing.ID != id {
 		return nil, util.NewError(409, "ID karyawan sudah dipakai user lain", util.ErrDuplicate)
 	}
+	phone, err := normalizePhone(req.PhoneNumber)
+	if err != nil {
+		return nil, err
+	}
+	req.PhoneNumber = phone
 
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -251,6 +298,13 @@ func (s *UserService) Update(ctx context.Context, id int32, req UpdateUserReques
 	}
 
 	full, _ := qtx.GetUserByID(ctx, id)
+
+	if string(full.RoleName) == "EMPLOYEE" && req.PhoneNumber == "" {
+		return nil, util.NewError(400, "nomor telepon wajib diisi untuk karyawan", util.ErrBadRequest)
+	}
+	if err := qtx.SetUserPhone(ctx, id, req.PhoneNumber); err != nil {
+		return nil, err
+	}
 
 	if string(full.RoleName) == "DRIVER" {
 		if req.LicenseNumber == "" || req.PhoneNumber == "" {
@@ -567,6 +621,7 @@ type BulkUserRow struct {
 	Password       string
 	RoleName       string
 	DepartmentName string
+	PhoneNumber    string // opsional (template lama tanpa kolom ini tetap jalan)
 }
 
 // BulkImportRowResult = hasil per baris agar admin tahu baris mana yang gagal.
@@ -619,6 +674,7 @@ func (s *UserService) BulkImport(ctx context.Context, rows []BulkUserRow) (map[s
 		roleName := strings.ToUpper(strings.TrimSpace(r.RoleName))
 		deptName := strings.ToLower(strings.TrimSpace(r.DepartmentName))
 		password := strings.TrimSpace(r.Password)
+		phone, perr := normalizePhone(r.PhoneNumber)
 
 		res := BulkImportRowResult{Row: r.Row, EmployeeID: employeeID, Name: name, Email: email}
 
@@ -640,6 +696,11 @@ func (s *UserService) BulkImport(ctx context.Context, rows []BulkUserRow) (map[s
 			continue
 		case !strings.Contains(email, "@") || !strings.Contains(email, "."):
 			fail("format email tidak valid")
+			continue
+		}
+
+		if perr != nil {
+			fail(perr.Error())
 			continue
 		}
 
@@ -683,7 +744,7 @@ func (s *UserService) BulkImport(ctx context.Context, rows []BulkUserRow) (map[s
 			continue
 		}
 
-		if _, cerr := s.q.CreateUser(ctx, repository.CreateUserParams{
+		created, cerr := s.q.CreateUser(ctx, repository.CreateUserParams{
 			EmployeeId:   employeeID,
 			Name:         name,
 			Email:        email,
@@ -691,7 +752,8 @@ func (s *UserService) BulkImport(ctx context.Context, rows []BulkUserRow) (map[s
 			IsActive:     true,
 			RoleId:       roleID,
 			DepartmentId: deptID,
-		}); cerr != nil {
+		})
+		if cerr != nil {
 			// employeeId & email UNIQUE di DB — terjemahkan agar mudah dipahami.
 			msg := cerr.Error()
 			switch {
@@ -703,6 +765,10 @@ func (s *UserService) BulkImport(ctx context.Context, rows []BulkUserRow) (map[s
 				fail("gagal menyimpan: " + msg)
 			}
 			continue
+		}
+
+		if phone != "" {
+			_ = s.q.SetUserPhone(ctx, created.ID, phone)
 		}
 
 		seenEmail[email] = true

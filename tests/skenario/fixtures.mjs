@@ -56,6 +56,8 @@ export async function createUser(code, role, extra = {}) {
   };
   if (role === ROLE.DRIVER) { body.licenseNumber ??= `SIM-${uniq()}`; body.phoneNumber ??= '0812000000'; }
   if (role === ROLE.ROOM_KEEPER) body.phoneNumber ??= '0813000000';
+  // Karyawan wajib punya nomor telepon (migrasi 000021).
+  if (role === ROLE.EMPLOYEE) body.phoneNumber ??= '0814000000';
   const r = await api('POST', '/users', { token: U.ADM.token, body });
   if (!ok2(r)) throw new Error(`buat user ${code} gagal: ${r.status} ${r.msg}`);
   const id = r.data.id;

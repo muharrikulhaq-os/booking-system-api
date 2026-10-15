@@ -391,6 +391,12 @@ func (s *BookingService) GetByID(ctx context.Context, id int32, currentUserID in
 	}
 	s.attachOvertime(ctx, out, id)
 	s.attachStartActor(ctx, out, id)
+	// Nomor pemohon - supaya supir/admin bisa menelepon (mis. tidak bertemu
+	// di titik jemput).
+	if u, ok := out["user"].(map[string]any); ok {
+		phone, _ := s.q.GetUserPhone(ctx, b.UserId)
+		u["phoneNumber"] = phone
+	}
 	return out, nil
 }
 

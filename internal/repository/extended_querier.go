@@ -17,6 +17,9 @@ type ExtendedQuerier interface {
 	CreateBookingMerge(ctx context.Context, primaryBookingID, mergedBookingID, mergedByID int32, reason string) (BookingMerge, error)
 	GetBookingMerges(ctx context.Context, bookingID int32) ([]BookingMergeInfoRow, error)
 	GetBookingStartActor(ctx context.Context, bookingIDs []int32) (BookingStartActor, error)
+	SetUserPhone(ctx context.Context, userID int32, phone string) error
+	GetUserPhone(ctx context.Context, userID int32) (string, error)
+	GetUserPhones(ctx context.Context, userIDs []int32) (map[int32]string, error)
 	InheritMergeDriverVehicle(ctx context.Context, mergedBookingID, driverID, vehicleID int32, driverValid, vehicleValid bool) error
 	InheritMergeResourceDriverVehicle(ctx context.Context, mergedBookingID, primaryResourceID, driverID, vehicleID int32, driverValid, vehicleValid bool) error
 	UpdateBookingDates(ctx context.Context, bookingID int32, startDate, endDate time.Time) error

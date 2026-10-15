@@ -277,6 +277,8 @@ var bulkColumnAliases = map[string]string{
 	"password": "password", "kata sandi": "password", "sandi": "password",
 	"role": "role", "peran": "role", "jabatan": "role",
 	"department": "department", "departemen": "department", "divisi": "department",
+	"phonenumber": "phoneNumber", "phone": "phoneNumber", "telepon": "phoneNumber",
+	"no telepon": "phoneNumber", "no. telepon": "phoneNumber", "no hp": "phoneNumber", "no. hp": "phoneNumber",
 }
 
 func normalizeHeader(s string) string {
@@ -297,7 +299,7 @@ func (h *UserHandler) BulkTemplate(c *fiber.Ctx) error {
 	const sheet = "Users"
 	f.SetSheetName(f.GetSheetName(0), sheet)
 
-	headers := []string{"employeeId", "name", "email", "password", "role", "department"}
+	headers := []string{"employeeId", "name", "email", "password", "role", "department", "phoneNumber"}
 	for i, hd := range headers {
 		cell, _ := excelize.CoordinatesToCellName(i+1, 1)
 		_ = f.SetCellValue(sheet, cell, hd)
@@ -312,7 +314,7 @@ func (h *UserHandler) BulkTemplate(c *fiber.Ctx) error {
 	if len(departments) > 0 {
 		exampleDept = departments[0]
 	}
-	example := []any{"EMP001", "Budi Santoso", "budi@perusahaan.com", "Password123!", exampleRole, exampleDept}
+	example := []any{"EMP001", "Budi Santoso", "budi@perusahaan.com", "Password123!", exampleRole, exampleDept, "081234567890"}
 	for i, v := range example {
 		cell, _ := excelize.CoordinatesToCellName(i+1, 2)
 		_ = f.SetCellValue(sheet, cell, v)
@@ -436,6 +438,7 @@ func (h *UserHandler) BulkImport(c *fiber.Ctx) error {
 			Password:       at(row, "password"),
 			RoleName:       at(row, "role"),
 			DepartmentName: at(row, "department"),
+			PhoneNumber:    at(row, "phoneNumber"),
 		})
 	}
 
