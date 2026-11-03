@@ -17,7 +17,10 @@ import (
 //   - supir pemegang     → tugas baru, atau mobil tugasnya dialihkan
 //   - supir yang diganti → tugasnya dilepas
 //   - pemilik mobil      → mobilnya (supir tetap) dipakai supir lain,
-//                          atau batal dipakai karena booking dialihkan
+//                          atau batal dipakai karena booking dialihkan.
+//                          Mobil tanpa supir tetap: supir yang sedang
+//                          MEMEGANGNYA (punya booking aktif dengan mobil itu)
+//                          diperlakukan sebagai pemilik.
 //
 // Supir yang bukan pemegang booking tidak bisa membuka detailnya (403), jadi
 // notifikasi untuk supir yang diganti & pemilik mobil sengaja tanpa
@@ -36,6 +39,17 @@ type vehicleBrief struct {
 	ownerID     sql.NullInt32
 	ownerUserID int32 // akun supir tetap; 0 = tidak ada
 	ownerName   string
+	// held: "pemilik" di atas bukan supir tetap, melainkan supir yang sedang
+	// memegang mobil ini (booking aktifnya) sebelum penugasan.
+	held bool
+}
+
+// ownedPhrase: cara menyebut hubungan pemilik dengan mobilnya di pesan.
+func (v vehicleBrief) ownedPhrase() string {
+	if v.held {
+		return "sedang dipegang "
+	}
+	return "milik "
 }
 
 // assignChange: keadaan sebelum & sesudah satu AssignVehicle.
@@ -115,7 +129,7 @@ func (c assignChange) notices() []assignNotice {
 	// ── Supir pemegang booking ──
 	ownerNote := ""
 	if c.borrowed() {
-		ownerNote = " Kendaraan ini milik " + c.newVehicle.ownerName + "."
+		ownerNote = " Kendaraan ini " + c.newVehicle.ownedPhrase() + c.newVehicle.ownerName + "."
 	}
 	ownNote := ""
 	if c.newDriverOwnPlate != "" {
@@ -155,10 +169,14 @@ func (c assignChange) notices() []assignNotice {
 	// Pemilik yang juga supir lama sudah diberi tahu lewat pesan di atas.
 	if c.borrowed() && c.newVehicle.ownerUserID != 0 && (vehicleChanged || newcomer) &&
 		!(c.prevDriverID.Valid && c.prevDriverID.Int32 == c.newVehicle.ownerID.Int32) {
-		out = append(out, assignNotice{c.newVehicle.ownerUserID, notifVehicleLent,
-			"Kendaraan Anda dipakai supir lain",
-			nv + " akan dikemudikan " + c.newDriverName + " pada " + c.schedule +
-				" karena penugasan dari admin.",
+		title, body := "Kendaraan Anda dipakai supir lain",
+			nv+" akan dikemudikan "+c.newDriverName+" pada "+c.schedule+" karena penugasan dari admin."
+		if c.newVehicle.held {
+			title = "Kendaraan yang Anda pegang dipakai supir lain"
+			body = nv + " (yang sedang Anda pegang) akan dikemudikan " + c.newDriverName + " pada " +
+				c.schedule + " karena penugasan dari admin. Tugas Anda yang memakai kendaraan ini tetap berjalan sesuai jadwalnya."
+		}
+		out = append(out, assignNotice{c.newVehicle.ownerUserID, notifVehicleLent, title, body,
 			map[string]any{"vehicleId": c.newVehicle.id}})
 	}
 
@@ -210,12 +228,20 @@ func (s *BookingService) loadVehicleBrief(ctx context.Context, vehicleID int32) 
 }
 
 // buildAssignChange merangkum perubahan AssignVehicle untuk notifikasi.
-// before = booking sebelum diubah, after = sesudahnya.
+// before = booking sebelum diubah, after = sesudahnya. newVehicleHolder =
+// supir yang memegang kendaraan baru SEBELUM penugasan (dibaca sebelum
+// pegangan disinkronkan, karena setelahnya bisa sudah berpindah).
 func (s *BookingService) buildAssignChange(ctx context.Context, before, after repository.GetBookingByIDRow,
-	newDriver repository.GetDriverByIDRow, newVehicleID int32) (assignChange, bool) {
+	newDriver repository.GetDriverByIDRow, newVehicleID int32, newVehicleHolder sql.NullInt32) (assignChange, bool) {
 	nv, ok := s.loadVehicleBrief(ctx, newVehicleID)
 	if !ok {
 		return assignChange{}, false
+	}
+	// Tanpa supir tetap → supir yang sedang memegangnya dianggap pemilik.
+	if !nv.ownerID.Valid && newVehicleHolder.Valid {
+		if d, err := s.q.GetDriverByID(ctx, newVehicleHolder.Int32); err == nil {
+			nv.ownerID, nv.ownerUserID, nv.ownerName, nv.held = newVehicleHolder, d.UserId, d.UserName, true
+		}
 	}
 	c := assignChange{
 		bookingID:       after.ID,
@@ -252,11 +278,11 @@ func (s *BookingService) buildAssignChange(ctx context.Context, before, after re
 
 // notifyAssignment mengirim semua notifikasi satu AssignVehicle.
 func (s *BookingService) notifyAssignment(ctx context.Context, before, after repository.GetBookingByIDRow,
-	newDriver repository.GetDriverByIDRow, newVehicleID int32) {
+	newDriver repository.GetDriverByIDRow, newVehicleID int32, newVehicleHolder sql.NullInt32) {
 	if s.notif == nil {
 		return
 	}
-	c, ok := s.buildAssignChange(ctx, before, after, newDriver, newVehicleID)
+	c, ok := s.buildAssignChange(ctx, before, after, newDriver, newVehicleID, newVehicleHolder)
 	if !ok {
 		// Data kendaraan gagal dimuat — minimal supir tetap tahu tugasnya.
 		s.notif.Notify(newDriver.UserId, "NEW_BOOKING", "Penugasan kendaraan",

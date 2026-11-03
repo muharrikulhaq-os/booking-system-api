@@ -150,3 +150,16 @@ func TestBookingComplete_NonSPDOnTime_NoOvertimeRecorded(t *testing.T) {
 		t.Fatal("did not expect overtime when the booking completed on/before schedule")
 	}
 }
+
+// Penumpang booking (passenger_service.go): default tanpa penumpang.
+func (m *MockQuerier) ListPassengerUserIDs(ctx context.Context, bookingID int32) ([]int32, error) {
+	return nil, nil
+}
+
+func (m *MockQuerier) IsBookingPassenger(ctx context.Context, bookingID, userID int32) (bool, error) {
+	return false, nil
+}
+
+func (m *MockQuerier) ListBookingPassengers(ctx context.Context, bookingIDs []int32) ([]repository.BookingPassenger, error) {
+	return nil, nil
+}

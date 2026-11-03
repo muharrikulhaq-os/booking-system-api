@@ -247,7 +247,7 @@ func TestNotifyAssignment_LoadsNamesAndOwners(t *testing.T) {
 	after.ResourceId, after.ResourceName = 502, "Innova"
 	after.PlateNumber = sql.NullString{String: "B 2 BB", Valid: true}
 
-	svc.notifyAssignment(context.Background(), before, after, m.drvRows[2], 20)
+	svc.notifyAssignment(context.Background(), before, after, m.drvRows[2], 20, sql.NullInt32{})
 
 	got := map[int32]repository.CreateNotificationParams{}
 	for _, n := range m.sent {
@@ -267,5 +267,62 @@ func TestNotifyAssignment_LoadsNamesAndOwners(t *testing.T) {
 	}
 	if got[33].RelatedEntityID.Valid {
 		t.Error("notifikasi pemilik mobil tidak boleh menautkan booking")
+	}
+}
+
+func TestAssignNotices_HeldCarNoFixedDriver(t *testing.T) {
+	// Mobil D tanpa supir tetap, tapi sedang dipegang Q (booking aktifnya).
+	// P tetap supirnya; mobil dialihkan dari A (milik P) ke D → Q diberi tahu.
+	held := carD
+	held.ownerID, held.ownerUserID, held.ownerName, held.held = sql.NullInt32{Int32: 3, Valid: true}, 33, "Q", true
+	c := withPrevDriver(withNewDriver(baseChange(), 1, 11, "P"), 1, 11, "P")
+	c.prevVehicle, c.prevVehicleAssigned, c.newVehicle = &carA, true, held
+	got := byUser(t, c.notices())
+	expectRecipients(t, got, 100, 11, 33)
+	expectNotice(t, got, 11, notifBookingReassigned, "sedang dipegang Q")
+	expectNotice(t, got, 33, notifVehicleLent, "Kendaraan yang Anda pegang", "dikemudikan P", "tetap berjalan")
+}
+
+func TestNotifyAssignment_HolderTreatedAsOwner(t *testing.T) {
+	// Mobil B (resource 502) TANPA supir tetap, dipegang Q sebelum penugasan.
+	fixed := func(id int32) sql.NullInt32 { return sql.NullInt32{Int32: id, Valid: true} }
+	m := &assignQuerier{
+		notifQuerier: &notifQuerier{MockQuerier: &MockQuerier{}},
+		vehicles: map[int32]repository.GetVehicleByIDRow{
+			10: {ID: 10, ResourceId: 501, ResourceName: "Avanza", PlateNumber: "B 1 AA", FixedDriverId: fixed(1)},
+			20: {ID: 20, ResourceId: 502, ResourceName: "Innova", PlateNumber: "B 2 BB"},
+		},
+		byRes: map[int32]int32{501: 10, 502: 20},
+		drvRows: map[int32]repository.GetDriverByIDRow{
+			1: {ID: 1, UserId: 11, UserName: "P"},
+			3: {ID: 3, UserId: 33, UserName: "Q"},
+		},
+	}
+	svc := &BookingService{q: m, notif: &NotificationService{q: m, hub: ws.NewHub()}}
+	start := time.Date(2026, 10, 6, 1, 0, 0, 0, time.UTC)
+	before := repository.GetBookingByIDRow{ID: 5, UserId: 100, ResourceId: 501, ResourceName: "Avanza", StartDate: start,
+		AssignedDriverId: fixed(1), AssignedVehicleId: fixed(10)}
+	after := before
+	after.ResourceId, after.ResourceName, after.AssignedVehicleId = 502, "Innova", fixed(20)
+
+	svc.notifyAssignment(context.Background(), before, after, m.drvRows[1], 20, fixed(3))
+
+	var toQ *repository.CreateNotificationParams
+	for i := range m.sent {
+		if m.sent[i].UserID == 33 {
+			toQ = &m.sent[i]
+		}
+	}
+	if toQ == nil || toQ.Type != notifVehicleLent || !strings.Contains(toQ.Body, "dikemudikan P") {
+		t.Fatalf("pemegang Q tidak diberi tahu: %+v", m.sent)
+	}
+
+	// Tanpa pemegang & tanpa supir tetap → tidak ada "pemilik" yang diberi tahu.
+	m.sent = nil
+	svc.notifyAssignment(context.Background(), before, after, m.drvRows[1], 20, sql.NullInt32{})
+	for _, n := range m.sent {
+		if n.Type == notifVehicleLent {
+			t.Fatalf("tak ada pemilik, tapi ada notifikasi pinjam: %+v", n)
+		}
 	}
 }

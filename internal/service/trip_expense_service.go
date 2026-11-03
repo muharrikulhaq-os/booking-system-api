@@ -51,7 +51,12 @@ func (s *TripExpenseService) Mode(ctx context.Context) string {
 }
 
 func (s *TripExpenseService) Config(ctx context.Context) map[string]any {
-	return map[string]any{"mode": s.Mode(ctx)}
+	mode := s.Mode(ctx)
+	categories := []string{tripCategoryToll, tripCategoryParking}
+	if mode == TripModeFull {
+		categories = append(categories, tripCategoryOther)
+	}
+	return map[string]any{"mode": mode, "categories": categories}
 }
 
 // ── Validasi (murni) ────────────────────────────────────────────────────────
@@ -102,9 +107,16 @@ func normalizeTripExpense(mode string, req CreateTripExpenseRequest) (CreateTrip
 		category = tripCategoryToll
 	}
 
+	// Parkir (kedua mode): nominal + foto karcis, lokasi opsional di note.
+	// Uang siapa dihitung dari bekal parkir booking, bukan per transaksi.
+	if category == tripCategoryParking {
+		out.Category = tripCategoryParking
+		return out, nil
+	}
+
 	if mode == TripModeSimple {
 		if category != tripCategoryToll {
-			return out, tripBadRequest("hanya biaya tol yang bisa dicatat")
+			return out, tripBadRequest("hanya biaya tol atau parkir yang bisa dicatat")
 		}
 		out.Category = tripCategoryToll
 		point := strings.ToUpper(strings.TrimSpace(req.TollPoint))
@@ -117,7 +129,7 @@ func normalizeTripExpense(mode string, req CreateTripExpenseRequest) (CreateTrip
 
 	// FULL
 	switch category {
-	case tripCategoryToll, tripCategoryParking, tripCategoryOther:
+	case tripCategoryToll, tripCategoryOther:
 	default:
 		return out, tripBadRequest("jenis biaya tidak dikenal")
 	}
@@ -174,7 +186,7 @@ func canRecordTrip(b repository.GetBookingByIDRow, role string, driverID int32) 
 func (s *TripExpenseService) canViewBooking(ctx context.Context, b repository.GetBookingByIDRow, userID int32, role string) error {
 	switch role {
 	case "EMPLOYEE":
-		if b.UserId != userID {
+		if !employeeCanView(ctx, s.q, b, userID) {
 			return util.ErrForbidden
 		}
 	case "DRIVER":
@@ -289,9 +301,10 @@ func (s *TripExpenseService) ListForBooking(ctx context.Context, bookingID, user
 	if err := s.canViewBooking(ctx, b, userID, role); err != nil {
 		return nil, err
 	}
+	lead := s.parkingLeadID(ctx, bookingID)
 	var all []repository.TripExpense
 	seen := map[int32]bool{}
-	for _, id := range s.tripBookingIDs(ctx, bookingID) {
+	for _, id := range append(s.tripBookingIDs(ctx, lead), bookingID) {
 		list, err := s.q.ListTripExpensesByBooking(ctx, id)
 		if err != nil {
 			return nil, err
@@ -308,10 +321,12 @@ func (s *TripExpenseService) ListForBooking(ctx context.Context, bookingID, user
 	for i, e := range all {
 		items[i] = serializeTripExpense(e)
 	}
+	summary := tripSummary(all, budget)
+	summary["parking"] = s.parkingInfo(ctx, lead, all)
 	return map[string]any{
 		"mode":    s.Mode(ctx),
 		"items":   items,
-		"summary": tripSummary(all, budget),
+		"summary": summary,
 	}, nil
 }
 
@@ -335,6 +350,11 @@ func (s *TripExpenseService) Create(ctx context.Context, bookingID int32, req Cr
 	n, err := normalizeTripExpense(mode, req)
 	if err != nil {
 		return nil, err
+	}
+	if n.Category == tripCategoryParking {
+		if err := s.ensureParkingOpen(ctx, bookingID); err != nil {
+			return nil, err
+		}
 	}
 	occurred := time.Now().UTC()
 	if n.OccurredAt != nil && !n.OccurredAt.IsZero() {
@@ -382,6 +402,11 @@ func (s *TripExpenseService) Void(ctx context.Context, id int32, reason string, 
 	}
 	if e.ReimbursementID.Valid {
 		return util.NewError(409, "catatan yang sudah direimburse tidak bisa dibatalkan", util.ErrConflict)
+	}
+	if e.Category == tripCategoryParking {
+		if err := s.ensureParkingOpen(ctx, e.BookingID); err != nil {
+			return err
+		}
 	}
 	ok, err := s.q.VoidTripExpense(ctx, id, actor.UserID, reason)
 	if err != nil {
@@ -524,6 +549,7 @@ func (s *TripExpenseService) ListReimbursements(ctx context.Context) ([]map[stri
 			"note":         nullStr(r.Note),
 			"createdBy":    r.CreatedByName,
 			"expenseCount": r.ExpenseCount,
+			"parkingCount": r.ParkingCount,
 			"createdAt":    r.CreatedAt,
 		}
 	}

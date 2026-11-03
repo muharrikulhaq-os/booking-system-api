@@ -138,7 +138,30 @@ func (s *AttachmentService) UploadForRoom(ctx context.Context, roomID, uploaderI
 		row.FilePath, row.FileName, row.FileType, row.FileSize, row.Description, row.CreatedAt), nil
 }
 
-func (s *AttachmentService) UploadForBooking(ctx context.Context, bookingID, uploaderID int32, fh *multipart.FileHeader, description string) (map[string]any, error) {
+// canUploadBookingAttachment: siapa yang boleh menambah lampiran booking.
+// Supir TIDAK boleh (bukti perjalanan supir lewat foto keberangkatan, BBM,
+// tol, & laporan pengembalian - bukan lampiran booking). Karyawan hanya ke
+// booking miliknya sendiri; admin & penjaga ruangan seperti sebelumnya.
+func (s *AttachmentService) canUploadBookingAttachment(ctx context.Context, bookingID, actorID int32, role string) error {
+	b, err := s.q.GetBookingByID(ctx, bookingID)
+	if err != nil {
+		return util.ErrNotFound
+	}
+	switch role {
+	case "ADMIN", "ROOM_KEEPER":
+		return nil
+	case "EMPLOYEE":
+		if b.UserId == actorID {
+			return nil
+		}
+	}
+	return util.NewError(403, "Anda tidak dapat menambah lampiran pada booking ini", util.ErrForbidden)
+}
+
+func (s *AttachmentService) UploadForBooking(ctx context.Context, bookingID, uploaderID int32, role string, fh *multipart.FileHeader, description string) (map[string]any, error) {
+	if err := s.canUploadBookingAttachment(ctx, bookingID, uploaderID, role); err != nil {
+		return nil, err
+	}
 	filePath, err := util.SaveUploadedFile(fh, "booking")
 	if err != nil {
 		return nil, util.NewError(400, err.Error(), util.ErrBadRequest)
@@ -192,10 +215,18 @@ func (s *AttachmentService) UploadReturnPhoto(ctx context.Context, bookingID, up
 	}, nil
 }
 
-func (s *AttachmentService) Delete(ctx context.Context, id int32) error {
+// Delete: admin boleh menghapus lampiran apa pun. Selain admin hanya lampiran
+// BOOKING yang diunggahnya sendiri - supir tidak bisa menghapus apa pun, dan
+// lampiran kendaraan/ruangan tetap urusan admin.
+func (s *AttachmentService) Delete(ctx context.Context, id, actorID int32, role string) error {
 	att, err := s.q.GetAttachmentByID(ctx, id)
 	if err != nil {
 		return util.ErrNotFound
+	}
+	if role != "ADMIN" {
+		if role == "DRIVER" || !att.BookingId.Valid || att.UploadedById != actorID {
+			return util.NewError(403, "Anda tidak dapat menghapus lampiran ini", util.ErrForbidden)
+		}
 	}
 	if err = s.q.DeleteAttachment(ctx, id); err != nil {
 		return err

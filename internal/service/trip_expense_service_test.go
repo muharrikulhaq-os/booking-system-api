@@ -28,7 +28,7 @@ func TestNormalizeTripExpense_Simple(t *testing.T) {
 		{"tanpa titik tol", CreateTripExpenseRequest{Amount: 1, ProofPhotoURL: "p"}, "Tol Masuk atau Tol Keluar"},
 		{"tanpa foto", CreateTripExpenseRequest{Amount: 1, TollPoint: "EXIT"}, "foto struk"},
 		{"nominal nol", CreateTripExpenseRequest{TollPoint: "EXIT", ProofPhotoURL: "p"}, "nominal wajib"},
-		{"parkir di mode sederhana", CreateTripExpenseRequest{Category: "PARKING", Amount: 1, ProofPhotoURL: "p"}, "hanya biaya tol"},
+		{"lainnya di mode sederhana", CreateTripExpenseRequest{Category: "OTHER", Amount: 1, ProofPhotoURL: "p"}, "hanya biaya tol atau parkir"},
 	}
 	for _, tc := range bad {
 		t.Run(tc.name, func(t *testing.T) {

@@ -138,7 +138,7 @@ func TopicsForPath(path string) []string {
 		// Pengisian/voucher/saldo memajukan odometer & mengubah saldo kendaraan.
 		return []string{TopicFuel, TopicVehicle}
 	// Biaya perjalanan (tol/parkir) & reimburse tampil di detail booking & laporan.
-	case "trip-expenses", "trip-reimbursements":
+	case "trip-expenses", "trip-reimbursements", "parking-settlements":
 		return []string{TopicBooking}
 	case "fuel-types", "fuel-stations", "master-settings", "settings":
 		return []string{TopicFuel}

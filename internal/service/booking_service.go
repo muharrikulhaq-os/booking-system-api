@@ -39,6 +39,9 @@ type CreateBookingRequest struct {
 	// tertolak). Diabaikan untuk booking ruangan.
 	PickupLocation   string     `json:"pickupLocation" validate:"omitempty,max=255"`
 	Destination      string     `json:"destination"    validate:"omitempty,max=255"`
+	// Karyawan yang ikut (booking kendaraan) — booking tetap satu atas nama
+	// pemesan. Lihat passenger_service.go.
+	PassengerIDs []int32 `json:"passengerIds"`
 }
 
 type ApproveBookingRequest struct {
@@ -375,7 +378,7 @@ func (s *BookingService) GetByID(ctx context.Context, id int32, currentUserID in
 	if err != nil {
 		return nil, util.ErrNotFound
 	}
-	if currentRole == "EMPLOYEE" && int(b.UserId) != currentUserID {
+	if currentRole == "EMPLOYEE" && !employeeCanView(ctx, s.q, b, int32(currentUserID)) {
 		return nil, util.ErrForbidden
 	}
 	if currentRole == "DRIVER" {
@@ -384,6 +387,12 @@ func (s *BookingService) GetByID(ctx context.Context, id int32, currentUserID in
 			return nil, util.ErrForbidden
 		}
 	}
+	return s.GetByIDFor(ctx, b)
+}
+
+// GetByIDFor: isi detail booking (tanpa cek akses — pemanggil sudah memeriksa).
+func (s *BookingService) GetByIDFor(ctx context.Context, b repository.GetBookingByIDRow) (map[string]any, error) {
+	id := b.ID
 	out := serializeBookingByID(b)
 	// Kapan tombol Mulai boleh dipakai (setting mulai lebih awal).
 	if b.Status == repository.BookingStatusAPPROVED {
@@ -397,6 +406,7 @@ func (s *BookingService) GetByID(ctx context.Context, id int32, currentUserID in
 		phone, _ := s.q.GetUserPhone(ctx, b.UserId)
 		u["phoneNumber"] = phone
 	}
+	s.attachPassengers(ctx, out, b)
 	return out, nil
 }
 
@@ -507,11 +517,12 @@ func (s *BookingService) Create(ctx context.Context, req CreateBookingRequest, a
 	explicitDriverPick := false
 	switch {
 	case fixedDriverID != 0:
+		// Kendaraannya = kendaraan yang dipesan (miliknya). Dulu diambil dari
+		// booking aktif supir, jadi saat supir tetap sedang meminjam mobil
+		// lain, booking baru untuk mobilnya ikut tertulis mobil pinjaman itu.
 		driverID = sql.NullInt32{Int32: fixedDriverID, Valid: true}
 		explicitDriverPick = true
-		if vid, err := s.q.GetDriverActiveVehicleID(ctx, fixedDriverID); err == nil {
-			vehicleID = sql.NullInt32{Int32: vid, Valid: true}
-		}
+		vehicleID = sql.NullInt32{Int32: bookedVehicleID, Valid: true}
 	case req.DriverID != nil:
 		// Supir pilihan pemohon wajib divalidasi di sini: daftar pilihan di FE
 		// sudah menyaring supir non-aktif, tapi driverId datang dari request
@@ -581,6 +592,21 @@ func (s *BookingService) Create(ctx context.Context, req CreateBookingRequest, a
 		}
 	}
 
+	// Karyawan yang ikut (kendaraan saja); jumlah penumpang minimal
+	// 1 (pemesan) + karyawan yang ikut.
+	var passengerIDs []int32
+	if isVehicle && len(req.PassengerIDs) > 0 {
+		capacity, _ := s.vehicleCapacity(ctx, req.ResourceID)
+		ids, perr := normalizePassengerIDs(ctx, s.q, int32(userID), req.PassengerIDs, capacity)
+		if perr != nil {
+			return nil, perr
+		}
+		passengerIDs = ids
+		if need := int32(len(ids)) + 1; req.PassengerCount < need {
+			req.PassengerCount = need
+		}
+	}
+
 	b, err := s.insertBookingOnce(ctx, repository.CreateBookingParams{
 		UserId:            int32(userID),
 		ResourceId:        req.ResourceID,
@@ -598,7 +624,13 @@ func (s *BookingService) Create(ctx context.Context, req CreateBookingRequest, a
 
 	logAudit(ctx, s.q, actor, "CREATE", "Booking", b.ID, "Booking dibuat")
 
+	var addedPassengers []int32
+	if len(passengerIDs) > 0 {
+		addedPassengers, _ = s.q.ReplaceBookingPassengers(ctx, b.ID, passengerIDs, int32(userID))
+	}
+
 	full, _ := s.q.GetBookingByID(ctx, b.ID)
+	s.notifyPassengersAdded(ctx, full, addedPassengers)
 
 	// Notifikasi: booking baru butuh persetujuan → semua admin; supir yang
 	// sudah dipilih/otomatis ditugaskan ikut tahu ada booking masuk.
@@ -665,6 +697,8 @@ func (s *BookingService) Cancel(ctx context.Context, id int32, actor AuditActor,
 		}
 		s.notifyDriver(ctx, b.AssignedDriverId, "BOOKING_CANCELLED", "Booking dibatalkan",
 			bookingLabel(b)+" — dibatalkan, Anda tidak jadi bertugas", id)
+		s.notifyPassengers(ctx, id, "BOOKING_CANCELLED", "Perjalanan dibatalkan",
+			"Perjalanan yang Anda ikuti dibatalkan: "+bookingLabel(b)+".")
 	}
 	full, _ := s.q.GetBookingByID(ctx, id)
 	return serializeBookingByID(full), nil
@@ -915,6 +949,9 @@ func (s *BookingService) Approve(ctx context.Context, id int32, req ApproveBooki
 		// Supir yang ditugaskan → booking resmi jadi tugasnya.
 		s.notifyDriver(ctx, full.AssignedDriverId, "NEW_BOOKING", "Booking disetujui",
 			driverTripLabel(full)+" — disetujui, Anda bertugas", full.ID)
+		// Karyawan yang ikut.
+		s.notifyPassengers(ctx, full.ID, "BOOKING_APPROVED", "Perjalanan disetujui",
+			"Perjalanan yang Anda ikuti disetujui: "+bookingLabel(full)+".")
 		// Booking ruangan → beri tahu room keeper.
 		if full.ResourceType == repository.ResourceTypeROOM {
 			s.notif.NotifyRoomKeepers("ROOM_BOOKED", "Ruangan dipesan",
@@ -963,6 +1000,8 @@ func (s *BookingService) Reject(ctx context.Context, id int32, req RejectBooking
 			"Booking Anda ditolak", map[string]any{"bookingId": id, "note": req.Note})
 		s.notifyDriver(ctx, b.AssignedDriverId, "BOOKING_REJECTED", "Booking ditolak",
 			bookingLabel(b)+" — ditolak admin, Anda tidak jadi bertugas", id)
+		s.notifyPassengers(ctx, id, "BOOKING_REJECTED", "Perjalanan ditolak",
+			"Perjalanan yang Anda ikuti ditolak admin: "+bookingLabel(b)+".")
 	}
 	go util.SendBookingStatusEmail(b.UserName, b.UserName, int(id), b.ResourceName, "REJECTED", req.Note)
 	return serializeBookingByID(full), nil
@@ -1028,6 +1067,13 @@ func (s *BookingService) AssignVehicle(ctx context.Context, id int32, req Assign
 		return nil, util.NewError(409, "kendaraan ini sedang/akan menjalani maintenance pada tanggal tersebut", util.ErrConflict)
 	}
 
+	// Pemegang kendaraan baru SEBELUM penugasan - untuk notifikasi bila
+	// kendaraan tanpa supir tetap (setelah sinkron pegangan sudah berpindah).
+	var newVehicleHolder sql.NullInt32
+	if h, herr := s.q.GetVehicleCurrentAssignment(ctx, req.VehicleID); herr == nil {
+		newVehicleHolder = sql.NullInt32{Int32: h.DriverId, Valid: true}
+	}
+
 	if err = s.q.AssignVehicleAndUpdateResource(ctx, id, req.DriverID, req.VehicleID, vehicle.ResourceId); err != nil {
 		return nil, err
 	}
@@ -1046,7 +1092,16 @@ func (s *BookingService) AssignVehicle(ctx context.Context, id int32, req Assign
 
 	// Pemohon, supir baru, supir yang diganti, dan pemilik mobil masing-masing
 	// mendapat pesan sesuai posisinya - lihat booking_assign_notify.go.
-	s.notifyAssignment(ctx, b, full, driver, vehicle.ID)
+	s.notifyAssignment(ctx, b, full, driver, vehicle.ID, newVehicleHolder)
+	if b.AssignedDriverId.Int32 != driver.ID || b.AssignedVehicleId.Int32 != vehicle.ID {
+		title := "Supir & kendaraan ditugaskan"
+		if b.AssignedDriverId.Valid {
+			title = "Supir / kendaraan dialihkan"
+		}
+		s.notifyPassengers(ctx, id, notifBookingReassigned, title,
+			"Perjalanan "+formatWIB(full.StartDate)+": "+vehicleLabel(vehicle.ResourceName, vehicle.PlateNumber)+
+				" dengan supir "+driver.UserName+".")
+	}
 
 	return serializeBookingByID(full), nil
 }
@@ -1692,7 +1747,7 @@ func (s *BookingService) GetActivity(ctx context.Context, id int32, callerID int
 	// Akses disamakan dengan GetByID: admin/room-keeper bebas, employee hanya
 	// pemilik, driver hanya yang ditugaskan. (Sebelumnya cuma admin/pemilik →
 	// driver kena 403 dan timeline hilang di detail booking.)
-	if callerRole == "EMPLOYEE" && int(b.UserId) != callerID {
+	if callerRole == "EMPLOYEE" && !employeeCanView(ctx, s.q, b, int32(callerID)) {
 		return nil, util.ErrForbidden
 	}
 	if callerRole == "DRIVER" {
@@ -1933,7 +1988,7 @@ func (s *BookingService) GetMergeInfo(ctx context.Context, id int32, callerID in
 	if err != nil {
 		return nil, util.ErrNotFound
 	}
-	if callerRole == "EMPLOYEE" && int(b.UserId) != callerID {
+	if callerRole == "EMPLOYEE" && !employeeCanView(ctx, s.q, b, int32(callerID)) {
 		return nil, util.ErrForbidden
 	}
 	if callerRole == "DRIVER" {
@@ -2071,7 +2126,7 @@ func (s *BookingService) GetReturnReport(ctx context.Context, bookingID int32, c
 			return nil, util.ErrForbidden
 		}
 	} else if callerRole == "EMPLOYEE" {
-		if int(b.UserId) != callerID {
+		if !employeeCanView(ctx, s.q, b, int32(callerID)) {
 			return nil, util.ErrForbidden
 		}
 	} else if callerRole != "ADMIN" && callerRole != "ROOM_KEEPER" {

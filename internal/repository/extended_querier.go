@@ -20,6 +20,20 @@ type ExtendedQuerier interface {
 	SetUserPhone(ctx context.Context, userID int32, phone string) error
 	GetUserPhone(ctx context.Context, userID int32) (string, error)
 	GetUserPhones(ctx context.Context, userIDs []int32) (map[int32]string, error)
+	GetBookingParkingAllowance(ctx context.Context, bookingID int32) (sql.NullFloat64, error)
+	SetBookingParkingAllowance(ctx context.Context, bookingID int32, amount sql.NullFloat64) error
+	GetParkingSettlement(ctx context.Context, bookingID int32) (ParkingSettlement, error)
+	ListParkingSettlements(ctx context.Context, limit int32) ([]ParkingSettlement, error)
+	ListPendingParking(ctx context.Context, bookingIDs []int32) ([]PendingParking, error)
+	CreateParkingSettlement(ctx context.Context, p CreateParkingSettlementParams) (bool, error)
+	CreateTripReimbursement(ctx context.Context, driverID int32, amount float64, paidAt time.Time, note sql.NullString, byID int32) (int32, error)
+	ListBookingPassengers(ctx context.Context, bookingIDs []int32) ([]BookingPassenger, error)
+	ReplaceBookingPassengers(ctx context.Context, bookingID int32, userIDs []int32, addedByID int32) ([]int32, error)
+	IsBookingPassenger(ctx context.Context, bookingID, userID int32) (bool, error)
+	ListPassengerUserIDs(ctx context.Context, bookingID int32) ([]int32, error)
+	ListPassengerTrips(ctx context.Context, userID int32, limit int32) ([]PassengerTrip, error)
+	LookupActiveUsers(ctx context.Context, search string, ids []int32, limit int32) ([]UserLookup, error)
+	SetBookingPassengerCount(ctx context.Context, bookingID, count int32) error
 	InheritMergeDriverVehicle(ctx context.Context, mergedBookingID, driverID, vehicleID int32, driverValid, vehicleValid bool) error
 	InheritMergeResourceDriverVehicle(ctx context.Context, mergedBookingID, primaryResourceID, driverID, vehicleID int32, driverValid, vehicleValid bool) error
 	UpdateBookingDates(ctx context.Context, bookingID int32, startDate, endDate time.Time) error

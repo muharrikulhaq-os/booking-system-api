@@ -32,6 +32,11 @@ func (h *TripExpenseHandler) Register(r fiber.Router) {
 	r.Get("/bookings/:id/trip-expenses", auth, h.ListForBooking)
 	r.Post("/bookings/:id/trip-expenses", auth, middleware.RequireRole("ADMIN", "DRIVER"), h.Create)
 	r.Patch("/bookings/:id/toll-budget", auth, admin, h.SetTollBudget)
+	// Uang parkir — docs/RANCANGAN_PARKIR_PENUMPANG.md §2.
+	r.Patch("/bookings/:id/parking-allowance", auth, admin, h.SetParkingAllowance)
+	r.Get("/parking-settlements/pending", auth, admin, h.PendingParking)
+	r.Get("/parking-settlements", auth, admin, h.ListParkingSettlements)
+	r.Post("/parking-settlements", auth, admin, h.SettleParking)
 
 	r.Get("/trip-reimbursements/pending", auth, admin, h.PendingReimbursements)
 	r.Get("/trip-reimbursements", auth, admin, h.ListReimbursements)
@@ -156,6 +161,52 @@ func (h *TripExpenseHandler) ListReimbursements(c *fiber.Ctx) error {
 		return err
 	}
 	return util.OK(c, "Reimbursements", data)
+}
+
+func (h *TripExpenseHandler) SetParkingAllowance(c *fiber.Ctx) error {
+	id, err := parseID(c, "id")
+	if err != nil {
+		return err
+	}
+	var body struct {
+		Amount *float64 `json:"amount"`
+	}
+	if err := c.BodyParser(&body); err != nil || body.Amount == nil {
+		return fiber.NewError(fiber.StatusBadRequest, "nominal uang parkir wajib diisi (0 = tidak dibekali)")
+	}
+	data, err := h.svc.SetParkingAllowance(c.Context(), id, *body.Amount, auditActor(c))
+	if err != nil {
+		return err
+	}
+	return util.OK(c, "Parking allowance updated", data)
+}
+
+func (h *TripExpenseHandler) PendingParking(c *fiber.Ctx) error {
+	data, err := h.svc.PendingParking(c.Context())
+	if err != nil {
+		return err
+	}
+	return util.OK(c, "Pending parking settlements", data)
+}
+
+func (h *TripExpenseHandler) ListParkingSettlements(c *fiber.Ctx) error {
+	data, err := h.svc.ListParkingSettlements(c.Context())
+	if err != nil {
+		return err
+	}
+	return util.OK(c, "Parking settlements", data)
+}
+
+func (h *TripExpenseHandler) SettleParking(c *fiber.Ctx) error {
+	var req service.SettleParkingRequest
+	if err := bindAndValidate(c, &req); err != nil {
+		return err
+	}
+	data, err := h.svc.SettleParking(c.Context(), req, auditActor(c))
+	if err != nil {
+		return err
+	}
+	return util.Created(c, "Parking settled", data)
 }
 
 func (h *TripExpenseHandler) PayReimbursement(c *fiber.Ctx) error {

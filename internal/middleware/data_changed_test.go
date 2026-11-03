@@ -20,6 +20,8 @@ func TestTopicsForPath(t *testing.T) {
 		{"/api/v1/bookings/12/toll-budget", []string{TopicBooking}},
 		{"/api/v1/trip-expenses/7/void", []string{TopicBooking}},
 		{"/api/v1/trip-reimbursements", []string{TopicBooking}},
+		{"/api/v1/bookings/12/parking-allowance", []string{TopicBooking}},
+		{"/api/v1/parking-settlements", []string{TopicBooking}},
 		{"/api/v1/guest-bookings/abc/cancel", []string{TopicBooking}},
 		{"/api/v1/vehicles/3/status", []string{TopicVehicle}},
 		{"/api/v1/vehicles/3/fixed-driver", []string{TopicVehicle, TopicDriver}},

@@ -30,6 +30,9 @@ func (h *UserHandler) Register(r fiber.Router) {
 	g := r.Group("/users", auth)
 	g.Get("", admin, h.List)
 	g.Get("/me", h.GetMe)
+	// Cari karyawan untuk dipilih sebagai penumpang booking (semua yang login,
+	// tanpa nomor telepon). Harus sebelum /:id.
+	g.Get("/lookup", h.Lookup)
 	g.Get("/summary", admin, h.Summary)
 	g.Get("/roles", h.ListRoles)
 	g.Get("/departments", h.ListDepartments)
@@ -60,6 +63,14 @@ func (h *UserHandler) List(c *fiber.Ctx) error {
 		return err
 	}
 	return util.Paginated(c, "Users retrieved", data, total, page, limit)
+}
+
+func (h *UserHandler) Lookup(c *fiber.Ctx) error {
+	data, err := h.svc.LookupPassengers(c.Context(), c.Query("q"))
+	if err != nil {
+		return err
+	}
+	return util.OK(c, "Users", data)
 }
 
 func (h *UserHandler) GetMe(c *fiber.Ctx) error {

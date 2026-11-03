@@ -65,6 +65,8 @@ func (h *BookingHandler) Register(r fiber.Router) {
 	g := r.Group("/bookings", auth)
 	g.Get("", h.List)
 	g.Get("/pending-driver-ratings", h.GetPendingDriverRatings)
+	// Perjalanan yang diikuti sebagai penumpang (harus sebelum /:id).
+	g.Get("/as-passenger", h.PassengerTrips)
 	g.Get("/drivers/:driver_id/ratings", admin, h.GetDriverRatings)
 	// Rating ruangan (sekarang ditujukan ke room keeper, bukan ruangannya)
 	// tetap terbuka ke semua peran (bukan admin-only seperti driver).
@@ -90,6 +92,7 @@ func (h *BookingHandler) Register(r fiber.Router) {
 	g.Get("/:id/room-rating", auth, h.GetBookingRoomRating)
 	g.Get("/:id/approval-log", admin, h.ApprovalLog)
 	g.Get("/:id/activity", auth, h.Activity)
+	g.Put("/:id/passengers", h.SetPassengers)
 	g.Get("/:id/attachments", h.ListAttachments)
 	g.Post("/:id/attachments", h.UploadAttachment)
 	g.Post("/:id/return-report", middleware.RequireRole("DRIVER"), h.SubmitReturnReport)
@@ -451,7 +454,7 @@ func (h *BookingHandler) UploadAttachment(c *fiber.Ctx) error {
 	}
 	desc := c.FormValue("description")
 	uploaderID := int32(middleware.GetUserID(c))
-	data, err := h.attachSvc.UploadForBooking(c.Context(), id, uploaderID, fh, desc)
+	data, err := h.attachSvc.UploadForBooking(c.Context(), id, uploaderID, middleware.GetUserRole(c), fh, desc)
 	if err != nil {
 		return err
 	}
@@ -524,4 +527,30 @@ func (h *BookingHandler) GetReturnReport(c *fiber.Ctx) error {
 		return err
 	}
 	return util.OK(c, "Return report retrieved", data)
+}
+
+// SetPassengers: ganti daftar karyawan yang ikut (pemesan / admin).
+func (h *BookingHandler) SetPassengers(c *fiber.Ctx) error {
+	id, err := parseID(c, "id")
+	if err != nil {
+		return err
+	}
+	var req service.SetPassengersRequest
+	if err := c.BodyParser(&req); err != nil {
+		return fiber.NewError(fiber.StatusBadRequest, "invalid request body")
+	}
+	data, err := h.svc.SetPassengers(c.Context(), id, req, auditActor(c), middleware.GetUserRole(c))
+	if err != nil {
+		return err
+	}
+	return util.OK(c, "Passengers updated", data)
+}
+
+// PassengerTrips: perjalanan yang diikuti user (bukan pemesannya).
+func (h *BookingHandler) PassengerTrips(c *fiber.Ctx) error {
+	data, err := h.svc.PassengerTrips(c.Context(), int32(middleware.GetUserID(c)))
+	if err != nil {
+		return err
+	}
+	return util.OK(c, "Passenger trips", data)
 }

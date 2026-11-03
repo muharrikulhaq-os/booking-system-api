@@ -166,7 +166,7 @@ func (h *AttachmentHandler) Delete(c *fiber.Ctx) error {
 	if err != nil {
 		return err
 	}
-	if err := h.svc.Delete(c.Context(), id); err != nil {
+	if err := h.svc.Delete(c.Context(), id, int32(middleware.GetUserID(c)), middleware.GetUserRole(c)); err != nil {
 		return err
 	}
 	return util.OK(c, "Attachment deleted", nil)

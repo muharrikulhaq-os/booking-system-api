@@ -227,13 +227,16 @@ type TripReimbursement struct {
 	Note          sql.NullString `json:"note"`
 	CreatedByName string         `json:"createdByName"`
 	ExpenseCount  int64          `json:"expenseCount"`
+	// Jumlah perjalanan yang kekurangan parkirnya ikut dibayar di sini.
+	ParkingCount int64 `json:"parkingCount"`
 	CreatedAt     time.Time      `json:"createdAt"`
 }
 
 func (q *Queries) ListTripReimbursements(ctx context.Context, limit int32) ([]TripReimbursement, error) {
 	rows, err := q.db.QueryContext(ctx, `
 		SELECT tr.id, tr."driverId", du.name, tr.amount::float8, tr."paidAt", tr.note, cu.name,
-		       (SELECT COUNT(*) FROM trip_expenses te WHERE te."reimbursementId" = tr.id), tr."createdAt"
+		       (SELECT COUNT(*) FROM trip_expenses te WHERE te."reimbursementId" = tr.id), tr."createdAt",
+		       (SELECT COUNT(*) FROM parking_settlements ps WHERE ps."reimbursementId" = tr.id)
 		FROM trip_reimbursements tr
 		JOIN drivers d ON d.id = tr."driverId"
 		JOIN users du ON du.id = d."userId"
@@ -248,7 +251,7 @@ func (q *Queries) ListTripReimbursements(ctx context.Context, limit int32) ([]Tr
 	for rows.Next() {
 		var r TripReimbursement
 		if err := rows.Scan(&r.ID, &r.DriverID, &r.DriverName, &r.Amount, &r.PaidAt, &r.Note,
-			&r.CreatedByName, &r.ExpenseCount, &r.CreatedAt); err != nil {
+			&r.CreatedByName, &r.ExpenseCount, &r.CreatedAt, &r.ParkingCount); err != nil {
 			return nil, err
 		}
 		out = append(out, r)
