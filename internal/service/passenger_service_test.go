@@ -64,3 +64,22 @@ func TestEmployeeCanView(t *testing.T) {
 		t.Error("karyawan lain tidak boleh melihat")
 	}
 }
+
+func TestNormalizeGuests(t *testing.T) {
+	got, err := normalizeGuests([]GuestInput{{Name: "  Pak Joko ", PhoneNumber: "0812 3456 7890", Note: " Dinas PU "}, {Name: "Bu Ani"}})
+	if err != nil || len(got) != 2 || got[0].Name != "Pak Joko" || got[0].Note != "Dinas PU" || got[1].PhoneNumber != "" {
+		t.Fatalf("got %+v, %v", got, err)
+	}
+	if _, err := normalizeGuests([]GuestInput{{Name: " "}}); err == nil || !strings.Contains(err.Error(), "nama tamu") {
+		t.Errorf("nama kosong harus ditolak: %v", err)
+	}
+	if _, err := normalizeGuests([]GuestInput{{Name: "X", PhoneNumber: "abc"}}); err == nil {
+		t.Error("nomor HP tidak valid harus ditolak")
+	}
+	if err := checkSeats(3, 2, 6); err != nil {
+		t.Errorf("5 orang + pemesan muat di 6: %v", err)
+	}
+	if err := checkSeats(3, 3, 6); err == nil || !strings.Contains(err.Error(), "maksimal 5") {
+		t.Errorf("lewat kapasitas harus ditolak: %v", err)
+	}
+}

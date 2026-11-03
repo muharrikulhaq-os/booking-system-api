@@ -42,6 +42,8 @@ type CreateBookingRequest struct {
 	// Karyawan yang ikut (booking kendaraan) — booking tetap satu atas nama
 	// pemesan. Lihat passenger_service.go.
 	PassengerIDs []int32 `json:"passengerIds"`
+	// Tamu tanpa akun (nama, nomor HP, keterangan).
+	Guests []GuestInput `json:"guests"`
 }
 
 type ApproveBookingRequest struct {
@@ -595,14 +597,21 @@ func (s *BookingService) Create(ctx context.Context, req CreateBookingRequest, a
 	// Karyawan yang ikut (kendaraan saja); jumlah penumpang minimal
 	// 1 (pemesan) + karyawan yang ikut.
 	var passengerIDs []int32
-	if isVehicle && len(req.PassengerIDs) > 0 {
+	var guests []repository.BookingGuest
+	if isVehicle && (len(req.PassengerIDs) > 0 || len(req.Guests) > 0) {
 		capacity, _ := s.vehicleCapacity(ctx, req.ResourceID)
 		ids, perr := normalizePassengerIDs(ctx, s.q, int32(userID), req.PassengerIDs, capacity)
 		if perr != nil {
 			return nil, perr
 		}
+		if guests, perr = normalizeGuests(req.Guests); perr != nil {
+			return nil, perr
+		}
+		if perr := checkSeats(len(ids), len(guests), capacity); perr != nil {
+			return nil, perr
+		}
 		passengerIDs = ids
-		if need := int32(len(ids)) + 1; req.PassengerCount < need {
+		if need := int32(len(ids)+len(guests)) + 1; req.PassengerCount < need {
 			req.PassengerCount = need
 		}
 	}
@@ -627,6 +636,9 @@ func (s *BookingService) Create(ctx context.Context, req CreateBookingRequest, a
 	var addedPassengers []int32
 	if len(passengerIDs) > 0 {
 		addedPassengers, _ = s.q.ReplaceBookingPassengers(ctx, b.ID, passengerIDs, int32(userID))
+	}
+	if len(guests) > 0 {
+		_ = s.q.ReplaceBookingGuests(ctx, b.ID, guests, int32(userID))
 	}
 
 	full, _ := s.q.GetBookingByID(ctx, b.ID)

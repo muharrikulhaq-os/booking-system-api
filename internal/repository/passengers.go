@@ -87,7 +87,7 @@ func (q *Queries) IsBookingPassenger(ctx context.Context, bookingID, userID int3
 
 // ListPassengerUserIDs: penumpang satu booking (untuk notifikasi).
 func (q *Queries) ListPassengerUserIDs(ctx context.Context, bookingID int32) ([]int32, error) {
-	rows, err := q.db.QueryContext(ctx, `SELECT "userId" FROM booking_passengers WHERE "bookingId" = $1`, bookingID)
+	rows, err := q.db.QueryContext(ctx, `SELECT "userId" FROM booking_passengers WHERE "bookingId" = $1 AND "userId" IS NOT NULL`, bookingID)
 	if err != nil {
 		return nil, err
 	}
@@ -189,4 +189,54 @@ func (q *Queries) LookupActiveUsers(ctx context.Context, search string, ids []in
 func (q *Queries) SetBookingPassengerCount(ctx context.Context, bookingID, count int32) error {
 	_, err := q.db.ExecContext(ctx, `UPDATE bookings SET "passengerCount" = $2, "updatedAt" = NOW() WHERE id = $1`, bookingID, count)
 	return err
+}
+
+// ── Tamu tanpa akun (migrasi 000023): baris dengan "userId" NULL ─────────────
+
+type BookingGuest struct {
+	BookingID   int32  `json:"bookingId"`
+	Name        string `json:"name"`
+	PhoneNumber string `json:"phoneNumber"`
+	Note        string `json:"note"`
+}
+
+func (q *Queries) ListBookingGuests(ctx context.Context, bookingIDs []int32) ([]BookingGuest, error) {
+	if len(bookingIDs) == 0 {
+		return nil, nil
+	}
+	rows, err := q.db.QueryContext(ctx, `
+		SELECT "bookingId", "guestName", COALESCE("guestPhone", ''), COALESCE("guestNote", '')
+		FROM booking_passengers
+		WHERE "bookingId" = ANY($1::int[]) AND "userId" IS NULL
+		ORDER BY "bookingId", id`, intArrayLiteral(bookingIDs))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []BookingGuest
+	for rows.Next() {
+		var g BookingGuest
+		if err := rows.Scan(&g.BookingID, &g.Name, &g.PhoneNumber, &g.Note); err != nil {
+			return nil, err
+		}
+		out = append(out, g)
+	}
+	return out, rows.Err()
+}
+
+// ReplaceBookingGuests mengganti seluruh tamu booking (karyawan tidak tersentuh).
+func (q *Queries) ReplaceBookingGuests(ctx context.Context, bookingID int32, guests []BookingGuest, addedByID int32) error {
+	if _, err := q.db.ExecContext(ctx,
+		`DELETE FROM booking_passengers WHERE "bookingId" = $1 AND "userId" IS NULL`, bookingID); err != nil {
+		return err
+	}
+	for _, g := range guests {
+		if _, err := q.db.ExecContext(ctx, `
+			INSERT INTO booking_passengers ("bookingId", "guestName", "guestPhone", "guestNote", "addedById")
+			VALUES ($1, $2, NULLIF($3, ''), NULLIF($4, ''), $5)`,
+			bookingID, g.Name, g.PhoneNumber, g.Note, addedByID); err != nil {
+			return err
+		}
+	}
+	return nil
 }

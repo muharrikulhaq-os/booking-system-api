@@ -194,3 +194,14 @@ Masing-masing diuji di database test + unit test + `tsc`/`next build` + `flutter
 | K2 | Tol ikut diberi pilihan cara bayar? | **Tidak**, tol tetap seperti sekarang |
 | K3 | BBM isi langsung ikut reimburse? | **Tidak sekarang** |
 | K4 | Karyawan yang ikut: notifikasi & lihat detail? | **Ya**, baca saja — dan **booking tetap terhitung satu** |
+
+---
+
+## 7. Tambahan: tamu tanpa akun (4 Nov 2026)
+- Penumpang boleh orang yang **tidak punya akun**: isi manual **nama** (wajib), **nomor HP** & **keterangan**
+  (mis. instansi/jabatan) opsional. Disimpan di `booking_passengers` dengan `userId` NULL (migrasi `000023`).
+- API: `POST /bookings` & `PUT /bookings/:id/passengers` menerima `guests: [{name, phoneNumber?, note?}]`.
+  Di `PUT`, `guests` tidak dikirim = tamu tidak diubah (klien lama aman); `[]` = hapus semua tamu.
+- Detail booking: `passengers[]` berisi `role: "GUEST"` (`userId` 0, `department` = keterangan).
+- Kapasitas: karyawan + tamu ≤ kapasitas − 1; jumlah penumpang otomatis disesuaikan.
+- Tamu tidak mendapat notifikasi dan tidak bisa membuka booking.

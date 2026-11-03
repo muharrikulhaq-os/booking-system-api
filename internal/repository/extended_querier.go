@@ -28,6 +28,8 @@ type ExtendedQuerier interface {
 	CreateParkingSettlement(ctx context.Context, p CreateParkingSettlementParams) (bool, error)
 	CreateTripReimbursement(ctx context.Context, driverID int32, amount float64, paidAt time.Time, note sql.NullString, byID int32) (int32, error)
 	ListBookingPassengers(ctx context.Context, bookingIDs []int32) ([]BookingPassenger, error)
+	ListBookingGuests(ctx context.Context, bookingIDs []int32) ([]BookingGuest, error)
+	ReplaceBookingGuests(ctx context.Context, bookingID int32, guests []BookingGuest, addedByID int32) error
 	ReplaceBookingPassengers(ctx context.Context, bookingID int32, userIDs []int32, addedByID int32) ([]int32, error)
 	IsBookingPassenger(ctx context.Context, bookingID, userID int32) (bool, error)
 	ListPassengerUserIDs(ctx context.Context, bookingID int32) ([]int32, error)

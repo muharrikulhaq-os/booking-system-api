@@ -55,6 +55,53 @@ func normalizePassengerIDs(ctx context.Context, q repository.ExtendedQuerier, ow
 	return out, nil
 }
 
+// GuestInput: penumpang tamu tanpa akun (nama wajib; nomor HP & keterangan
+// mis. instansi/jabatan opsional). Tidak mendapat notifikasi / akses.
+type GuestInput struct {
+	Name        string `json:"name"`
+	PhoneNumber string `json:"phoneNumber"`
+	Note        string `json:"note"`
+}
+
+const maxGuests = 20
+
+// normalizeGuests merapikan & memvalidasi tamu.
+func normalizeGuests(in []GuestInput) ([]repository.BookingGuest, error) {
+	if len(in) > maxGuests {
+		return nil, util.NewError(400, fmt.Sprintf("tamu maksimal %d orang", maxGuests), util.ErrBadRequest)
+	}
+	out := make([]repository.BookingGuest, 0, len(in))
+	for _, g := range in {
+		name := strings.TrimSpace(g.Name)
+		if name == "" {
+			return nil, util.NewError(400, "nama tamu wajib diisi", util.ErrBadRequest)
+		}
+		if len([]rune(name)) > 120 {
+			return nil, util.NewError(400, "nama tamu terlalu panjang (maks 120 karakter)", util.ErrBadRequest)
+		}
+		phone, err := normalizePhone(g.PhoneNumber)
+		if err != nil {
+			return nil, err
+		}
+		note := strings.TrimSpace(g.Note)
+		if r := []rune(note); len(r) > 120 {
+			note = string(r[:120])
+		}
+		out = append(out, repository.BookingGuest{Name: name, PhoneNumber: phone, Note: note})
+	}
+	return out, nil
+}
+
+// checkSeats: karyawan + tamu tidak melebihi kapasitas dikurangi pemesan.
+func checkSeats(users, guests int, capacity int32) error {
+	if capacity > 0 && int32(users+guests) > capacity-1 {
+		return util.NewError(400,
+			fmt.Sprintf("penumpang yang ikut maksimal %d orang (kapasitas kendaraan %d termasuk pemesan)", capacity-1, capacity),
+			util.ErrBadRequest)
+	}
+	return nil
+}
+
 // vehicleCapacity: kapasitas kendaraan resource booking (0 = bukan kendaraan).
 func (s *BookingService) vehicleCapacity(ctx context.Context, resourceID int32) (int32, bool) {
 	vid, err := s.q.GetVehicleIDByResourceID(ctx, resourceID)
@@ -103,6 +150,14 @@ func (s *BookingService) attachPassengers(ctx context.Context, out map[string]an
 			})
 		}
 	}
+	if guests, err := s.q.ListBookingGuests(ctx, ids); err == nil {
+		for _, g := range guests {
+			list = append(list, map[string]any{
+				"userId": 0, "name": g.Name, "employeeId": "", "department": g.Note,
+				"phoneNumber": g.PhoneNumber, "bookingId": g.BookingID, "role": "GUEST",
+			})
+		}
+	}
 	out["passengers"] = list
 }
 
@@ -122,6 +177,8 @@ func (s *BookingService) notifyPassengers(ctx context.Context, bookingID int32, 
 
 type SetPassengersRequest struct {
 	PassengerIDs []int32 `json:"passengerIds"`
+	// nil = tamu tidak diubah (klien lama); [] = hapus semua tamu.
+	Guests *[]GuestInput `json:"guests"`
 }
 
 // SetPassengers mengganti daftar karyawan yang ikut. Pemesan (selama
@@ -145,14 +202,30 @@ func (s *BookingService) SetPassengers(ctx context.Context, id int32, req SetPas
 	if err != nil {
 		return nil, err
 	}
+	var guests []repository.BookingGuest
+	if req.Guests != nil {
+		if guests, err = normalizeGuests(*req.Guests); err != nil {
+			return nil, err
+		}
+	} else if guests, err = s.q.ListBookingGuests(ctx, []int32{id}); err != nil {
+		return nil, err
+	}
+	if err := checkSeats(len(ids), len(guests), capacity); err != nil {
+		return nil, err
+	}
 	added, err := s.q.ReplaceBookingPassengers(ctx, id, ids, actor.UserID)
 	if err != nil {
 		return nil, err
 	}
-	if need := int32(len(ids)) + 1; b.PassengerCount < need {
+	if req.Guests != nil {
+		if err := s.q.ReplaceBookingGuests(ctx, id, guests, actor.UserID); err != nil {
+			return nil, err
+		}
+	}
+	if need := int32(len(ids)+len(guests)) + 1; b.PassengerCount < need {
 		_ = s.q.SetBookingPassengerCount(ctx, id, need)
 	}
-	logAudit(ctx, s.q, actor, "UPDATE", "Booking", id, fmt.Sprintf("Karyawan yang ikut: %d orang", len(ids)))
+	logAudit(ctx, s.q, actor, "UPDATE", "Booking", id, fmt.Sprintf("Penumpang yang ikut: %d karyawan, %d tamu", len(ids), len(guests)))
 	s.notifyPassengersAdded(ctx, b, added)
 	full, _ := s.q.GetBookingByID(ctx, id)
 	return s.GetByIDFor(ctx, full)

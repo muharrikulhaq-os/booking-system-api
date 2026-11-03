@@ -163,3 +163,7 @@ func (m *MockQuerier) IsBookingPassenger(ctx context.Context, bookingID, userID 
 func (m *MockQuerier) ListBookingPassengers(ctx context.Context, bookingIDs []int32) ([]repository.BookingPassenger, error) {
 	return nil, nil
 }
+
+func (m *MockQuerier) ListBookingGuests(ctx context.Context, bookingIDs []int32) ([]repository.BookingGuest, error) {
+	return nil, nil
+}
