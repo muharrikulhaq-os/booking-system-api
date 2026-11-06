@@ -123,6 +123,9 @@ func (s *NotificationService) Notify(userID int32, notifType, title, message str
 	s.createAndSend(context.Background(), userID, title, message, notifType, entityID, data)
 }
 
+// PushEnabled: true bila push FCM aktif (kredensial Firebase ditemukan).
+func (s *NotificationService) PushEnabled() bool { return s.fcm != nil }
+
 // NotifyAdmins fans a notification out to every active ADMIN user.
 func (s *NotificationService) NotifyAdmins(notifType, title, message string, data map[string]any) {
 	s.notifyRole("ADMIN", notifType, title, message, data)

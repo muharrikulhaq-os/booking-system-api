@@ -48,12 +48,15 @@ func main() {
 		ExposeHeaders: "X-Data-Changed, Content-Disposition",
 	}))
 
-	// health check
+	// health check. "push" = status FCM: "fcm" (notifikasi sampai walau app
+	// ditutup) atau "disabled" (kredensial Firebase tidak ada di server →
+	// notifikasi hanya lewat WebSocket, yaitu selama app masih berjalan).
+	pushStatus := "disabled"
 	app.Get("/health", func(c *fiber.Ctx) error {
 		if err := repository.DB.Ping(); err != nil {
 			return c.Status(503).JSON(fiber.Map{"status": "unhealthy", "db": err.Error()})
 		}
-		return c.JSON(fiber.Map{"status": "ok"})
+		return c.JSON(fiber.Map{"status": "ok", "push": pushStatus})
 	})
 
 	// serve uploaded files (auth-protected)
@@ -81,6 +84,9 @@ func main() {
 	vehicleSvc := service.NewVehicleService(db)
 	roomSvc := service.NewRoomService(db)
 	notifSvc := service.NewNotificationService(db, wsHub)
+	if notifSvc.PushEnabled() {
+		pushStatus = "fcm"
+	}
 	driverSvc := service.NewDriverService(db)
 	roomKeeperSvc := service.NewRoomKeeperService(db)
 	bookingSvc := service.NewBookingService(db, notifSvc)
