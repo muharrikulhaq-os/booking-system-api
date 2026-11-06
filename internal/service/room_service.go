@@ -59,12 +59,14 @@ func serializeRoomByID(r repository.GetRoomByIDRow) map[string]any {
 	}
 }
 
-func (s *RoomService) List(ctx context.Context, page, limit int, search *string, status *string, sortBy, sortOrder string) ([]map[string]any, int64, error) {
+// bookable = hanya yang bisa dipesan (lihat VehicleService.List).
+func (s *RoomService) List(ctx context.Context, page, limit int, search *string, status *string, bookable bool, sortBy, sortOrder string) ([]map[string]any, int64, error) {
 	params := repository.ListRoomsParams{
-		Limit:     int32(limit),
-		Offset:    int32((page - 1) * limit),
-		SortBy:    sortBy,
-		SortOrder: sortOrder,
+		Limit:        int32(limit),
+		Offset:       int32((page - 1) * limit),
+		SortBy:       sortBy,
+		SortOrder:    sortOrder,
+		BookableOnly: bookable,
 	}
 	if search != nil {
 		params.Search = sql.NullString{String: *search, Valid: true}
@@ -79,7 +81,7 @@ func (s *RoomService) List(ctx context.Context, page, limit int, search *string,
 		return nil, 0, err
 	}
 	total, _ := s.q.CountRooms(ctx, repository.CountRoomsParams{
-		Search: params.Search, Status: params.Status,
+		Search: params.Search, Status: params.Status, BookableOnly: bookable,
 	})
 	out := make([]map[string]any, len(rows))
 	for i, r := range rows {

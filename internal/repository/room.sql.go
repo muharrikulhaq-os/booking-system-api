@@ -24,15 +24,18 @@ WHERE ($1::text IS NULL
              AND bk.status IN ('APPROVED', 'ONGOING')
              AND NOW() BETWEEN bk."startDate" AND bk."endDate"
        ))
+  AND (NOT $3::boolean OR r.status NOT IN ('INACTIVE', 'MAINTENANCE'))
 `
 
 type CountRoomsParams struct {
 	Search sql.NullString     `json:"search"`
 	Status NullResourceStatus `json:"status"`
+	// BookableOnly: buang INACTIVE & MAINTENANCE (pilihan saat membuat booking).
+	BookableOnly bool `json:"bookable_only"`
 }
 
 func (q *Queries) CountRooms(ctx context.Context, arg CountRoomsParams) (int64, error) {
-	row := q.db.QueryRowContext(ctx, countRooms, arg.Search, arg.Status)
+	row := q.db.QueryRowContext(ctx, countRooms, arg.Search, arg.Status, arg.BookableOnly)
 	var count int64
 	err := row.Scan(&count)
 	return count, err
@@ -114,6 +117,7 @@ WHERE ($3::text IS NULL
              AND bk.status IN ('APPROVED', 'ONGOING')
              AND NOW() BETWEEN bk."startDate" AND bk."endDate"
        ))
+  AND (NOT $5::boolean OR r.status NOT IN ('INACTIVE', 'MAINTENANCE'))
 ORDER BY %s
 LIMIT $1 OFFSET $2
 `
@@ -135,6 +139,8 @@ type ListRoomsParams struct {
 	Status    NullResourceStatus `json:"status"`
 	SortBy    string             `json:"sort_by"`
 	SortOrder string             `json:"sort_order"`
+	// BookableOnly: buang INACTIVE & MAINTENANCE (pilihan saat membuat booking).
+	BookableOnly bool `json:"bookable_only"`
 }
 
 type ListRoomsRow struct {
@@ -156,6 +162,7 @@ func (q *Queries) ListRooms(ctx context.Context, arg ListRoomsParams) ([]ListRoo
 		arg.Offset,
 		arg.Search,
 		arg.Status,
+		arg.BookableOnly,
 	)
 	if err != nil {
 		return nil, err

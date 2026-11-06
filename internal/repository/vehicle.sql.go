@@ -26,16 +26,19 @@ WHERE ($1::text IS NULL
              AND bk.status IN ('APPROVED', 'ONGOING')
              AND NOW() BETWEEN bk."startDate" AND bk."endDate"
        ))
+  AND (NOT $4::boolean OR r.status NOT IN ('INACTIVE', 'MAINTENANCE'))
 `
 
 type CountVehiclesParams struct {
 	Search     sql.NullString     `json:"search"`
 	CategoryID sql.NullInt32      `json:"category_id"`
 	Status     NullResourceStatus `json:"status"`
+	// BookableOnly: buang INACTIVE & MAINTENANCE (pilihan saat membuat booking).
+	BookableOnly bool `json:"bookable_only"`
 }
 
 func (q *Queries) CountVehicles(ctx context.Context, arg CountVehiclesParams) (int64, error) {
-	row := q.db.QueryRowContext(ctx, countVehicles, arg.Search, arg.CategoryID, arg.Status)
+	row := q.db.QueryRowContext(ctx, countVehicles, arg.Search, arg.CategoryID, arg.Status, arg.BookableOnly)
 	var count int64
 	err := row.Scan(&count)
 	return count, err
@@ -309,6 +312,7 @@ WHERE ($3::text IS NULL
              AND bk.status IN ('APPROVED', 'ONGOING')
              AND NOW() BETWEEN bk."startDate" AND bk."endDate"
        ))
+  AND (NOT $6::boolean OR r.status NOT IN ('INACTIVE', 'MAINTENANCE'))
 ORDER BY %s
 LIMIT $1 OFFSET $2
 `
@@ -336,6 +340,8 @@ type ListVehiclesParams struct {
 	Status     NullResourceStatus `json:"status"`
 	SortBy     string             `json:"sort_by"`
 	SortOrder  string             `json:"sort_order"`
+	// BookableOnly: buang INACTIVE & MAINTENANCE (pilihan saat membuat booking).
+	BookableOnly bool `json:"bookable_only"`
 }
 
 type ListVehiclesRow struct {
@@ -371,6 +377,7 @@ func (q *Queries) ListVehicles(ctx context.Context, arg ListVehiclesParams) ([]L
 		arg.Search,
 		arg.CategoryID,
 		arg.Status,
+		arg.BookableOnly,
 	)
 	if err != nil {
 		return nil, err
