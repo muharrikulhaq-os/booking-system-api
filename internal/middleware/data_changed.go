@@ -125,12 +125,13 @@ func TopicsForPath(path string) []string {
 		}
 		return []string{TopicDriver}
 	case "rooms":
-		if last == "room-keeper" {
+		if last == "room-keeper" || last == "room-keepers" {
 			return []string{TopicRoom, TopicRoomKeeper}
 		}
 		return []string{TopicRoom}
 	case "room-keepers":
-		return []string{TopicRoomKeeper}
+		// Status aktif penjaga menentukan ruangan bisa dibooking atau tidak.
+		return []string{TopicRoomKeeper, TopicRoom}
 	case "fuel-expenses", "fuel-vouchers", "fuel-balances":
 		if last == "preview" {
 			return nil // hanya menghitung, tidak menyimpan

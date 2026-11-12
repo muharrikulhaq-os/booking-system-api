@@ -70,6 +70,7 @@ func (s *BookingService) notifySweptBookings(ctx context.Context, expired, ignor
 				label+" — "+ownerMsg, map[string]any{"bookingId": b.ID})
 			s.notifyDriver(ctx, b.AssignedDriverId, "BOOKING_CANCELLED", "Booking hangus",
 				label+" — "+driverMsg, b.ID)
+			s.notifyRoomBookingKeepers(ctx, b, "BOOKING_CANCELLED", "Booking hangus", ownerMsg, 0)
 		}
 	}
 	send(expired,

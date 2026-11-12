@@ -90,6 +90,7 @@ func (h *BookingHandler) Register(r fiber.Router) {
 	g.Get("/:id/driver-rating", auth, h.GetBookingDriverRating)
 	g.Post("/:id/rate-room", h.RateRoom)
 	g.Get("/:id/room-rating", auth, h.GetBookingRoomRating)
+	g.Get("/:id/room-ratings", auth, h.GetBookingRoomRatings)
 	g.Get("/:id/approval-log", admin, h.ApprovalLog)
 	g.Get("/:id/activity", auth, h.Activity)
 	g.Put("/:id/passengers", h.SetPassengers)
@@ -379,6 +380,19 @@ func (h *BookingHandler) RateRoom(c *fiber.Ctx) error {
 		return err
 	}
 	return util.Created(c, "Room rated", data)
+}
+
+// GetBookingRoomRatings: penjaga ruangan booking ini + rating masing-masing.
+func (h *BookingHandler) GetBookingRoomRatings(c *fiber.Ctx) error {
+	id, err := parseID(c, "id")
+	if err != nil {
+		return err
+	}
+	data, err := h.svc.GetBookingRoomRatings(c.Context(), id)
+	if err != nil {
+		return err
+	}
+	return util.OK(c, "Booking room ratings retrieved", data)
 }
 
 func (h *BookingHandler) GetRoomRatings(c *fiber.Ctx) error {

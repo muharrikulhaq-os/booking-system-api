@@ -17,3 +17,9 @@ func inUseError(err error, msg string) error {
 	}
 	return err
 }
+
+// isUniqueViolation: pelanggaran UNIQUE (data yang sama baru saja disimpan).
+func isUniqueViolation(err error) bool {
+	var pgErr *pgconn.PgError
+	return errors.As(err, &pgErr) && pgErr.Code == "23505"
+}

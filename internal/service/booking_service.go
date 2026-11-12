@@ -69,11 +69,6 @@ type RateDriverRequest struct {
 	Review string `json:"review"`
 }
 
-type RateRoomRequest struct {
-	Rating int16  `json:"rating" validate:"required,min=1,max=5"`
-	Review string `json:"review"`
-}
-
 type MergeBookingRequest struct {
 	TargetBookingID int32      `json:"targetBookingId" validate:"required"`
 	Reason          string     `json:"reason"`
@@ -317,6 +312,14 @@ func (s *BookingService) List(ctx context.Context,
 			}
 		case "EMPLOYEE":
 			params.UserID = sql.NullInt32{Int32: int32(currentUserID), Valid: true}
+		case "ROOM_KEEPER":
+			// Semua penjaga ruangan yang sama melihat booking yang sama.
+			rk, err := s.q.GetRoomKeeperByUserID(ctx, int32(currentUserID))
+			if err != nil {
+				params.UserID = sql.NullInt32{Int32: -1, Valid: true}
+			} else {
+				params.RoomKeeperID = sql.NullInt32{Int32: rk.ID, Valid: true}
+			}
 		default:
 			if userID != nil {
 				params.UserID = sql.NullInt32{Int32: *userID, Valid: true}
@@ -362,7 +365,7 @@ func (s *BookingService) List(ctx context.Context,
 		UserID: params.UserID, Status: params.Status,
 		ResourceID: params.ResourceID, ResourceType: params.ResourceType,
 		DriverID: params.DriverID, StartFrom: params.StartFrom, EndTo: params.EndTo,
-		Search: params.Search,
+		Search: params.Search, RoomKeeperID: params.RoomKeeperID,
 	})
 
 	out := make([]map[string]any, len(rows))
@@ -409,6 +412,7 @@ func (s *BookingService) GetByIDFor(ctx context.Context, b repository.GetBooking
 		u["phoneNumber"] = phone
 	}
 	s.attachPassengers(ctx, out, b)
+	s.attachRoomKeepers(ctx, out, b)
 	return out, nil
 }
 
@@ -475,6 +479,11 @@ func (s *BookingService) Create(ctx context.Context, req CreateBookingRequest, a
 	}
 	if err := s.checkResourceBookable(ctx, req.ResourceID); err != nil {
 		return nil, err
+	}
+	if resource.Type == repository.ResourceTypeROOM {
+		if err := requireRoomHasKeeper(ctx, s.q, req.ResourceID); err != nil {
+			return nil, err
+		}
 	}
 
 	var driverID sql.NullInt32
@@ -651,6 +660,8 @@ func (s *BookingService) Create(ctx context.Context, req CreateBookingRequest, a
 			"Ada booking baru yang menunggu persetujuan: "+bookingLabel(full), map[string]any{"bookingId": b.ID})
 		s.notifyDriver(ctx, driverID, "NEW_BOOKING", "Booking masuk",
 			driverTripLabel(full)+" — Anda ditugaskan, menunggu persetujuan admin", b.ID)
+		s.notifyRoomBookingKeepers(ctx, full, "NEW_BOOKING", "Booking ruangan masuk",
+			"menunggu persetujuan admin", 0)
 	}
 
 	return serializeBookingByID(full), nil
@@ -709,6 +720,8 @@ func (s *BookingService) Cancel(ctx context.Context, id int32, actor AuditActor,
 		}
 		s.notifyDriver(ctx, b.AssignedDriverId, "BOOKING_CANCELLED", "Booking dibatalkan",
 			bookingLabel(b)+" — dibatalkan, Anda tidak jadi bertugas", id)
+		s.notifyRoomBookingKeepers(ctx, b, "BOOKING_CANCELLED", "Booking ruangan dibatalkan",
+			strings.ToLower(cancelDesc[:1])+cancelDesc[1:], 0)
 		s.notifyPassengers(ctx, id, "BOOKING_CANCELLED", "Perjalanan dibatalkan",
 			"Perjalanan yang Anda ikuti dibatalkan: "+bookingLabel(b)+".")
 	}
@@ -824,6 +837,9 @@ func (s *BookingService) Approve(ctx context.Context, id int32, req ApproveBooki
 	// Ruangan tidak bisa dipakai dua rapat sekaligus (B8). Booking PENDING
 	// yang bentrok boleh ada; yang disetujui lebih dulu menang.
 	if b.ResourceType == repository.ResourceTypeROOM {
+		if err := requireRoomHasKeeper(ctx, s.q, b.ResourceId); err != nil {
+			return ApproveBookingResponse{}, err
+		}
 		if n, rerr := s.q.CountActiveResourceOverlap(ctx, b.ResourceId, b.StartDate, b.EndDate, b.ID); rerr != nil {
 			return ApproveBookingResponse{}, rerr
 		} else if n > 0 {
@@ -964,11 +980,8 @@ func (s *BookingService) Approve(ctx context.Context, id int32, req ApproveBooki
 		// Karyawan yang ikut.
 		s.notifyPassengers(ctx, full.ID, "BOOKING_APPROVED", "Perjalanan disetujui",
 			"Perjalanan yang Anda ikuti disetujui: "+bookingLabel(full)+".")
-		// Booking ruangan → beri tahu room keeper.
-		if full.ResourceType == repository.ResourceTypeROOM {
-			s.notif.NotifyRoomKeepers("ROOM_BOOKED", "Ruangan dipesan",
-				"Ada booking ruangan yang disetujui", map[string]any{"bookingId": full.ID})
-		}
+		// Booking ruangan → semua penjaga ruangan itu.
+		s.notifyRoomBookingKeepers(ctx, full, "ROOM_BOOKED", "Ruangan dipesan", "disetujui", 0)
 	}
 
 	return ApproveBookingResponse{
@@ -1012,6 +1025,7 @@ func (s *BookingService) Reject(ctx context.Context, id int32, req RejectBooking
 			"Booking Anda ditolak", map[string]any{"bookingId": id, "note": req.Note})
 		s.notifyDriver(ctx, b.AssignedDriverId, "BOOKING_REJECTED", "Booking ditolak",
 			bookingLabel(b)+" — ditolak admin, Anda tidak jadi bertugas", id)
+		s.notifyRoomBookingKeepers(ctx, b, "BOOKING_REJECTED", "Booking ruangan ditolak", "ditolak admin", 0)
 		s.notifyPassengers(ctx, id, "BOOKING_REJECTED", "Perjalanan ditolak",
 			"Perjalanan yang Anda ikuti ditolak admin: "+bookingLabel(b)+".")
 	}
@@ -1231,6 +1245,8 @@ func (s *BookingService) Start(ctx context.Context, id int32, odometer *int32, l
 	if s.notif != nil {
 		s.notif.Notify(full.UserId, "BOOKING_STARTED", "Perjalanan dimulai",
 			"Perjalanan booking Anda telah dimulai", map[string]any{"bookingId": id})
+		s.notifyRoomBookingKeepers(ctx, full, "BOOKING_STARTED", "Booking ruangan dimulai",
+			"telah dimulai", actor.UserID)
 	}
 	return serializeBookingByID(full), nil
 }
@@ -1390,6 +1406,8 @@ func (s *BookingService) Complete(ctx context.Context, id int32, actor AuditActo
 		// Supir tidak bisa menyelesaikan sendiri (admin/pemohon yang menutup).
 		s.notifyDriver(ctx, b.AssignedDriverId, "BOOKING_COMPLETED", "Perjalanan selesai",
 			bookingLabel(full)+" — telah diselesaikan", id)
+		s.notifyRoomBookingKeepers(ctx, full, "BOOKING_COMPLETED", "Booking ruangan selesai",
+			"telah diselesaikan", actor.UserID)
 		// Booking ruangan langsung memicu prompt rating karena biasanya
 		// pemilik booking sendiri yang menyelesaikannya (self-serve, lihat
 		// Complete() case EMPLOYEE di atas) - begitu selesai mereka masih di
@@ -1551,68 +1569,6 @@ func (s *BookingService) GetBookingDriverRating(ctx context.Context, bookingID i
 	}, nil
 }
 
-// ─────────────────────────────────────────────────────────────────────────
-// ROOM RATINGS
-// Mirrors RateDriver/GetDriverRatings/GetBookingDriverRating above, but the
-// rated target is the room KEEPER (roomKeeperId), not the room - it evaluates
-// the person's service, not the room's condition. A room keeper can be
-// responsible for more than one room (N:1, unlike the strict 1:1
-// vehicle<->driver pairing), so ratings aggregate across every room they
-// keep. No merge handling needed: merge is vehicle-only (see MergeBookings),
-// room bookings are never merged.
-// ─────────────────────────────────────────────────────────────────────────
-
-func (s *BookingService) RateRoom(ctx context.Context, bookingID int32, req RateRoomRequest, actor AuditActor) (map[string]any, error) {
-	userID := int(actor.UserID)
-	b, err := s.q.GetBookingByID(ctx, bookingID)
-	if err != nil {
-		return nil, util.ErrNotFound
-	}
-	if b.Status != repository.BookingStatusCOMPLETED {
-		return nil, util.NewError(400, "can only rate completed bookings", util.ErrBadRequest)
-	}
-	if int(b.UserId) != userID {
-		return nil, util.ErrForbidden
-	}
-	if b.ResourceType != repository.ResourceTypeROOM {
-		return nil, util.NewError(400, "room rating is only for room bookings", util.ErrBadRequest)
-	}
-	roomID, err := s.q.GetRoomIDByResourceID(ctx, b.ResourceId)
-	if err != nil {
-		return nil, util.NewError(404, "room not found", util.ErrNotFound)
-	}
-	// Nullable on purpose - a room without an assigned keeper can still be
-	// rated (the booking still gets marked "sudah dinilai"), it just won't
-	// count toward anyone's summary.
-	roomKeeperID, _ := s.q.GetRoomKeeperIDByResourceID(ctx, b.ResourceId)
-	if _, err = s.q.GetRoomRatingByBooking(ctx, bookingID); err == nil {
-		return nil, util.NewError(409, "you have already rated this booking", util.ErrConflict)
-	}
-
-	r, err := s.q.CreateRoomRating(ctx, repository.CreateRoomRatingParams{
-		BookingId:    bookingID,
-		RoomId:       roomID,
-		RoomKeeperId: roomKeeperID,
-		RatedById:    int32(userID),
-		Rating:       req.Rating,
-		Review:       sql.NullString{String: req.Review, Valid: req.Review != ""},
-	})
-	if err != nil {
-		return nil, err
-	}
-	logAudit(ctx, s.q, actor, "RATE_ROOM", "Booking", bookingID,
-		"Ruangan dinilai "+itoa(int32(req.Rating))+" bintang")
-	return map[string]any{
-		"id":           r.ID,
-		"bookingId":    r.BookingId,
-		"roomId":       r.RoomId,
-		"roomKeeperId": nullInt32(r.RoomKeeperId),
-		"rating":       r.Rating,
-		"review":       nullStr(r.Review),
-		"createdAt":    r.CreatedAt,
-	}, nil
-}
-
 // GetRoomRatings returns every rating attributed to this room keeper, across
 // all rooms they're responsible for.
 func (s *BookingService) GetRoomRatings(ctx context.Context, roomKeeperID int32) (map[string]any, error) {
@@ -1712,6 +1668,11 @@ func (s *BookingService) SubstituteResource(ctx context.Context, id int32, req S
 	if newResource.Status == repository.ResourceStatusMAINTENANCE {
 		return nil, util.NewError(409, "new resource is currently under maintenance", util.ErrConflict)
 	}
+	if newResource.Type == repository.ResourceTypeROOM {
+		if err := requireRoomHasKeeper(ctx, s.q, req.ResourceID); err != nil {
+			return nil, err
+		}
+	}
 
 	count, _ := s.q.CheckBookingConflict(ctx, repository.CheckBookingConflictParams{
 		ResourceId: req.ResourceID,
@@ -1747,6 +1708,11 @@ func (s *BookingService) SubstituteResource(ctx context.Context, id int32, req S
 		// Supir tetap, kendaraannya berganti.
 		s.notifyDriver(ctx, full.AssignedDriverId, "BOOKING_SUBSTITUTED", "Kendaraan diganti",
 			bookingLabel(full)+" — kendaraan diganti dari "+b.ResourceName, id)
+		// Ruangan diganti: penjaga ruangan lama lepas, penjaga ruangan baru menerima.
+		s.notifyRoomBookingKeepers(ctx, b, "BOOKING_SUBSTITUTED", "Ruangan diganti",
+			"dipindahkan ke "+full.ResourceName+", tidak lagi di ruangan Anda", 0)
+		s.notifyRoomBookingKeepers(ctx, full, "NEW_BOOKING", "Booking ruangan masuk",
+			"dialihkan dari "+b.ResourceName+", menunggu persetujuan admin", 0)
 	}
 	return serializeBookingByID(full), nil
 }

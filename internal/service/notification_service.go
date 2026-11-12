@@ -131,11 +131,6 @@ func (s *NotificationService) NotifyAdmins(notifType, title, message string, dat
 	s.notifyRole("ADMIN", notifType, title, message, data)
 }
 
-// NotifyRoomKeepers fans a notification out to every active ROOM_KEEPER user.
-func (s *NotificationService) NotifyRoomKeepers(notifType, title, message string, data map[string]any) {
-	s.notifyRole("ROOM_KEEPER", notifType, title, message, data)
-}
-
 func (s *NotificationService) notifyRole(role, notifType, title, message string, data map[string]any) {
 	ids, err := s.q.ListActiveUserIDsByRole(context.Background(), role)
 	if err != nil {

@@ -356,7 +356,7 @@ tidak dipilih otomatis untuk booking lain.
 | RT-02 | Rating kedua kali | Ditolak "sudah dinilai"; panel menampilkan hasil, bukan form kosong | DB |
 | RT-03 | Rating booking belum COMPLETED / bukan pemilik | Ditolak | — |
 | RT-04 | Rating supir pada booking tanpa supir | Ditolak | — |
-| RT-05 | Rating ruangan R2 (tanpa penjaga) | Tersimpan, tidak masuk ringkasan penjaga mana pun | RG |
+| RT-05 | Booking ruangan R2 (tanpa penjaga) | Ditolak 409 - admin wajib memilih penjaga dulu (migrasi 000024) | RG |
 | RT-06 | Rating ruangan R1 | Masuk ringkasan RK-1 | RK |
 | RT-07 | Pengingat rating: booking kendaraan selesai, pemohon login ulang | Prompt/modal rating muncul sekali; bisa ditutup; notifikasi tetap ada | NT |
 

@@ -134,6 +134,12 @@ func (s *GuestBookingService) Create(ctx context.Context, req CreateGuestBooking
 	if !req.EndDate.After(req.StartDate) {
 		return nil, util.ErrInvalidDateRange
 	}
+	// Ruangan tanpa penjaga aktif tidak bisa dibooking.
+	if res, err := s.q.GetResourceByID(ctx, req.ResourceID); err == nil && res.Type == repository.ResourceTypeROOM {
+		if err := requireRoomHasKeeper(ctx, s.q, req.ResourceID); err != nil {
+			return nil, err
+		}
+	}
 
 	token := util.GenerateToken(32)
 	g, err := s.q.CreateGuestBooking(ctx, repository.CreateGuestBookingParams{

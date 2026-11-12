@@ -324,11 +324,10 @@ export async function runBatch3() {
     check('RT-04', r.status === 400, `Rating supir pada booking tanpa supir → ${r.status}`);
   });
   await scenario('RT-05/06', async () => {
-    const rNo = await newRoom();
-    const b = await bookApproved(U.EMPA.token, rNo.resourceId, inMin(5), inMin(60));
-    await startB(b.id, U.EMPA.token); await completeB(b.id, U.EMPA.token);
-    const r5 = await rateRoom(b.id, U.EMPA.token);
-    check('RT-05', ok2(r5) && r5.data.roomKeeperId == null, `Rating ruangan tanpa penjaga → ${r5.status}`);
+    // Sejak migrasi 000024 ruangan tanpa penjaga tidak bisa dibooking.
+    const rNo = await newRoom({ keeperIds: [] });
+    const r5 = await book(U.EMPA.token, rNo.resourceId, inMin(5), inMin(60));
+    check('RT-05', r5.status === 409, `Booking ruangan tanpa penjaga → ${r5.status}`);
     const r6 = await rateRoom(roomOngoing, U.EMPA.token, 5);
     const list = await api('GET', `/bookings/room-keepers/${U.RK1.rkId}/ratings`, { token: U.ADM.token });
     const found = (list.data?.ratings ?? []).some((x) => x.ratedBy?.id === U.EMPA.id && x.rating === 5);

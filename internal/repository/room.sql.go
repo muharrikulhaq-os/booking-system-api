@@ -24,13 +24,19 @@ WHERE ($1::text IS NULL
              AND bk.status IN ('APPROVED', 'ONGOING')
              AND NOW() BETWEEN bk."startDate" AND bk."endDate"
        ))
-  AND (NOT $3::boolean OR r.status NOT IN ('INACTIVE', 'MAINTENANCE'))
+  AND (NOT $3::boolean OR (r.status NOT IN ('INACTIVE', 'MAINTENANCE')
+       AND EXISTS (
+           SELECT 1 FROM room_keeper_rooms rkr
+           JOIN room_keepers rk ON rk.id = rkr."roomKeeperId"
+           JOIN users ku ON ku.id = rk."userId"
+           WHERE rkr."roomId" = rm.id AND rk."isActive" AND ku."isActive")))
 `
 
 type CountRoomsParams struct {
 	Search sql.NullString     `json:"search"`
 	Status NullResourceStatus `json:"status"`
-	// BookableOnly: buang INACTIVE & MAINTENANCE (pilihan saat membuat booking).
+	// BookableOnly: buang INACTIVE & MAINTENANCE serta ruangan tanpa penjaga
+	// aktif (pilihan saat membuat booking).
 	BookableOnly bool `json:"bookable_only"`
 }
 
@@ -65,11 +71,9 @@ func (q *Queries) CreateRoom(ctx context.Context, arg CreateRoomParams) (Room, e
 }
 
 const getRoomByID = `-- name: GetRoomByID :one
-SELECT rm.id, rm."resourceId", rm.location, rm.capacity, rm."photoUrl", rm."roomKeeperId", r.name AS resource_name, r.status AS resource_status, rku.name AS room_keeper_name
+SELECT rm.id, rm."resourceId", rm.location, rm.capacity, rm."photoUrl", r.name AS resource_name, r.status AS resource_status
 FROM rooms rm
 JOIN resources r ON r.id = rm."resourceId"
-LEFT JOIN room_keepers rk ON rk.id = rm."roomKeeperId"
-LEFT JOIN users rku ON rku.id = rk."userId"
 WHERE rm.id = $1 LIMIT 1
 `
 
@@ -79,10 +83,8 @@ type GetRoomByIDRow struct {
 	Location       string         `json:"location"`
 	Capacity       int16          `json:"capacity"`
 	PhotoUrl       sql.NullString `json:"photoUrl"`
-	RoomKeeperId   sql.NullInt32  `json:"roomKeeperId"`
 	ResourceName   string         `json:"resource_name"`
 	ResourceStatus ResourceStatus `json:"resource_status"`
-	RoomKeeperName sql.NullString `json:"room_keeper_name"`
 }
 
 func (q *Queries) GetRoomByID(ctx context.Context, id int32) (GetRoomByIDRow, error) {
@@ -94,10 +96,8 @@ func (q *Queries) GetRoomByID(ctx context.Context, id int32) (GetRoomByIDRow, er
 		&i.Location,
 		&i.Capacity,
 		&i.PhotoUrl,
-		&i.RoomKeeperId,
 		&i.ResourceName,
 		&i.ResourceStatus,
-		&i.RoomKeeperName,
 	)
 	return i, err
 }
@@ -117,7 +117,12 @@ WHERE ($3::text IS NULL
              AND bk.status IN ('APPROVED', 'ONGOING')
              AND NOW() BETWEEN bk."startDate" AND bk."endDate"
        ))
-  AND (NOT $5::boolean OR r.status NOT IN ('INACTIVE', 'MAINTENANCE'))
+  AND (NOT $5::boolean OR (r.status NOT IN ('INACTIVE', 'MAINTENANCE')
+       AND EXISTS (
+           SELECT 1 FROM room_keeper_rooms rkr
+           JOIN room_keepers rk ON rk.id = rkr."roomKeeperId"
+           JOIN users ku ON ku.id = rk."userId"
+           WHERE rkr."roomId" = rm.id AND rk."isActive" AND ku."isActive")))
 ORDER BY %s
 LIMIT $1 OFFSET $2
 `

@@ -46,6 +46,10 @@ WHERE (sqlc.narg(user_id)::int IS NULL OR b."userId" = sqlc.narg(user_id)::int)
   AND (sqlc.narg(start_from)::timestamptz IS NULL OR b."startDate" >= sqlc.narg(start_from)::timestamptz)
   AND (sqlc.narg(end_to)::timestamptz IS NULL OR b."endDate" <= sqlc.narg(end_to)::timestamptz)
   AND (sqlc.narg(search)::text IS NULL OR r.name ILIKE '%' || sqlc.narg(search)::text || '%' OR u.name ILIKE '%' || sqlc.narg(search)::text || '%')
+  AND (sqlc.narg(room_keeper_id)::int IS NULL OR b."resourceId" IN (
+       SELECT rm2."resourceId" FROM rooms rm2
+       JOIN room_keeper_rooms rkr ON rkr."roomId" = rm2.id
+       WHERE rkr."roomKeeperId" = sqlc.narg(room_keeper_id)::int))
 ORDER BY b."createdAt" DESC
 LIMIT $1 OFFSET $2;
 
@@ -60,7 +64,11 @@ WHERE (sqlc.narg(user_id)::int IS NULL OR b."userId" = sqlc.narg(user_id)::int)
   AND (sqlc.narg(driver_id)::int IS NULL OR b."assignedDriverId" = sqlc.narg(driver_id)::int)
   AND (sqlc.narg(start_from)::timestamptz IS NULL OR b."startDate" >= sqlc.narg(start_from)::timestamptz)
   AND (sqlc.narg(end_to)::timestamptz IS NULL OR b."endDate" <= sqlc.narg(end_to)::timestamptz)
-  AND (sqlc.narg(search)::text IS NULL OR r.name ILIKE '%' || sqlc.narg(search)::text || '%' OR u.name ILIKE '%' || sqlc.narg(search)::text || '%');
+  AND (sqlc.narg(search)::text IS NULL OR r.name ILIKE '%' || sqlc.narg(search)::text || '%' OR u.name ILIKE '%' || sqlc.narg(search)::text || '%')
+  AND (sqlc.narg(room_keeper_id)::int IS NULL OR b."resourceId" IN (
+       SELECT rm2."resourceId" FROM rooms rm2
+       JOIN room_keeper_rooms rkr ON rkr."roomId" = rm2.id
+       WHERE rkr."roomKeeperId" = sqlc.narg(room_keeper_id)::int));
 
 -- name: GetBookingByID :one
 SELECT b.*,

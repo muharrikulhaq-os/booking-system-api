@@ -186,15 +186,6 @@ func (q *Queries) GetRoomIDByResourceID(ctx context.Context, resourceID int32) (
 	return id, err
 }
 
-// GetRoomKeeperIDByResourceID resolves a booking's resourceId down to the
-// room's assigned room keeper (nullable - a room may not have one). Used by
-// RateRoom to attribute the rating to the keeper, not the room.
-func (q *Queries) GetRoomKeeperIDByResourceID(ctx context.Context, resourceID int32) (sql.NullInt32, error) {
-	var roomKeeperID sql.NullInt32
-	err := q.db.QueryRowContext(ctx,
-		`SELECT "roomKeeperId" FROM rooms WHERE "resourceId" = $1 LIMIT 1`, resourceID).Scan(&roomKeeperID)
-	return roomKeeperID, err
-}
 
 // ─────────────────────────────────────────────────────────────────────────
 // ROOM RATINGS

@@ -92,14 +92,25 @@ export async function setVehicleStatus(v, status) {
   return r;
 }
 
-export async function newRoom({ keeperId } = {}) {
+/** Penjaga ruangan bawaan untuk ruangan uji (ruangan tanpa penjaga tidak bisa dibooking). */
+async function defaultKeeperId() {
+  if (!U.RKDEF) await createUser('RKDEF', ROLE.ROOM_KEEPER);
+  return U.RKDEF.rkId;
+}
+
+/**
+ * Ruangan uji. keeperIds = daftar penjaga; keeperId = satu penjaga (lama).
+ * Tanpa keduanya → penjaga bawaan RKDEF; keeperIds: [] → tanpa penjaga.
+ */
+export async function newRoom({ keeperId, keeperIds } = {}) {
   const name = `Ruang ${uniq()}`;
   const r = await api('POST', '/rooms', { token: U.ADM.token, body: { name, location: 'Lt 2', capacity: 10 } });
   if (!ok2(r)) throw new Error(`buat ruangan gagal: ${r.status} ${r.msg}`);
   const row = sql(`select r.id, r."resourceId" from rooms r join resources s on s.id=r."resourceId" where s.name='${name}'`).split('|');
   const room = { id: Number(row[0]), resourceId: Number(row[1]), name };
-  if (keeperId) {
-    const k = await api('PATCH', `/rooms/${room.id}/room-keeper`, { token: U.ADM.token, body: { roomKeeperId: keeperId } });
+  const ids = keeperIds ?? (keeperId ? [keeperId] : [await defaultKeeperId()]);
+  if (ids.length) {
+    const k = await api('PATCH', `/rooms/${room.id}/room-keepers`, { token: U.ADM.token, body: { roomKeeperIds: ids } });
     if (!ok2(k)) throw new Error(`set penjaga gagal: ${k.status} ${k.msg}`);
   }
   return room;

@@ -29,7 +29,8 @@ func (h *RoomHandler) Register(r fiber.Router) {
 	// Penjaga ruangan boleh mengubah status ruangan yang dijaganya (B19).
 	g.Patch("/:id/status", middleware.RequireRole("ADMIN", "ROOM_KEEPER"), h.UpdateStatus)
 	g.Patch("/:id/photo", admin, h.UpdatePhoto)
-	g.Patch("/:id/room-keeper", admin, h.SetRoomKeeper)
+	g.Patch("/:id/room-keepers", admin, h.SetRoomKeepers)
+	g.Patch("/:id/room-keeper", admin, h.SetRoomKeepers) // aplikasi versi lama
 	g.Delete("/:id", admin, h.Delete)
 	g.Get("/:id/attachments", h.ListAttachments)
 	g.Post("/:id/attachments", admin, h.UploadAttachment)
@@ -122,22 +123,29 @@ func (h *RoomHandler) UpdatePhoto(c *fiber.Ctx) error {
 	return util.OK(c, "Room photo updated", data)
 }
 
-func (h *RoomHandler) SetRoomKeeper(c *fiber.Ctx) error {
+// SetRoomKeepers: {roomKeeperIds: [..]} mengganti seluruh penjaga ruangan.
+// Bentuk lama {roomKeeperId: n|null} tetap diterima (satu penjaga / kosong).
+func (h *RoomHandler) SetRoomKeepers(c *fiber.Ctx) error {
 	id, err := parseID(c, "id")
 	if err != nil {
 		return err
 	}
 	var body struct {
-		RoomKeeperID *int32 `json:"roomKeeperId"`
+		RoomKeeperIDs []int32 `json:"roomKeeperIds"`
+		RoomKeeperID  *int32  `json:"roomKeeperId"`
 	}
 	if err := bindAndValidate(c, &body); err != nil {
 		return err
 	}
-	data, err := h.svc.SetRoomKeeper(c.Context(), id, body.RoomKeeperID)
+	ids := body.RoomKeeperIDs
+	if ids == nil && body.RoomKeeperID != nil {
+		ids = []int32{*body.RoomKeeperID}
+	}
+	data, err := h.svc.SetRoomKeepers(c.Context(), id, ids, auditActor(c))
 	if err != nil {
 		return err
 	}
-	return util.OK(c, "Room keeper updated", data)
+	return util.OK(c, "Room keepers updated", data)
 }
 
 func (h *RoomHandler) Delete(c *fiber.Ctx) error {

@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"database/sql"
+	"strings"
 
 	"booking-system-api/internal/repository"
 	"booking-system-api/internal/util"
@@ -28,24 +29,28 @@ type UpdateRoomRequest struct {
 	Capacity int16  `json:"capacity" validate:"required,min=1"`
 }
 
-func serializeRoomRow(r repository.ListRoomsRow) map[string]any {
-	return map[string]any{
-		"id":         r.ID,
-		"resourceId": r.ResourceId,
-		"name":       r.ResourceName,
-		"location":   r.Location,
-		"capacity":   r.Capacity,
-		"status":     string(r.ResourceStatus),
-		"photoUrl":   nullStr(r.PhotoUrl),
+// withRoomKeepers menambahkan penjaga ruangan (N:N, migrasi 000024):
+//   - roomKeepers: semua penjaga (aktif maupun tidak)
+//   - hasActiveKeeper: false = ruangan belum bisa dibooking
+//   - roomKeeper: penjaga pertama - hanya untuk aplikasi versi lama
+func withRoomKeepers(out map[string]any, keepers []repository.RoomKeeperRef) map[string]any {
+	list := make([]map[string]any, 0, len(keepers))
+	active := false
+	for _, k := range keepers {
+		list = append(list, roomKeeperPayload(k))
+		active = active || k.IsActive
 	}
+	out["roomKeepers"] = list
+	out["hasActiveKeeper"] = active
+	out["roomKeeper"] = nil
+	if len(keepers) > 0 {
+		out["roomKeeper"] = map[string]any{"id": keepers[0].RoomKeeperID, "name": keepers[0].Name}
+	}
+	return out
 }
 
-func serializeRoomByID(r repository.GetRoomByIDRow) map[string]any {
-	var roomKeeper any
-	if r.RoomKeeperId.Valid {
-		roomKeeper = map[string]any{"id": r.RoomKeeperId.Int32, "name": r.RoomKeeperName.String}
-	}
-	return map[string]any{
+func serializeRoomRow(r repository.ListRoomsRow, keepers []repository.RoomKeeperRef) map[string]any {
+	return withRoomKeepers(map[string]any{
 		"id":         r.ID,
 		"resourceId": r.ResourceId,
 		"name":       r.ResourceName,
@@ -53,10 +58,19 @@ func serializeRoomByID(r repository.GetRoomByIDRow) map[string]any {
 		"capacity":   r.Capacity,
 		"status":     string(r.ResourceStatus),
 		"photoUrl":   nullStr(r.PhotoUrl),
-		// Room keeper penanggung jawab ruangan ini (opsional, N:1 - satu room
-		// keeper boleh punya banyak ruangan) - dipakai untuk atribusi rating.
-		"roomKeeper": roomKeeper,
-	}
+	}, keepers)
+}
+
+func serializeRoomByID(r repository.GetRoomByIDRow, keepers []repository.RoomKeeperRef) map[string]any {
+	return withRoomKeepers(map[string]any{
+		"id":         r.ID,
+		"resourceId": r.ResourceId,
+		"name":       r.ResourceName,
+		"location":   r.Location,
+		"capacity":   r.Capacity,
+		"status":     string(r.ResourceStatus),
+		"photoUrl":   nullStr(r.PhotoUrl),
+	}, keepers)
 }
 
 // bookable = hanya yang bisa dipesan (lihat VehicleService.List).
@@ -83,9 +97,14 @@ func (s *RoomService) List(ctx context.Context, page, limit int, search *string,
 	total, _ := s.q.CountRooms(ctx, repository.CountRoomsParams{
 		Search: params.Search, Status: params.Status, BookableOnly: bookable,
 	})
+	refs, _ := s.q.ListAllRoomKeeperRefs(ctx)
+	byRoom := map[int32][]repository.RoomKeeperRef{}
+	for _, k := range refs {
+		byRoom[k.RoomID] = append(byRoom[k.RoomID], k)
+	}
 	out := make([]map[string]any, len(rows))
 	for i, r := range rows {
-		out[i] = serializeRoomRow(r)
+		out[i] = serializeRoomRow(r, byRoom[r.ID])
 	}
 	return out, total, nil
 }
@@ -95,7 +114,11 @@ func (s *RoomService) GetByID(ctx context.Context, id int32) (map[string]any, er
 	if err != nil {
 		return nil, util.ErrNotFound
 	}
-	return serializeRoomByID(r), nil
+	keepers, err := s.q.ListRoomKeepersOfRoom(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	return serializeRoomByID(r, keepers), nil
 }
 
 func (s *RoomService) Create(ctx context.Context, req CreateRoomRequest, actor AuditActor) (map[string]any, error) {
@@ -142,7 +165,10 @@ func (s *RoomService) UpdateStatus(ctx context.Context, id int32, status string,
 	// Penjaga ruangan hanya boleh mengubah ruangan yang dijaganya (B19).
 	if role == "ROOM_KEEPER" {
 		rk, rkErr := s.q.GetRoomKeeperByUserID(ctx, actor.UserID)
-		if rkErr != nil || !rk.IsActive || !r.RoomKeeperId.Valid || r.RoomKeeperId.Int32 != rk.ID {
+		if rkErr != nil || !rk.IsActive {
+			return nil, util.NewError(403, "Anda bukan penjaga ruangan ini", util.ErrForbidden)
+		}
+		if ok, err := s.q.IsRoomKeeperOfResource(ctx, rk.ID, r.ResourceId); err != nil || !ok {
 			return nil, util.NewError(403, "Anda bukan penjaga ruangan ini", util.ErrForbidden)
 		}
 	}
@@ -172,24 +198,38 @@ func (s *RoomService) Delete(ctx context.Context, id int32, actor AuditActor) er
 	return nil
 }
 
-// SetRoomKeeper assigns (roomKeeperID != nil) or clears (nil) this room's
-// keeper. Unlike VehicleService.SetFixedDriver, no "release the old
-// pairing" step is needed - a room keeper can be responsible for more than
-// one room, so there's no uniqueness to defend.
-func (s *RoomService) SetRoomKeeper(ctx context.Context, id int32, roomKeeperID *int32) (map[string]any, error) {
-	if _, err := s.q.GetRoomByID(ctx, id); err != nil {
+// SetRoomKeepers mengganti seluruh penjaga ruangan (N:N - satu ruangan bisa
+// dijaga beberapa orang, satu orang bisa menjaga beberapa ruangan). Daftar
+// kosong = tanpa penjaga: ruangan tidak bisa dibooking sampai dipilihkan lagi.
+// Booking yang sudah ada tetap berjalan.
+func (s *RoomService) SetRoomKeepers(ctx context.Context, id int32, keeperIDs []int32, actor AuditActor) (map[string]any, error) {
+	r, err := s.q.GetRoomByID(ctx, id)
+	if err != nil {
 		return nil, util.ErrNotFound
 	}
-	var newKeeper sql.NullInt32
-	if roomKeeperID != nil {
-		if _, err := s.q.GetRoomKeeperByID(ctx, *roomKeeperID); err != nil {
-			return nil, util.NewError(404, "room keeper not found", util.ErrNotFound)
+	ids := make([]int32, 0, len(keeperIDs))
+	names := make([]string, 0, len(keeperIDs))
+	seen := map[int32]bool{}
+	for _, kid := range keeperIDs {
+		if seen[kid] {
+			continue
 		}
-		newKeeper = sql.NullInt32{Int32: *roomKeeperID, Valid: true}
+		seen[kid] = true
+		k, err := s.q.GetRoomKeeperByID(ctx, kid)
+		if err != nil {
+			return nil, util.NewError(404, "penjaga ruangan tidak ditemukan", util.ErrNotFound)
+		}
+		ids = append(ids, kid)
+		names = append(names, k.UserName)
 	}
-	if _, err := s.q.SetRoomKeeper(ctx, id, newKeeper); err != nil {
+	if err := s.q.SetRoomKeepers(ctx, id, ids); err != nil {
 		return nil, err
 	}
+	desc := "Penjaga ruangan " + r.ResourceName + " dikosongkan"
+	if len(names) > 0 {
+		desc = "Penjaga ruangan " + r.ResourceName + ": " + strings.Join(names, ", ")
+	}
+	logAudit(ctx, s.q, actor, "UPDATE", "Room", id, desc)
 	return s.GetByID(ctx, id)
 }
 

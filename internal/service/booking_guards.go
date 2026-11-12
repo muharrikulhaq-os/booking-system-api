@@ -19,8 +19,8 @@ func (s *BookingService) requireRoomKeeperOf(ctx context.Context, userID, resour
 	if err != nil || !rk.IsActive {
 		return util.ErrForbidden
 	}
-	keeperID, err := s.q.GetRoomKeeperIDByResourceID(ctx, resourceID)
-	if err != nil || !keeperID.Valid || keeperID.Int32 != rk.ID {
+	ok, err := s.q.IsRoomKeeperOfResource(ctx, rk.ID, resourceID)
+	if err != nil || !ok {
 		return util.NewError(403, "Anda bukan penjaga ruangan ini", util.ErrForbidden)
 	}
 	return nil

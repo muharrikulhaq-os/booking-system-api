@@ -229,6 +229,10 @@ WHERE ($1::int IS NULL OR b."userId" = $1::int)
   AND ($6::timestamptz IS NULL OR b."startDate" >= $6::timestamptz)
   AND ($7::timestamptz IS NULL OR b."endDate" <= $7::timestamptz)
   AND ($8::text IS NULL OR r.name ILIKE '%' || $8::text || '%' OR u.name ILIKE '%' || $8::text || '%')
+  AND ($9::int IS NULL OR b."resourceId" IN (
+       SELECT rm2."resourceId" FROM rooms rm2
+       JOIN room_keeper_rooms rkr ON rkr."roomId" = rm2.id
+       WHERE rkr."roomKeeperId" = $9::int))
 `
 
 type CountBookingsParams struct {
@@ -240,6 +244,8 @@ type CountBookingsParams struct {
 	StartFrom    sql.NullTime      `json:"start_from"`
 	EndTo        sql.NullTime      `json:"end_to"`
 	Search       sql.NullString    `json:"search"`
+	// RoomKeeperID: hanya booking ruangan yang dijaga penjaga ini.
+	RoomKeeperID sql.NullInt32 `json:"room_keeper_id"`
 }
 
 func (q *Queries) CountBookings(ctx context.Context, arg CountBookingsParams) (int64, error) {
@@ -252,6 +258,7 @@ func (q *Queries) CountBookings(ctx context.Context, arg CountBookingsParams) (i
 		arg.StartFrom,
 		arg.EndTo,
 		arg.Search,
+		arg.RoomKeeperID,
 	)
 	var count int64
 	err := row.Scan(&count)
@@ -712,6 +719,10 @@ WHERE ($3::int IS NULL OR b."userId" = $3::int)
   AND ($8::timestamptz IS NULL OR b."startDate" >= $8::timestamptz)
   AND ($9::timestamptz IS NULL OR b."endDate" <= $9::timestamptz)
   AND ($10::text IS NULL OR r.name ILIKE '%%' || $10::text || '%%' OR u.name ILIKE '%%' || $10::text || '%%')
+  AND ($11::int IS NULL OR b."resourceId" IN (
+       SELECT rm2."resourceId" FROM rooms rm2
+       JOIN room_keeper_rooms rkr ON rkr."roomId" = rm2.id
+       WHERE rkr."roomKeeperId" = $11::int))
 ORDER BY %s
 LIMIT $1 OFFSET $2
 `
@@ -743,6 +754,8 @@ type ListBookingsParams struct {
 	Search       sql.NullString    `json:"search"`
 	SortBy       string            `json:"sort_by"`
 	SortOrder    string            `json:"sort_order"`
+	// RoomKeeperID: hanya booking ruangan yang dijaga penjaga ini.
+	RoomKeeperID sql.NullInt32 `json:"room_keeper_id"`
 }
 
 type ListBookingsRow struct {
@@ -804,6 +817,7 @@ func (q *Queries) ListBookings(ctx context.Context, arg ListBookingsParams) ([]L
 		arg.StartFrom,
 		arg.EndTo,
 		arg.Search,
+		arg.RoomKeeperID,
 	)
 	if err != nil {
 		return nil, err
