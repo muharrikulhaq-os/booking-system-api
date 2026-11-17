@@ -32,6 +32,10 @@ type Config struct {
 
 	FrontendOrigin string
 
+	// URL publik API (mis. https://reservasi.kce.co.id) untuk link foto di
+	// ekspor Excel. Kosong = diambil dari header request.
+	PublicBaseURL string
+
 	// Path file service-account Firebase (untuk push FCM). Bila file tidak
 	// ada, push FCM dinonaktifkan otomatis (WebSocket tetap jalan).
 	FirebaseCredFile string
@@ -62,6 +66,7 @@ func Load() {
 		MaxFileSizeMB:        int64(getEnvInt("MAX_FILE_SIZE_MB", 10)),
 		FirebaseCredFile:     getEnv("FIREBASE_CREDENTIALS_FILE", "./firebase-service-account.json"),
 		FrontendOrigin:       getEnv("FRONTEND_ORIGIN", "http://localhost:3000"),
+		PublicBaseURL:        getEnv("PUBLIC_BASE_URL", ""),
 	}
 }
 

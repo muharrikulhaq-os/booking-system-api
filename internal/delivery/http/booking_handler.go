@@ -71,6 +71,9 @@ func (h *BookingHandler) Register(r fiber.Router) {
 	// Rating ruangan (sekarang ditujukan ke room keeper, bukan ruangannya)
 	// tetap terbuka ke semua peran (bukan admin-only seperti driver).
 	g.Get("/room-keepers/:room_keeper_id/ratings", h.GetRoomRatings)
+	// Riwayat booking (admin) + ekspor Excel - harus sebelum /:id.
+	g.Get("/history", admin, h.History)
+	g.Get("/history/export", admin, h.ExportHistory)
 	g.Get("/:id", h.GetByID)
 	g.Post("", adminOrEmployee, h.Create)
 	// Pembuat booking hanya ADMIN/EMPLOYEE; kepemilikan dicek di Cancel().
