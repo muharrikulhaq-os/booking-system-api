@@ -23,6 +23,8 @@ func historyQuery(c *fiber.Ctx) service.BookingHistoryQuery {
 		BookingType:  c.Query("bookingType"),
 		Statuses:     splitList(c.Query("status")),
 		Search:       c.Query("search"),
+		SortBy:       c.Query("sortBy"),
+		SortOrder:    c.Query("sortOrder"),
 	}
 }
 

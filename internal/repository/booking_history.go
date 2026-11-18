@@ -18,6 +18,21 @@ type BookingHistoryFilter struct {
 	BookingType  string   // "" | SPD | NON_SPD (khusus kendaraan)
 	Statuses     []string // kosong = semua (sudah divalidasi pemanggil)
 	Search       string
+	// Urutan (kolom tabel riwayat); kosong = jadwal terbaru dulu.
+	SortBy, SortOrder string
+}
+
+// BookingHistorySortColumns: kunci sort dari web → ekspresi SQL (whitelist,
+// lihat BuildOrderBy). "handler" = supir (kendaraan) / penjaga (ruangan).
+var BookingHistorySortColumns = map[string]string{
+	"id":           "b.id",
+	"startDate":    `b."startDate"`,
+	"resourceName": "r.name",
+	"bookingType":  `b."bookingType"::text`,
+	"requester":    "u.name",
+	"handler":      "COALESCE(NULLIF(du.name, ''), rkn.names, '')",
+	"status":       "b.status::text",
+	"createdAt":    `b."createdAt"`,
 }
 
 const bookingHistoryFrom = `
@@ -101,11 +116,7 @@ const bookingHistorySelect = `
 	       COALESCE((SELECT al.note FROM approval_logs al
 	                 WHERE al."bookingId" = b.id AND al.action = 'REJECTED'
 	                 ORDER BY al.id DESC LIMIT 1), ''),
-	       COALESCE((SELECT string_agg(ku.name, ', ' ORDER BY ku.name)
-	                 FROM room_keeper_rooms rkr
-	                 JOIN room_keepers rk ON rk.id = rkr."roomKeeperId"
-	                 JOIN users ku ON ku.id = rk."userId"
-	                 WHERE rkr."roomId" = rm.id), ''),
+	       COALESCE(rkn.names, ''),
 	       st."createdAt", COALESCE(st.name, ''),
 	       (SELECT a."createdAt" FROM audit_logs a
 	        WHERE a."entityType" = 'Booking' AND a."entityId" = b.id AND a.action = 'COMPLETE'
@@ -122,12 +133,20 @@ const bookingHistorySelect = `
 		LEFT JOIN users su ON su.id = a."userId"
 		WHERE a."entityType" = 'Booking' AND a."entityId" = b.id AND a.action = 'START'
 		ORDER BY a.id LIMIT 1
-	) st ON TRUE`
+	) st ON TRUE
+	LEFT JOIN LATERAL (
+		SELECT string_agg(ku.name, ', ' ORDER BY ku.name) AS names
+		FROM room_keeper_rooms rkr
+		JOIN room_keepers rk ON rk.id = rkr."roomKeeperId"
+		JOIN users ku ON ku.id = rk."userId"
+		WHERE rkr."roomId" = rm.id
+	) rkn ON TRUE`
 
 // ListBookingHistory: limit <= 0 = semua baris (ekspor).
 func (q *Queries) ListBookingHistory(ctx context.Context, f BookingHistoryFilter, limit, offset int32) ([]BookingHistoryRow, error) {
 	where, args := f.where()
-	query := bookingHistorySelect + where + ` ORDER BY b."startDate" DESC, b.id DESC`
+	order := BuildOrderBy(f.SortBy, f.SortOrder, BookingHistorySortColumns, `b."startDate" DESC`)
+	query := bookingHistorySelect + where + " ORDER BY " + order + ", b.id DESC"
 	if limit > 0 {
 		args = append(args, limit, offset)
 		query += ` LIMIT $` + strconv.Itoa(len(args)-1) + ` OFFSET $` + strconv.Itoa(len(args))

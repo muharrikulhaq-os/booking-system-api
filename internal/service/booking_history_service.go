@@ -25,6 +25,8 @@ type BookingHistoryQuery struct {
 	BookingType  string
 	Statuses     []string
 	Search       string
+	SortBy       string // kunci kolom (lihat repository.BookingHistorySortColumns)
+	SortOrder    string // asc | desc
 }
 
 const historyMaxDays = 366
@@ -105,6 +107,7 @@ func ParseBookingHistoryFilter(p BookingHistoryQuery) (repository.BookingHistory
 		f.Statuses = append(f.Statuses, s)
 	}
 	f.Search = strings.TrimSpace(p.Search)
+	f.SortBy, f.SortOrder = p.SortBy, p.SortOrder // tak dikenal → urutan bawaan
 	return f, nil
 }
 
