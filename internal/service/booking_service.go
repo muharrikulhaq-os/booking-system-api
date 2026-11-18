@@ -1787,6 +1787,14 @@ func (s *BookingService) MergeBookings(ctx context.Context, primaryID int32, req
 	if alreadyMerged {
 		return nil, util.NewError(409, "these bookings are already merged", util.ErrConflict)
 	}
+	// Booking yang masih PENDING ikut disetujui saat digabung (lihat
+	// approveMergedBooking), jadi aturan "booking milik sendiri harus
+	// disetujui admin lain" berlaku juga di sini - dicek sebelum mengubah apa pun.
+	for _, b := range []repository.GetBookingByIDRow{primary, target} {
+		if b.Status == repository.BookingStatusPENDING && int(b.UserId) == adminID {
+			return nil, util.ErrSelfApproval
+		}
+	}
 
 	// Determine effective time window for the primary booking.
 	// Default: union of both bookings (earliest start, latest end).
@@ -1949,16 +1957,89 @@ func (s *BookingService) MergeBookings(ctx context.Context, primaryID int32, req
 		}
 	}
 
+	// Booking yang digabung tidak lagi menunggu: yang masih PENDING langsung
+	// disetujui di sini. Dulu web/mobile memanggil approve terpisah setelah
+	// merge - bila panggilan kedua itu gagal, booking tertinggal "Menunggu"
+	// padahal sudah tergabung.
+	// Peringatan kapasitas (sama seperti Approve): total penumpang trip
+	// gabungan melebihi kursi kendaraan utama.
+	warningMsg := ""
+	if primary.AssignedVehicleId.Valid {
+		if v, verr := s.q.GetVehicleByID(ctx, primary.AssignedVehicleId.Int32); verr == nil {
+			others, _ := s.q.GetOverlappingPassengerCount(ctx, repository.GetOverlappingPassengerCountParams{
+				AssignedVehicleId: primary.AssignedVehicleId,
+				CheckStart:        effectiveStart,
+				CheckEnd:          effectiveEnd,
+				ExcludeID:         req.TargetBookingID,
+			})
+			if int(others)+int(target.PassengerCount) > int(v.Capacity) {
+				warningMsg = "Warning: Vehicle capacity overload! (Remaining capacity is negative). Please substitute vehicle if needed."
+			}
+		}
+	}
+
+	approved := []int32{}
+	if primary.Status == repository.BookingStatusPENDING &&
+		s.approveMergedBooking(ctx, primaryID, req.TargetBookingID, true, actor) {
+		approved = append(approved, primaryID)
+	}
+	if target.Status == repository.BookingStatusPENDING &&
+		s.approveMergedBooking(ctx, req.TargetBookingID, primaryID, false, actor) {
+		approved = append(approved, req.TargetBookingID)
+	}
+
 	return map[string]any{
 		"mergeId":            merge.ID,
 		"primaryBookingId":   merge.PrimaryBookingId,
 		"mergedBookingId":    merge.MergedBookingId,
+		"approvedBookingIds": approved,
+		"warning":            warningMsg,
 		"mergedBy":           adminID,
 		"reason":             nullStr(merge.Reason),
 		"effectiveStartDate": effectiveStart,
 		"effectiveEndDate":   effectiveEnd,
 		"createdAt":          merge.CreatedAt,
 	}, nil
+}
+
+// approveMergedBooking menyetujui booking PENDING yang baru saja digabung
+// dengan [otherID]. Jadwal, kendaraan, dan supirnya sudah divalidasi oleh
+// MergeBookings (booking yang digabung mengikuti trip utama), jadi tidak
+// mengulang semua pengecekan Approve. Mengembalikan true bila berubah ke
+// APPROVED. Supir hanya diberi tahu untuk booking utama - supir trip utama
+// sudah mendapat notifikasi BOOKING_MERGED untuk booking yang digabung.
+func (s *BookingService) approveMergedBooking(ctx context.Context, id, otherID int32, isPrimary bool, actor AuditActor) bool {
+	if _, err := s.q.ApproveBooking(ctx, repository.ApproveBookingParams{
+		ID:           id,
+		ApprovedById: sql.NullInt32{Int32: actor.UserID, Valid: true},
+	}); err != nil {
+		return false // sudah tidak PENDING (mis. disetujui admin lain bersamaan)
+	}
+	note := "Disetujui otomatis karena digabung dengan booking #" + itoa(otherID)
+	_, _ = s.q.CreateApprovalLog(ctx, repository.CreateApprovalLogParams{
+		BookingId:  id,
+		ApproverId: actor.UserID,
+		Action:     repository.ApprovalActionAPPROVED,
+		Note:       sql.NullString{String: note, Valid: true},
+	})
+	logAudit(ctx, s.q, actor, "APPROVE", "Booking", id, "Booking disetujui: "+note)
+
+	full, err := s.q.GetBookingByID(ctx, id)
+	if err != nil {
+		return true
+	}
+	syncDriverHolds(ctx, s.q, full.AssignedDriverId)
+	if s.notif != nil {
+		s.notif.Notify(full.UserId, "BOOKING_APPROVED", "Booking disetujui",
+			"Booking Anda telah disetujui (digabung dengan trip lain)", map[string]any{"bookingId": id})
+		s.notifyPassengers(ctx, id, "BOOKING_APPROVED", "Perjalanan disetujui",
+			"Perjalanan yang Anda ikuti disetujui: "+bookingLabel(full)+".")
+		if isPrimary {
+			s.notifyDriver(ctx, full.AssignedDriverId, "NEW_BOOKING", "Booking disetujui",
+				driverTripLabel(full)+" — disetujui, Anda bertugas", id)
+		}
+	}
+	return true
 }
 
 func (s *BookingService) GetMergeInfo(ctx context.Context, id int32, callerID int, callerRole string) (any, error) {

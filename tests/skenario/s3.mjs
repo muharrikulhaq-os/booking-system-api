@@ -240,15 +240,35 @@ export async function runBatch3() {
     const P = await bookApproved(U.EMPA.token, va.resourceId, wib(46, 9), wib(46, 12), { driverId: dA.driverId, passengerCount: 3 });
     const T = await book(U.EMPB.token, vb.resourceId, wib(46, 10), wib(46, 13), { driverId: dB.driverId, passengerCount: 2 });
     const m = await merge(P.id, { targetBookingId: T.data.id, reason: 'Searah' });
-    const a = await approve(T.data.id, U.ADM.token, 'telah dilakukan merge');
+    // Merge langsung menyetujui booking yang masih PENDING (tanpa approve terpisah).
     const gT = (await getBooking(T.data.id)).data; const gP = (await getBooking(P.id)).data;
     const vbFree = sqlInt(`select count(*) from bookings where "resourceId"=${vb.resourceId} and status in ('PENDING','APPROVED','ONGOING')`) === 0;
     const t = (x) => Date.parse(x);
     const sameWindow = t(gT.startDate) === t(gP.startDate) && t(gT.endDate) === t(gP.endDate) && t(gP.startDate) === t(wib(46, 9)) && t(gP.endDate) === t(wib(46, 13));
     const n = await hasNotif(U.EMPB.token, 'BOOKING_MERGED', T.data.id);
-    check('MG-01', ok2(m) && ok2(a) && gT.resource.id === va.resourceId && gT.assignedDriver?.id === dA.driverId && gT.status === 'APPROVED' && sameWindow && vbFree && n,
-      `Gabung: ikut kendaraan & supir utama, jendela 09–13 (${sameWindow}), kendaraan lama bebas=${vbFree}, notif=${n}`);
+    const ids = m.data?.approvedBookingIds ?? [];
+    check('MG-01', ok2(m) && gT.resource.id === va.resourceId && gT.assignedDriver?.id === dA.driverId && gT.status === 'APPROVED' && ids.includes(T.data.id) && sameWindow && vbFree && n,
+      `Gabung: langsung Disetujui, ikut kendaraan & supir utama, jendela 09–13 (${sameWindow}), kendaraan lama bebas=${vbFree}, notif=${n}`,
+      `Gabung: status sekunder=${gT.status}, approvedBookingIds=${JSON.stringify(ids)}`);
     U.mg = { P: P.id, T: T.data.id };
+    const log = sql(`select note from approval_logs where "bookingId"=${T.data.id} and action='APPROVED' order by id desc limit 1`);
+    const aud = sqlInt(`select count(*) from audit_logs where "entityType"='Booking' and "entityId"=${T.data.id} and action='APPROVE'`);
+    const na = await hasNotif(U.EMPB.token, 'BOOKING_APPROVED', T.data.id);
+    check('MG-15', log.includes(`digabung dengan booking #${P.id}`) && aud === 1 && na,
+      `Persetujuan otomatis tercatat (approval log "${log}", audit=${aud}) & pemohon dapat notifikasi disetujui=${na}`);
+    const again = await approve(T.data.id);
+    check('MG-16', again.status === 400, `Approve manual setelah merge → ${again.status} (sudah disetujui)`);
+  });
+  await scenario('MG-17', async () => {
+    // Admin tidak boleh menyetujui booking miliknya sendiri lewat merge.
+    const va = await newVehicle();
+    const P = await bookApproved(U.EMPA.token, va.resourceId, wib(50, 9), wib(50, 12), { driverId: (await newDriver('DRVMG14A')).driverId });
+    const own = await book(U.ADM.token, (await newVehicle()).resourceId, wib(50, 10), wib(50, 11), { driverId: (await newDriver('DRVMG14B')).driverId });
+    const m = await merge(P.id, { targetBookingId: own.data.id, reason: 'Searah' });
+    const g = (await getBooking(own.data.id)).data;
+    const merged = sqlInt(`select count(*) from booking_merges where "mergedBookingId"=${own.data.id}`);
+    check('MG-17', m.status === 403 && g.status === 'PENDING' && merged === 0,
+      `Gabung booking milik admin sendiri → ${m.status}, tetap ${g.status}, tidak tergabung (${merged})`);
   });
   await scenario('MG-02..08', async () => {
     const dA = await newDriver('DRVMG2A'); const va = await newVehicle({ capacity: 4 });
@@ -257,8 +277,7 @@ export async function runBatch3() {
     const m2 = await merge(P.id, { targetBookingId: T.data.id, startDate: wib(47, 8), endDate: wib(47, 14) });
     const gP = (await getBooking(P.id)).data;
     check('MG-02', ok2(m2) && Date.parse(gP.startDate) === Date.parse(wib(47, 8)) && Date.parse(gP.endDate) === Date.parse(wib(47, 14)), `Jendela gabungan kustom 08–14 diterapkan`);
-    const a8 = await approve(T.data.id);
-    check('MG-08', ok2(a8) && !!a8.json?.warning, `Total penumpang 6 di kapasitas 4 → peringatan "${a8.json?.warning ?? '-'}"`);
+    check('MG-08', ok2(m2) && !!m2.data?.warning, `Total penumpang 6 di kapasitas 4 → peringatan saat merge "${m2.data?.warning ?? '-'}"`);
     const m3 = await merge(P.id, { targetBookingId: P.id });
     check('MG-03', m3.status === 400, `Gabung dengan diri sendiri → ${m3.status}`);
     const m4 = await merge(P.id, { targetBookingId: T.data.id });
@@ -294,7 +313,7 @@ export async function runBatch3() {
     const dA = await newDriver('DRVMG10'); const va = await newVehicle();
     const P = await bookApproved(U.EMPA.token, va.resourceId, inMin(5), inMin(120), { driverId: dA.driverId });
     const T = await book(U.EMPB.token, (await newVehicle()).resourceId, inMin(10), inMin(100), { driverId: (await newDriver('DRVMG10B')).driverId });
-    await merge(P.id, { targetBookingId: T.data.id }); await approve(T.data.id);
+    await merge(P.id, { targetBookingId: T.data.id });
     await startB(P.id, dA.token);
     const sT = (await getBooking(T.data.id)).data.status;
     await completeB(P.id);

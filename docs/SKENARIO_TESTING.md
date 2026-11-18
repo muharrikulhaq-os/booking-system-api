@@ -318,7 +318,7 @@ tidak dipilih otomatis untuk booking lain.
 
 | ID | Skenario | Diharapkan | Menu lain ikut berubah |
 |---|---|---|---|
-| MG-01 | EMP-A (APPROVED, K2, DRV-2, 09–12, 3 org) & EMP-B (PENDING, K3, 10–13, 2 org) searah → admin gabung EMP-B ke EMP-A | EMP-B ikut K2 & DRV-2, jendela 09–13 untuk keduanya, EMP-B otomatis APPROVED ("telah dilakukan merge"); K3 bebas | LB, DB (kartu "Digabungkan"), AQ, KL, DR, NT (EMP-B & DRV-2) |
+| MG-01 | EMP-A (APPROVED, K2, DRV-2, 09–12, 3 org) & EMP-B (PENDING, K3, 10–13, 2 org) searah → admin gabung EMP-B ke EMP-A | EMP-B ikut K2 & DRV-2, jendela 09–13 untuk keduanya, EMP-B langsung APPROVED oleh backend saat merge (tanpa approve terpisah); K3 bebas | LB, DB (kartu "Digabungkan"), AQ, KL, DR, NT (EMP-B & DRV-2) |
 | MG-02 | Gabung dengan jendela waktu kustom | Kedua booking memakai jendela kustom | KL |
 | MG-03 | Gabung booking dengan dirinya sendiri | Ditolak | — |
 | MG-04 | Gabung pasangan yang sudah digabung | Ditolak "sudah digabung" | — |
@@ -332,6 +332,9 @@ tidak dipilih otomatis untuk booking lain.
 | MG-12 | BBM dicatat di booking utama | Tampil juga di detail booking sekunder, tanpa dobel | DB |
 | MG-13 | Kalender kendaraan setelah gabung | Satu trip, bukan dua jadwal terpisah | KL |
 | MG-14 | Antrian approval: booking yang punya kandidat gabung | Ada tanda/badge kandidat merge | AQ |
+| MG-15 | Persetujuan otomatis saat gabung | Approval log "Disetujui otomatis karena digabung dengan booking #...", audit APPROVE, pemohon dapat notifikasi disetujui | DB, NT |
+| MG-16 | Approve manual setelah gabung | Ditolak 400 (sudah disetujui) | — |
+| MG-17 | Admin menggabungkan booking PENDING miliknya sendiri | Ditolak 403 sebelum ada perubahan - booking tetap PENDING & tidak tergabung | — |
 
 ## 13. Laporan pengembalian — RR
 
