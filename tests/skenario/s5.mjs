@@ -217,13 +217,8 @@ export async function runBatch5() {
     const own = await put(U.EMPA.token, { passengerIds: [] });
     const adm = await put(A(), { passengerIds: [] });
     const kept = sqlInt(`select count(*) from booking_passengers where "bookingId"=${b.data?.id} and "userId"=${U.EMPB.id}`);
-    // Pengaturan "boleh ubah setelah disetujui" ON → pemesan boleh lagi.
-    const setS = (value) => api('PUT', '/master-settings/booking_passenger_edit_after_approval', { token: A(), body: { value } });
-    await setS('1');
-    const on = await put(U.EMPA.token, { passengerIds: [] });
-    await setS('0');
-    check('BC-24', b.status === 201 && over.status === 400 && ok2(pend) && ok2(ap) && own.status === 409 && adm.status === 409 && kept === 1 && ok2(on),
-      `PENDING: melebihi kapasitas ${over.status}, sesuai ${pend.status}; disetujui + pengaturan OFF: pemesan ${own.status}, admin ${adm.status}, daftar tetap (${kept}); pengaturan ON: pemesan ${on.status}`);
+    check('BC-24', b.status === 201 && over.status === 400 && ok2(pend) && ok2(ap) && own.status === 409 && adm.status === 409 && kept === 1,
+      `PENDING: melebihi kapasitas ${over.status}, sesuai ${pend.status}; setelah disetujui pemesan ${own.status}, admin ${adm.status}; daftar tetap (${kept})`);
   });
   await scenario('RR-10', async () => {
     const d = await newDriver('DRVRR10'); const v = await newVehicle({ odometer: 10000 });

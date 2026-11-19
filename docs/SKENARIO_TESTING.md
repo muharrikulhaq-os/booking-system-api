@@ -178,7 +178,7 @@ tidak dipilih otomatis untuk booking lain.
 | BC-21 | Karyawan booking atas nama sendiri lalu admin melihat | Admin melihat nama & departemen pemohon benar | LB, AQ |
 | BC-22 | Tombol "Ajukan Booking" ditekan beruntun / request terkirim ulang (serentak & berurutan) | Hanya SATU booking; kiriman identik berikutnya 409 "Booking yang sama sudah Anda ajukan (#id)". Jam berbeda / pengguna lain tetap boleh. Web & mobile juga menahan klik ganda | LB, DS |
 | BC-23 | Booking kendaraan dengan **Lokasi Penjemputan** & **Lokasi Tujuan** | Wajib di form web & mobile untuk kendaraan (tidak tampil untuk ruangan); tersimpan & tampil di detail; lokasi penjemputan ikut di notifikasi supir | DB, NT |
-| BC-24 | Ubah penumpang (karyawan/tamu yang ikut) setelah booking dibuat | Selama PENDING: pemesan/admin boleh, total (termasuk pemesan) ≤ kapasitas (lebih → 400). Setelah **disetujui**: pengaturan "boleh ubah setelah disetujui" OFF (bawaan) → terkunci untuk pemesan & admin (409), tombol "Ubah" hilang di web & mobile; ON → boleh sampai perjalanan dimulai | DB |
+| BC-24 | Ubah penumpang (karyawan/tamu yang ikut) setelah booking dibuat | Selama PENDING: pemesan/admin boleh, total (termasuk pemesan) ≤ kapasitas (lebih → 400). Setelah **disetujui**: terkunci untuk pemesan & admin (409), tombol "Ubah" hilang di web & mobile | DB |
 
 ## 4. Pemilihan supir otomatis & supir tetap — SP
 

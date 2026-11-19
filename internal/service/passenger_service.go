@@ -17,22 +17,10 @@ import (
 
 const maxPassengerLookup = 20
 
-// settingPassengerEditAfterApproval: 1 = penumpang boleh diubah setelah booking
-// disetujui (sampai perjalanan dimulai); 0 = terkunci begitu disetujui.
-const settingPassengerEditAfterApproval = "booking_passenger_edit_after_approval"
-
-// passengersEditable: status booking ini masih mengizinkan daftar penumpang
-// diubah - PENDING selalu; APPROVED hanya bila diizinkan pengaturan.
-// (Siapa yang boleh - pemesan/admin - dicek terpisah.)
-func (s *BookingService) passengersEditable(ctx context.Context, status repository.BookingStatus) bool {
-	switch status {
-	case repository.BookingStatusPENDING:
-		return true
-	case repository.BookingStatusAPPROVED:
-		m, err := s.q.GetMasterSettingByKey(ctx, settingPassengerEditAfterApproval)
-		return err == nil && util.ParseStringToFloat64(m.Value) >= 1
-	}
-	return false
+// passengersEditable: daftar penumpang hanya bisa diubah selama PENDING -
+// begitu disetujui terkunci. (Siapa yang boleh - pemesan/admin - dicek terpisah.)
+func passengersEditable(status repository.BookingStatus) bool {
+	return status == repository.BookingStatusPENDING
 }
 
 // employeeCanView: karyawan boleh membuka booking yang dia pesan atau ikuti.
@@ -177,9 +165,9 @@ func (s *BookingService) attachPassengers(ctx context.Context, out map[string]an
 		}
 	}
 	out["passengers"] = list
-	// Status ini masih boleh diubah (PENDING / APPROVED + pengaturan) - klien
-	// menambahkan cek pemesan/admin.
-	out["passengersEditable"] = s.passengersEditable(ctx, b.Status)
+	// Status ini masih boleh diubah (hanya PENDING) - klien menambahkan cek
+	// pemesan/admin.
+	out["passengersEditable"] = passengersEditable(b.Status)
 }
 
 // notifyPassengers: kabar perkembangan booking ke karyawan yang ikut.
@@ -202,10 +190,9 @@ type SetPassengersRequest struct {
 	Guests *[]GuestInput `json:"guests"`
 }
 
-// SetPassengers mengganti daftar karyawan yang ikut. Pemesan & admin selama
-// PENDING; setelah disetujui hanya bila pengaturan
-// booking_passenger_edit_after_approval = 1 (sampai perjalanan dimulai).
-// Jumlah penumpang dinaikkan bila kurang dan tidak pernah melebihi kapasitas.
+// SetPassengers mengganti daftar karyawan yang ikut. Pemesan & admin, HANYA
+// selama PENDING - setelah disetujui daftar penumpang terkunci. Jumlah
+// penumpang dinaikkan bila kurang dan tidak pernah melebihi kapasitas.
 func (s *BookingService) SetPassengers(ctx context.Context, id int32, req SetPassengersRequest, actor AuditActor, role string) (map[string]any, error) {
 	b, err := s.q.GetBookingByID(ctx, id)
 	if err != nil {
@@ -214,12 +201,8 @@ func (s *BookingService) SetPassengers(ctx context.Context, id int32, req SetPas
 	if role != "ADMIN" && b.UserId != actor.UserID {
 		return nil, util.ErrForbidden
 	}
-	if !s.passengersEditable(ctx, b.Status) {
-		msg := "daftar penumpang hanya bisa diubah selama booking masih menunggu persetujuan"
-		if b.Status != repository.BookingStatusAPPROVED {
-			msg = "daftar penumpang hanya bisa diubah sebelum perjalanan dimulai"
-		}
-		return nil, util.NewError(409, msg, util.ErrConflict)
+	if !passengersEditable(b.Status) {
+		return nil, util.NewError(409, "daftar penumpang hanya bisa diubah selama booking masih menunggu persetujuan", util.ErrConflict)
 	}
 	capacity, isVehicle := s.vehicleCapacity(ctx, b.ResourceId)
 	if !isVehicle {

@@ -130,7 +130,7 @@ Sinkronisasi: semua tulis memicu topik `booking` (web `DATA_CHANGED`, mobile `Da
 3. **Detail booking**: bagian **"Penumpang"** berisi pemesan + karyawan yang ikut, masing-masing dengan
    departemen dan **nomor HP** (tombol Telepon & WhatsApp, komponen `PhoneContact` yang sudah ada).
    Nomor kosong → "No. telepon belum diisi".
-4. **Ubah daftar**: pemesan dan admin bisa menambah/mengurangi karyawan yang ikut selama PENDING. Setelah **disetujui** tergantung pengaturan `booking_passenger_edit_after_approval` (menu Pengaturan web, kartu "Penumpang Booking"): 0 = terkunci (409, bawaan), 1 = boleh sampai perjalanan dimulai. Detail booking mengirim `passengersEditable` (status + pengaturan) — klien menambah cek pemesan/admin. Total penumpang (termasuk pemesan) tidak pernah melebihi kapasitas kendaraan, termasuk `passengerCount` saat booking dibuat (400).
+4. **Ubah daftar**: pemesan dan admin bisa menambah/mengurangi karyawan yang ikut **hanya selama PENDING** — setelah disetujui daftar penumpang terkunci (409), tanpa pengaturan (keputusan pemilik produk 2026-11-19). Detail booking mengirim `passengersEditable` (= status PENDING) — klien menambah cek pemesan/admin. Total penumpang (termasuk pemesan) tidak pernah melebihi kapasitas kendaraan, termasuk `passengerCount` saat booking dibuat (400).
 5. **Booking digabung (merge)**: supir melihat gabungan penumpang dari semua booking dalam satu perjalanan.
 6. Hanya untuk booking **kendaraan** (ruangan tidak).
 
@@ -151,7 +151,7 @@ CREATE TABLE IF NOT EXISTS booking_passengers (
 |---|---|---|
 | `GET /users/lookup?q=` | semua yang login | cari karyawan aktif: id, nama, ID karyawan, departemen (**tanpa** nomor HP — daftar pencarian tidak membocorkan nomor) |
 | `POST /bookings` | pemesan | + `passengerIds: number[]` |
-| `PUT /bookings/:id/passengers` | pemesan & admin; PENDING, atau APPROVED bila pengaturan mengizinkan | ganti daftar |
+| `PUT /bookings/:id/passengers` | pemesan & admin, hanya PENDING | ganti daftar |
 | `GET /bookings/:id` | yang boleh melihat booking | + `passengers: [{id, name, employeeId, department, phoneNumber}]` |
 
 Validasi: karyawan harus aktif, tidak boleh duplikat, pemesan sendiri diabaikan, maksimal = kapasitas − 1.
