@@ -234,7 +234,10 @@ func (s *AuthService) GetMe(ctx context.Context, userID int) (map[string]any, er
 	if err != nil {
 		return nil, util.ErrNotFound
 	}
+	// Nomor HP sendiri (semua role) - bisa diisi/diubah lewat PUT /users/me/phone.
+	phone, _ := s.q.GetUserPhone(ctx, int32(userID))
 	return map[string]any{
+		"phoneNumber":  phone,
 		"id":           user.ID,
 		"employeeId":   user.EmployeeId,
 		"name":         user.Name,

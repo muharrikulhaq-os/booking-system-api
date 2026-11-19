@@ -122,6 +122,7 @@ type ExtendedQuerier interface {
 	CreateRoomRating(ctx context.Context, arg CreateRoomRatingParams) (RoomRating, error)
 	GetRoomRatingByBooking(ctx context.Context, bookingID int32) (RoomRating, error)
 	GetRoomRatings(ctx context.Context, roomKeeperID int32) ([]GetRoomRatingsRow, error)
+	SetUserPhoneAll(ctx context.Context, userID int32, phone string) error
 	ListRoomKeepersOfRoom(ctx context.Context, roomID int32) ([]RoomKeeperRef, error)
 	ListRoomKeepersByResource(ctx context.Context, resourceID int32) ([]RoomKeeperRef, error)
 	ListAllRoomKeeperRefs(ctx context.Context) ([]RoomKeeperRef, error)

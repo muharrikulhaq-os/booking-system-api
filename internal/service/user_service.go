@@ -49,6 +49,24 @@ type UpdateUserRequest struct {
 
 // normalizePhone merapikan & memvalidasi nomor telepon: boleh +, spasi, -,
 // titik, kurung; 8-15 digit. "" tetap "" (kosong).
+// UpdateMyPhone: pengguna mengisi / mengubah nomor HP-nya sendiri (semua
+// role). Untuk supir & penjaga ruangan nomor di data masing-masing ikut
+// diperbarui. Mengembalikan profil terbaru.
+func (s *UserService) UpdateMyPhone(ctx context.Context, actor AuditActor, phone string) (map[string]any, error) {
+	p, err := normalizePhone(phone)
+	if err != nil {
+		return nil, err
+	}
+	if p == "" {
+		return nil, util.NewError(400, "nomor HP wajib diisi", util.ErrBadRequest)
+	}
+	if err := s.q.SetUserPhoneAll(ctx, actor.UserID, p); err != nil {
+		return nil, err
+	}
+	logAudit(ctx, s.q, actor, "UPDATE", "User", actor.UserID, "Memperbarui nomor HP sendiri")
+	return s.GetByID(ctx, actor.UserID)
+}
+
 func normalizePhone(p string) (string, error) {
 	p = strings.TrimSpace(p)
 	if p == "" {

@@ -28,6 +28,7 @@ func TestTopicsForPath(t *testing.T) {
 		{"/api/v1/drivers/4/fixed-vehicle", []string{TopicDriver, TopicVehicle}},
 		{"/api/v1/rooms/5/room-keeper", []string{TopicRoom, TopicRoomKeeper}},
 		{"/api/v1/rooms/5/room-keepers", []string{TopicRoom, TopicRoomKeeper}},
+		{"/api/v1/users/me/phone", []string{TopicUser, TopicDriver, TopicRoomKeeper, TopicBooking}},
 		{"/api/v1/room-keepers/6/toggle-active", []string{TopicRoomKeeper, TopicRoom}},
 		{"/api/v1/fuel-expenses/bbm", []string{TopicFuel, TopicVehicle}},
 		{"/api/v1/fuel-expenses/3/void", []string{TopicFuel, TopicVehicle}},

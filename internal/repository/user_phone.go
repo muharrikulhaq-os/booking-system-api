@@ -28,6 +28,17 @@ func (q *Queries) SetUserPhone(ctx context.Context, userID int32, phone string) 
 	return err
 }
 
+// SetUserPhoneAll menyimpan nomor telepon user sekaligus ke data supir /
+// penjaga ruangan miliknya (bila ada), supaya nomor yang tampil di detail
+// booking dan menu Driver/Penjaga Ruangan sama.
+func (q *Queries) SetUserPhoneAll(ctx context.Context, userID int32, phone string) error {
+	_, err := q.db.ExecContext(ctx, `
+		WITH u AS (UPDATE users SET "phoneNumber" = $2 WHERE id = $1),
+		     d AS (UPDATE drivers SET "phoneNumber" = $2 WHERE "userId" = $1)
+		UPDATE room_keepers SET "phoneNumber" = $2 WHERE "userId" = $1`, userID, strings.TrimSpace(phone))
+	return err
+}
+
 // GetUserPhone mengembalikan nomor telepon user ("" bila belum ada).
 func (q *Queries) GetUserPhone(ctx context.Context, userID int32) (string, error) {
 	var phone string

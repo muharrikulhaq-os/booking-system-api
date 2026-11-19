@@ -52,6 +52,8 @@ func (h *UserHandler) Register(r fiber.Router) {
 	g.Delete("/:id", admin, h.Delete)
 	g.Put("/me/profile-photo", h.UploadMyPhoto)
 	g.Delete("/me/profile-photo", h.DeleteMyPhoto)
+	// Semua role boleh mengisi / mengubah nomor HP-nya sendiri.
+	g.Put("/me/phone", h.UpdateMyPhone)
 	g.Put("/:id/profile-photo", admin, h.UploadUserPhoto)
 }
 
@@ -227,6 +229,20 @@ func (h *UserHandler) DeleteDepartment(c *fiber.Ctx) error {
 		return err
 	}
 	return util.OK(c, "Department deleted", nil)
+}
+
+func (h *UserHandler) UpdateMyPhone(c *fiber.Ctx) error {
+	var body struct {
+		PhoneNumber string `json:"phoneNumber"`
+	}
+	if err := bindAndValidate(c, &body); err != nil {
+		return err
+	}
+	data, err := h.svc.UpdateMyPhone(c.Context(), auditActor(c), body.PhoneNumber)
+	if err != nil {
+		return err
+	}
+	return util.OK(c, "Phone number updated", data)
 }
 
 func (h *UserHandler) UploadMyPhoto(c *fiber.Ctx) error {

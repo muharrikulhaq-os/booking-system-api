@@ -106,6 +106,10 @@ func TopicsForPath(path string) []string {
 		}
 		return nil // login/logout/refresh/password — tidak mengubah data bersama
 	case "users":
+		if len(seg) > 2 && seg[1] == "me" && seg[2] == "phone" {
+			// Nomor HP tampil di detail booking, menu Driver & Penjaga Ruangan.
+			return []string{TopicUser, TopicDriver, TopicRoomKeeper, TopicBooking}
+		}
 		if len(seg) > 2 && seg[1] == "me" && seg[2] != "profile-photo" {
 			return nil // notifikasi & device token pribadi
 		}
