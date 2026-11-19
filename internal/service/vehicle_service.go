@@ -114,13 +114,16 @@ func fixedDriverField(id sql.NullInt32, name sql.NullString) any {
 // bookable = hanya yang bisa dipesan (tanpa INACTIVE & MAINTENANCE) — pilihan
 // resource saat membuat booking. IN_USE tetap tampil: sedang dipakai hari ini
 // bukan berarti tidak bisa dipesan untuk tanggal lain.
-func (s *VehicleService) List(ctx context.Context, page, limit int, search *string, categoryID *int32, status *string, bookable bool, sortBy, sortOrder string) ([]map[string]any, int64, error) {
+// hideInactive: pengguna selain admin tidak melihat kendaraan INACTIVE sama
+// sekali (daftar, jumlah, maupun filter status).
+func (s *VehicleService) List(ctx context.Context, page, limit int, search *string, categoryID *int32, status *string, bookable, hideInactive bool, sortBy, sortOrder string) ([]map[string]any, int64, error) {
 	params := repository.ListVehiclesParams{
 		Limit:        int32(limit),
 		Offset:       int32((page - 1) * limit),
 		SortBy:       sortBy,
 		SortOrder:    sortOrder,
 		BookableOnly: bookable,
+		HideInactive: hideInactive,
 	}
 	if search != nil {
 		params.Search = sql.NullString{String: *search, Valid: true}
@@ -143,6 +146,7 @@ func (s *VehicleService) List(ctx context.Context, page, limit int, search *stri
 	}
 	total, _ := s.q.CountVehicles(ctx, repository.CountVehiclesParams{
 		Search: params.Search, CategoryID: params.CategoryID, Status: params.Status, BookableOnly: bookable,
+		HideInactive: hideInactive,
 	})
 
 	spdIDs, _ := s.q.GetVehicleIDsWithActiveSpd(ctx)
@@ -157,6 +161,18 @@ func (s *VehicleService) List(ctx context.Context, page, limit int, search *stri
 	}
 	s.attachOwnership(ctx, out...)
 	return out, total, nil
+}
+
+// GetByIDFor: seperti GetByID, tetapi kendaraan INACTIVE disembunyikan (404)
+// dari pengguna selain admin.
+func (s *VehicleService) GetByIDFor(ctx context.Context, id int32, role string) (map[string]any, error) {
+	if role != "ADMIN" {
+		v, err := s.q.GetVehicleByID(ctx, id)
+		if err != nil || v.ResourceStatus == repository.ResourceStatusINACTIVE {
+			return nil, util.ErrNotFound
+		}
+	}
+	return s.GetByID(ctx, id)
 }
 
 func (s *VehicleService) GetByID(ctx context.Context, id int32) (map[string]any, error) {

@@ -27,6 +27,7 @@ WHERE ($1::text IS NULL
              AND NOW() BETWEEN bk."startDate" AND bk."endDate"
        ))
   AND (NOT $4::boolean OR r.status NOT IN ('INACTIVE', 'MAINTENANCE'))
+  AND (NOT $5::boolean OR r.status <> 'INACTIVE')
 `
 
 type CountVehiclesParams struct {
@@ -35,10 +36,12 @@ type CountVehiclesParams struct {
 	Status     NullResourceStatus `json:"status"`
 	// BookableOnly: buang INACTIVE & MAINTENANCE (pilihan saat membuat booking).
 	BookableOnly bool `json:"bookable_only"`
+	// HideInactive: buang INACTIVE (pengguna selain admin tidak melihatnya).
+	HideInactive bool `json:"hide_inactive"`
 }
 
 func (q *Queries) CountVehicles(ctx context.Context, arg CountVehiclesParams) (int64, error) {
-	row := q.db.QueryRowContext(ctx, countVehicles, arg.Search, arg.CategoryID, arg.Status, arg.BookableOnly)
+	row := q.db.QueryRowContext(ctx, countVehicles, arg.Search, arg.CategoryID, arg.Status, arg.BookableOnly, arg.HideInactive)
 	var count int64
 	err := row.Scan(&count)
 	return count, err
@@ -313,6 +316,7 @@ WHERE ($3::text IS NULL
              AND NOW() BETWEEN bk."startDate" AND bk."endDate"
        ))
   AND (NOT $6::boolean OR r.status NOT IN ('INACTIVE', 'MAINTENANCE'))
+  AND (NOT $7::boolean OR r.status <> 'INACTIVE')
 ORDER BY %s
 LIMIT $1 OFFSET $2
 `
@@ -342,6 +346,8 @@ type ListVehiclesParams struct {
 	SortOrder  string             `json:"sort_order"`
 	// BookableOnly: buang INACTIVE & MAINTENANCE (pilihan saat membuat booking).
 	BookableOnly bool `json:"bookable_only"`
+	// HideInactive: buang INACTIVE (pengguna selain admin tidak melihatnya).
+	HideInactive bool `json:"hide_inactive"`
 }
 
 type ListVehiclesRow struct {
@@ -378,6 +384,7 @@ func (q *Queries) ListVehicles(ctx context.Context, arg ListVehiclesParams) ([]L
 		arg.CategoryID,
 		arg.Status,
 		arg.BookableOnly,
+		arg.HideInactive,
 	)
 	if err != nil {
 		return nil, err

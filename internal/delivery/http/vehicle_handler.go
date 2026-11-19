@@ -42,7 +42,8 @@ func (h *VehicleHandler) Register(r fiber.Router) {
 func (h *VehicleHandler) List(c *fiber.Ctx) error {
 	page := queryInt(c, "page", 1)
 	limit := queryInt(c, "limit", 20)
-	data, total, err := h.svc.List(c.Context(), page, limit, queryString(c, "search"), queryInt32(c, "categoryId"), queryString(c, "status"), c.QueryBool("bookable"), c.Query("sortBy"), c.Query("sortOrder"))
+	data, total, err := h.svc.List(c.Context(), page, limit, queryString(c, "search"), queryInt32(c, "categoryId"), queryString(c, "status"), c.QueryBool("bookable"),
+		middleware.GetUserRole(c) != "ADMIN", c.Query("sortBy"), c.Query("sortOrder"))
 	if err != nil {
 		return err
 	}
@@ -54,7 +55,7 @@ func (h *VehicleHandler) GetByID(c *fiber.Ctx) error {
 	if err != nil {
 		return err
 	}
-	data, err := h.svc.GetByID(c.Context(), id)
+	data, err := h.svc.GetByIDFor(c.Context(), id, middleware.GetUserRole(c))
 	if err != nil {
 		return err
 	}

@@ -29,6 +29,7 @@ WHERE (sqlc.narg(search)::text IS NULL
              AND NOW() BETWEEN bk."startDate" AND bk."endDate"
        ))
   AND (NOT sqlc.arg(bookable_only)::boolean OR r.status NOT IN ('INACTIVE', 'MAINTENANCE'))
+  AND (NOT sqlc.arg(hide_inactive)::boolean OR r.status <> 'INACTIVE')
 ORDER BY r."createdAt" DESC
 LIMIT $1 OFFSET $2;
 
@@ -47,7 +48,8 @@ WHERE (sqlc.narg(search)::text IS NULL
              AND bk.status IN ('APPROVED', 'ONGOING')
              AND NOW() BETWEEN bk."startDate" AND bk."endDate"
        ))
-  AND (NOT sqlc.arg(bookable_only)::boolean OR r.status NOT IN ('INACTIVE', 'MAINTENANCE'));
+  AND (NOT sqlc.arg(bookable_only)::boolean OR r.status NOT IN ('INACTIVE', 'MAINTENANCE'))
+  AND (NOT sqlc.arg(hide_inactive)::boolean OR r.status <> 'INACTIVE');
 
 -- name: GetVehicleByID :one
 SELECT v.*, r.name AS resource_name, r.status AS resource_status,
