@@ -272,8 +272,10 @@ export async function runBatch3() {
   });
   await scenario('MG-02..08', async () => {
     const dA = await newDriver('DRVMG2A'); const va = await newVehicle({ capacity: 4 });
-    const P = await bookApproved(U.EMPA.token, va.resourceId, wib(47, 9), wib(47, 11), { driverId: dA.driverId, passengerCount: 3 });
-    const T = await book(U.EMPB.token, (await newVehicle()).resourceId, wib(47, 10), wib(47, 12), { driverId: (await newDriver('DRVMG2B')).driverId, passengerCount: 3 });
+    // Jumlah penumpang dihitung dari daftar: pemesan + 2 tamu = 3 per booking.
+    const dua = [{ name: 'Tamu 1' }, { name: 'Tamu 2' }];
+    const P = await bookApproved(U.EMPA.token, va.resourceId, wib(47, 9), wib(47, 11), { driverId: dA.driverId, guests: dua });
+    const T = await book(U.EMPB.token, (await newVehicle()).resourceId, wib(47, 10), wib(47, 12), { driverId: (await newDriver('DRVMG2B')).driverId, guests: dua });
     const m2 = await merge(P.id, { targetBookingId: T.data.id, startDate: wib(47, 8), endDate: wib(47, 14) });
     const gP = (await getBooking(P.id)).data;
     check('MG-02', ok2(m2) && Date.parse(gP.startDate) === Date.parse(wib(47, 8)) && Date.parse(gP.endDate) === Date.parse(wib(47, 14)), `Jendela gabungan kustom 08–14 diterapkan`);

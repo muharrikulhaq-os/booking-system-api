@@ -98,6 +98,13 @@ func normalizeGuests(in []GuestInput) ([]repository.BookingGuest, error) {
 	return out, nil
 }
 
+// passengerTotal: jumlah penumpang booking kendaraan = pemesan + karyawan
+// yang ikut + tamu. Supir TIDAK dihitung (kapasitas kendaraan = kursi
+// penumpang). Satu-satunya sumber angka passengerCount.
+func passengerTotal(users, guests int) int32 {
+	return int32(1 + users + guests)
+}
+
 // checkSeats: karyawan + tamu tidak melebihi kapasitas dikurangi pemesan.
 func checkSeats(users, guests int, capacity int32) error {
 	if capacity > 0 && int32(users+guests) > capacity-1 {
@@ -192,7 +199,7 @@ type SetPassengersRequest struct {
 
 // SetPassengers mengganti daftar karyawan yang ikut. Pemesan & admin, HANYA
 // selama PENDING - setelah disetujui daftar penumpang terkunci. Jumlah
-// penumpang dinaikkan bila kurang dan tidak pernah melebihi kapasitas.
+// penumpang dihitung ulang persis dari daftar (naik maupun turun).
 func (s *BookingService) SetPassengers(ctx context.Context, id int32, req SetPassengersRequest, actor AuditActor, role string) (map[string]any, error) {
 	b, err := s.q.GetBookingByID(ctx, id)
 	if err != nil {
@@ -232,18 +239,11 @@ func (s *BookingService) SetPassengers(ctx context.Context, id int32, req SetPas
 			return nil, err
 		}
 	}
-	// Jumlah penumpang: minimal pemesan + yang ikut, maksimal kapasitas
-	// kendaraan (data lama yang terlanjur melebihi kapasitas ikut dirapikan).
-	need := int32(len(ids)+len(guests)) + 1
-	count := b.PassengerCount
-	if count < need {
-		count = need
-	}
-	if capacity > 0 && count > capacity {
-		count = max(capacity, need)
-	}
-	if count != b.PassengerCount {
-		_ = s.q.SetBookingPassengerCount(ctx, id, count)
+	// Jumlah penumpang = pemesan + karyawan + tamu (ikut turun saat dihapus).
+	if count := passengerTotal(len(ids), len(guests)); count != b.PassengerCount {
+		if err := s.q.SetBookingPassengerCount(ctx, id, count); err != nil {
+			return nil, err
+		}
 	}
 	logAudit(ctx, s.q, actor, "UPDATE", "Booking", id, fmt.Sprintf("Penumpang yang ikut: %d karyawan, %d tamu", len(ids), len(guests)))
 	s.notifyPassengersAdded(ctx, b, added)

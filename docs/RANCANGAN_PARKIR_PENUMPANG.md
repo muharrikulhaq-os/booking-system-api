@@ -130,7 +130,7 @@ Sinkronisasi: semua tulis memicu topik `booking` (web `DATA_CHANGED`, mobile `Da
 3. **Detail booking**: bagian **"Penumpang"** berisi pemesan + karyawan yang ikut, masing-masing dengan
    departemen dan **nomor HP** (tombol Telepon & WhatsApp, komponen `PhoneContact` yang sudah ada).
    Nomor kosong → "No. telepon belum diisi".
-4. **Ubah daftar**: pemesan dan admin bisa menambah/mengurangi karyawan yang ikut **hanya selama PENDING** — setelah disetujui daftar penumpang terkunci (409), tanpa pengaturan (keputusan pemilik produk 2026-11-19). Detail booking mengirim `passengersEditable` (= status PENDING) — klien menambah cek pemesan/admin. Total penumpang (termasuk pemesan) tidak pernah melebihi kapasitas kendaraan, termasuk `passengerCount` saat booking dibuat (400).
+4. **Ubah daftar**: pemesan dan admin bisa menambah/mengurangi karyawan yang ikut **hanya selama PENDING** — setelah disetujui daftar penumpang terkunci (409), tanpa pengaturan (keputusan pemilik produk 2026-11-19). Detail booking mengirim `passengersEditable` (= status PENDING) — klien menambah cek pemesan/admin. **Jumlah penumpang (`passengerCount`) selalu dihitung dari daftar** = pemesan + karyawan yang ikut + tamu — tidak ada lagi angka manual; menambah/menghapus penumpang langsung menaikkan/menurunkan jumlahnya. Supir TIDAK dihitung (kapasitas kendaraan = kursi penumpang, pemesan termasuk). Orang tanpa akun dicatat sebagai tamu. Total tidak pernah melebihi kapasitas (400). Booking kendaraan yang belum selesai dirapikan sekali oleh migrasi 000027 (keputusan pemilik produk 2026-11-19).
 5. **Booking digabung (merge)**: supir melihat gabungan penumpang dari semua booking dalam satu perjalanan.
 6. Hanya untuk booking **kendaraan** (ruangan tidak).
 

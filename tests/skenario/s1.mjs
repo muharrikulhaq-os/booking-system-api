@@ -182,10 +182,14 @@ export async function runBatch1() {
   });
   await scenario('BC-12', async () => {
     const d = await newDriver('DRVBC12'); const v = await newVehicle({ capacity: 6 });
-    const over = await book(U.EMPA.token, v.resourceId, wib(2, 13), wib(2, 14), { driverId: d.driverId, passengerCount: 10 });
-    const exact = await book(U.EMPA.token, v.resourceId, wib(2, 13), wib(2, 14), { driverId: d.driverId, passengerCount: 6 });
-    check('BC-12', over.status === 400 && exact.status === 201,
-      `10 penumpang di kapasitas 6 → ${over.status} "${over.msg}"; tepat 6 → ${exact.status}`);
+    const tamu = (n) => Array.from({ length: n }, (_, i) => ({ name: `Tamu ${i + 1}` }));
+    // Angka manual diabaikan: tanpa daftar → 1 (pemesan saja).
+    const manual = await book(U.EMPA.token, v.resourceId, wib(2, 9), wib(2, 10), { driverId: d.driverId, passengerCount: 10 });
+    const over = await book(U.EMPA.token, v.resourceId, wib(2, 13), wib(2, 14), { driverId: d.driverId, guests: tamu(6) });
+    const exact = await book(U.EMPA.token, v.resourceId, wib(2, 13), wib(2, 14), { driverId: d.driverId, guests: tamu(5) });
+    check('BC-12', manual.status === 201 && manual.data?.passengerCount === 1 && over.status === 400
+      && exact.status === 201 && exact.data?.passengerCount === 6,
+      `angka manual 10 tanpa daftar → ${manual.data?.passengerCount} orang; pemesan + 6 tamu di kapasitas 6 → ${over.status}; pemesan + 5 tamu → ${exact.status} (${exact.data?.passengerCount} orang)`);
   });
   await scenario('BC-13', async () => {
     const dx = await newDriver('DRVX');
@@ -276,7 +280,9 @@ export async function runBatch1() {
   });
   await scenario('SP-11', async () => {
     const d = await newDriver('DRVSP11'); const v = await newVehicle({ capacity: 6 });
-    await bookApproved(U.EMPA.token, v.resourceId, wib(14, 8), wib(14, 12), { driverId: d.driverId, passengerCount: 4 });
+    // 4 penumpang = pemesan + 3 tamu (jumlah dihitung dari daftar).
+    await bookApproved(U.EMPA.token, v.resourceId, wib(14, 8), wib(14, 12),
+      { driverId: d.driverId, guests: [{ name: 'Tamu 1' }, { name: 'Tamu 2' }, { name: 'Tamu 3' }] });
     const av = await api('GET', `/drivers/available?startDate=${encodeURIComponent(wib(14, 9))}&endDate=${encodeURIComponent(wib(14, 10))}`, { token: A() });
     const row = (av.data ?? []).find((x) => x.driverId === d.driverId);
     check('SP-11', row && row.plateNumber === v.plate && row.remainingSeats === 2 && row.overlappingPurpose !== '' && 'isSpdActive' in row,

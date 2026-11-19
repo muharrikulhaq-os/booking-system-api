@@ -166,7 +166,7 @@ tidak dipilih otomatis untuk booking lain.
 | BC-09 | Resource sedang IN_USE sekarang, booking untuk besok | Diterima (IN_USE hanya status saat ini) | — |
 | BC-10 | EMP-A & EMP-B booking K2 di jam yang sama (dua-duanya PENDING) | Keduanya diterima PENDING (bentrok diselesaikan admin saat approve: merge/alihkan) | AQ (tanda kandidat merge) |
 | BC-11 | EMP-A & EMP-B booking **R1** di jam yang sama | Yang kedua **ditolak** saat approve (ruangan tidak bisa dipakai dua rapat) (✅ B8) | KL |
-| BC-12 | Jumlah penumpang > kapasitas kendaraan | **Ditolak 400** "jumlah penumpang … melebihi kapasitas kendaraan"; tepat sama dengan kapasitas boleh. Form web & mobile juga membatasi | — |
+| BC-12 | Jumlah penumpang dihitung dari daftar & dibatasi kapasitas | `passengerCount` = pemesan + karyawan + tamu (angka manual dari klien diabaikan; supir tidak dihitung). Karyawan + tamu melebihi kapasitas − 1 → **400**; tepat sama dengan kapasitas boleh. Hapus penumpang → jumlah ikut turun | — |
 | BC-13 | Pilih supir yang nonaktif (API) | Ditolak "supir yang dipilih tidak aktif" | — |
 | BC-14 | Booking SPD K2 H+2 08:00–10:00 lalu booking lain K2 H+2 15:00–17:00 (K2 sudah APPROVED SPD) | Yang kedua ditolak "kendaraan sedang bertugas SPD pada tanggal tersebut" (SPD memblokir **seharian**) | — |
 | BC-15 | K2 punya booking NON_SPD APPROVED H+2 08–10; booking baru **SPD** K2 H+2 15–17 | Ditolak (SPD butuh hari kosong) | — |

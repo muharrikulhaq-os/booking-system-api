@@ -607,11 +607,11 @@ func (s *BookingService) Create(ctx context.Context, req CreateBookingRequest, a
 	// 1 (pemesan) + karyawan yang ikut.
 	var passengerIDs []int32
 	var guests []repository.BookingGuest
-	var capacity int32
 	if isVehicle {
-		capacity, _ = s.vehicleCapacity(ctx, req.ResourceID)
-	}
-	if isVehicle && (len(req.PassengerIDs) > 0 || len(req.Guests) > 0) {
+		// Jumlah penumpang SELALU dihitung dari daftar: pemesan + karyawan
+		// yang ikut + tamu (supir tidak dihitung). Angka passengerCount dari
+		// klien diabaikan; kapasitas kendaraan dicek checkSeats.
+		capacity, _ := s.vehicleCapacity(ctx, req.ResourceID)
 		ids, perr := normalizePassengerIDs(ctx, s.q, int32(userID), req.PassengerIDs, capacity)
 		if perr != nil {
 			return nil, perr
@@ -623,16 +623,7 @@ func (s *BookingService) Create(ctx context.Context, req CreateBookingRequest, a
 			return nil, perr
 		}
 		passengerIDs = ids
-		if need := int32(len(ids)+len(guests)) + 1; req.PassengerCount < need {
-			req.PassengerCount = need
-		}
-	}
-	// Total penumpang (termasuk pemesan) tidak boleh melebihi kapasitas kendaraan.
-	if capacity > 0 && req.PassengerCount > capacity {
-		return nil, util.NewError(400,
-			"jumlah penumpang "+strconv.Itoa(int(req.PassengerCount))+" orang melebihi kapasitas kendaraan ("+
-				strconv.Itoa(int(capacity))+" orang termasuk pemesan)",
-			util.ErrBadRequest)
+		req.PassengerCount = passengerTotal(len(ids), len(guests))
 	}
 
 	b, err := s.insertBookingOnce(ctx, repository.CreateBookingParams{
