@@ -207,6 +207,24 @@ export async function runBatch5() {
       && dv.data?.destination === 'Bandara Soekarno-Hatta' && br.status === 201 && br.data?.pickupLocation === null,
       `Kendaraan: jemput "${dv.data?.pickupLocation}", tujuan "${dv.data?.destination}"; ruangan → lokasi ${br.data?.pickupLocation}`);
   });
+  await scenario('BC-24', async () => {
+    const v = await newVehicle({ capacity: 4 });
+    const b = await book(U.EMPA.token, v.resourceId, wib(5, 9), wib(5, 11), { passengerIds: [U.EMPB.id] });
+    const put = (token, body) => api('PUT', `/bookings/${b.data?.id}/passengers`, { token, body });
+    const over = await put(U.EMPA.token, { passengerIds: [U.EMPB.id], guests: [{ name: 'Tamu 1' }, { name: 'Tamu 2' }, { name: 'Tamu 3' }] });
+    const pend = await put(U.EMPA.token, { passengerIds: [U.EMPB.id], guests: [{ name: 'Tamu 1' }] });
+    const ap = await api('POST', `/bookings/${b.data?.id}/approve`, { token: A(), body: {} });
+    const own = await put(U.EMPA.token, { passengerIds: [] });
+    const adm = await put(A(), { passengerIds: [] });
+    const kept = sqlInt(`select count(*) from booking_passengers where "bookingId"=${b.data?.id} and "userId"=${U.EMPB.id}`);
+    // Pengaturan "boleh ubah setelah disetujui" ON → pemesan boleh lagi.
+    const setS = (value) => api('PUT', '/master-settings/booking_passenger_edit_after_approval', { token: A(), body: { value } });
+    await setS('1');
+    const on = await put(U.EMPA.token, { passengerIds: [] });
+    await setS('0');
+    check('BC-24', b.status === 201 && over.status === 400 && ok2(pend) && ok2(ap) && own.status === 409 && adm.status === 409 && kept === 1 && ok2(on),
+      `PENDING: melebihi kapasitas ${over.status}, sesuai ${pend.status}; disetujui + pengaturan OFF: pemesan ${own.status}, admin ${adm.status}, daftar tetap (${kept}); pengaturan ON: pemesan ${on.status}`);
+  });
   await scenario('RR-10', async () => {
     const d = await newDriver('DRVRR10'); const v = await newVehicle({ odometer: 10000 });
     const b = await bookApproved(U.EMPA.token, v.resourceId, inMin(5), inMin(180), { driverId: d.driverId });

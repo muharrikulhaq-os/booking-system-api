@@ -90,7 +90,7 @@ func (s *MasterSettingService) Upsert(ctx context.Context, key string, req Upser
 			return nil, util.NewError(400, "ambang lembur harus angka 0 - 24 jam", util.ErrBadRequest)
 		}
 		valStr = strconv.FormatFloat(v, 'f', -1, 64)
-	case settingOvertimeSPDEnabled, settingOvertimeSPDSameAsNonSPD:
+	case settingOvertimeSPDEnabled, settingOvertimeSPDSameAsNonSPD, settingPassengerEditAfterApproval:
 		switch strings.ToLower(valStr) {
 		case "1", "true":
 			valStr = "1"

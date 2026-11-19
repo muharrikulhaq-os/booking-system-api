@@ -17,6 +17,24 @@ import (
 
 const maxPassengerLookup = 20
 
+// settingPassengerEditAfterApproval: 1 = penumpang boleh diubah setelah booking
+// disetujui (sampai perjalanan dimulai); 0 = terkunci begitu disetujui.
+const settingPassengerEditAfterApproval = "booking_passenger_edit_after_approval"
+
+// passengersEditable: status booking ini masih mengizinkan daftar penumpang
+// diubah - PENDING selalu; APPROVED hanya bila diizinkan pengaturan.
+// (Siapa yang boleh - pemesan/admin - dicek terpisah.)
+func (s *BookingService) passengersEditable(ctx context.Context, status repository.BookingStatus) bool {
+	switch status {
+	case repository.BookingStatusPENDING:
+		return true
+	case repository.BookingStatusAPPROVED:
+		m, err := s.q.GetMasterSettingByKey(ctx, settingPassengerEditAfterApproval)
+		return err == nil && util.ParseStringToFloat64(m.Value) >= 1
+	}
+	return false
+}
+
 // employeeCanView: karyawan boleh membuka booking yang dia pesan atau ikuti.
 func employeeCanView(ctx context.Context, q repository.ExtendedQuerier, b repository.GetBookingByIDRow, userID int32) bool {
 	if b.UserId == userID {
@@ -159,6 +177,9 @@ func (s *BookingService) attachPassengers(ctx context.Context, out map[string]an
 		}
 	}
 	out["passengers"] = list
+	// Status ini masih boleh diubah (PENDING / APPROVED + pengaturan) - klien
+	// menambahkan cek pemesan/admin.
+	out["passengersEditable"] = s.passengersEditable(ctx, b.Status)
 }
 
 // notifyPassengers: kabar perkembangan booking ke karyawan yang ikut.
@@ -181,8 +202,10 @@ type SetPassengersRequest struct {
 	Guests *[]GuestInput `json:"guests"`
 }
 
-// SetPassengers mengganti daftar karyawan yang ikut. Pemesan (selama
-// PENDING/APPROVED) & admin. Jumlah penumpang dinaikkan bila kurang.
+// SetPassengers mengganti daftar karyawan yang ikut. Pemesan & admin selama
+// PENDING; setelah disetujui hanya bila pengaturan
+// booking_passenger_edit_after_approval = 1 (sampai perjalanan dimulai).
+// Jumlah penumpang dinaikkan bila kurang dan tidak pernah melebihi kapasitas.
 func (s *BookingService) SetPassengers(ctx context.Context, id int32, req SetPassengersRequest, actor AuditActor, role string) (map[string]any, error) {
 	b, err := s.q.GetBookingByID(ctx, id)
 	if err != nil {
@@ -191,8 +214,12 @@ func (s *BookingService) SetPassengers(ctx context.Context, id int32, req SetPas
 	if role != "ADMIN" && b.UserId != actor.UserID {
 		return nil, util.ErrForbidden
 	}
-	if b.Status != repository.BookingStatusPENDING && b.Status != repository.BookingStatusAPPROVED {
-		return nil, util.NewError(409, "daftar karyawan yang ikut hanya bisa diubah sebelum perjalanan dimulai", util.ErrConflict)
+	if !s.passengersEditable(ctx, b.Status) {
+		msg := "daftar penumpang hanya bisa diubah selama booking masih menunggu persetujuan"
+		if b.Status != repository.BookingStatusAPPROVED {
+			msg = "daftar penumpang hanya bisa diubah sebelum perjalanan dimulai"
+		}
+		return nil, util.NewError(409, msg, util.ErrConflict)
 	}
 	capacity, isVehicle := s.vehicleCapacity(ctx, b.ResourceId)
 	if !isVehicle {
@@ -222,8 +249,18 @@ func (s *BookingService) SetPassengers(ctx context.Context, id int32, req SetPas
 			return nil, err
 		}
 	}
-	if need := int32(len(ids)+len(guests)) + 1; b.PassengerCount < need {
-		_ = s.q.SetBookingPassengerCount(ctx, id, need)
+	// Jumlah penumpang: minimal pemesan + yang ikut, maksimal kapasitas
+	// kendaraan (data lama yang terlanjur melebihi kapasitas ikut dirapikan).
+	need := int32(len(ids)+len(guests)) + 1
+	count := b.PassengerCount
+	if count < need {
+		count = need
+	}
+	if capacity > 0 && count > capacity {
+		count = max(capacity, need)
+	}
+	if count != b.PassengerCount {
+		_ = s.q.SetBookingPassengerCount(ctx, id, count)
 	}
 	logAudit(ctx, s.q, actor, "UPDATE", "Booking", id, fmt.Sprintf("Penumpang yang ikut: %d karyawan, %d tamu", len(ids), len(guests)))
 	s.notifyPassengersAdded(ctx, b, added)

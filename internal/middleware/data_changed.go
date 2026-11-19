@@ -145,8 +145,11 @@ func TopicsForPath(path string) []string {
 	// Biaya perjalanan (tol/parkir) & reimburse tampil di detail booking & laporan.
 	case "trip-expenses", "trip-reimbursements", "parking-settlements":
 		return []string{TopicBooking}
-	case "fuel-types", "fuel-stations", "master-settings", "settings":
+	case "fuel-types", "fuel-stations":
 		return []string{TopicFuel}
+	// Pengaturan juga memengaruhi detail booking (mis. boleh ubah penumpang).
+	case "master-settings", "settings":
+		return []string{TopicFuel, TopicBooking}
 	// Serah terima / kembali dari vendor mengubah status & odometer kendaraan.
 	case "maintenance":
 		return []string{TopicMaintenance, TopicVehicle}

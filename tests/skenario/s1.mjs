@@ -182,9 +182,10 @@ export async function runBatch1() {
   });
   await scenario('BC-12', async () => {
     const d = await newDriver('DRVBC12'); const v = await newVehicle({ capacity: 6 });
-    const b = await book(U.EMPA.token, v.resourceId, wib(2, 13), wib(2, 14), { driverId: d.driverId, passengerCount: 10 });
-    const a = await approve(b.data.id);
-    check('BC-12', b.status === 201 && ok2(a) && !!a.json?.warning, `10 penumpang di kapasitas 6: dibuat, approve + peringatan "${a.json?.warning}"`);
+    const over = await book(U.EMPA.token, v.resourceId, wib(2, 13), wib(2, 14), { driverId: d.driverId, passengerCount: 10 });
+    const exact = await book(U.EMPA.token, v.resourceId, wib(2, 13), wib(2, 14), { driverId: d.driverId, passengerCount: 6 });
+    check('BC-12', over.status === 400 && exact.status === 201,
+      `10 penumpang di kapasitas 6 → ${over.status} "${over.msg}"; tepat 6 → ${exact.status}`);
   });
   await scenario('BC-13', async () => {
     const dx = await newDriver('DRVX');
